@@ -1,0 +1,38 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -892,17 +892,18 @@
+     vz[tid] = vzi + gain * dvz;
+ }
+ 
+-template<int CACHE_SATS>
++template<int CACHE_SATS, int FIXED_SATS = 0>
+ __global__ void pfd_doppler_kf_update_kernel(
+     const double* px, const double* py, const double* pz,
+     double* vx, double* vy, double* vz,
+     double* vcov,
+     const double* doppler_data,  // [sat_ecef: n*3][sat_vel: n*3][doppler_hz: n][weights: n]
+     double* log_weights,
+-    int N, int n_sat,
++    int N, int runtime_n_sat,
+     double wavelength_m,
+     double sigma_mps) {
+ 
++    const int n_sat = FIXED_SATS > 0 ? FIXED_SATS : runtime_n_sat;
+     extern __shared__ double s_data[];
+     double* s_sat = s_data;                 // n_sat * 3
+     double* s_sat_vel = s_data + n_sat * 3; // n_sat * 3
+@@ -2747,7 +2748,13 @@
+     size_t smem = (size_t)n_sat * (n_sat <= MAX_SATS ? 9 : 8) * sizeof(double);
+     // The measurement geometry can now produce distinct particle covariances.
+     state->covariance_uniform = false;
+-    if (n_sat <= 16) {
++    if (n_sat == 12) {
++        pfd_doppler_kf_update_kernel<12, 12><<<grid, block, smem, state->stream>>>(
++            state->d_px, state->d_py, state->d_pz,
++            state->d_vx, state->d_vy, state->d_vz, state->d_vcov,
++            state->d_obs_scratch, state->d_log_weights,
++            N, n_sat, wavelength_m, sigma_mps);
++    } else if (n_sat <= 16) {
+         pfd_doppler_kf_update_kernel<16><<<grid, block, smem, state->stream>>>(
+             state->d_px, state->d_py, state->d_pz,
+             state->d_vx, state->d_vy, state->d_vz, state->d_vcov,

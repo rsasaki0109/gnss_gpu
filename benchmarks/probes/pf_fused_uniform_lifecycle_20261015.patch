@@ -1,0 +1,12 @@
+--- a/benchmarks/bench_pf_fused_uniform_compare.py
++++ b/benchmarks/bench_pf_fused_uniform_compare.py
+@@ -114,6 +114,9 @@
+             self.native.pf_device_destroy(self.peer._state)
+             self.peer._state=None
+         super().close()
++        # The pool factory captures this session; release it outside timing.
++        self.pool = None
++        self.peer = None
+ 
+     def measure(self, repeats, snapshot=True, warmups=1):
+         samples, hashes, returns = [], set(), set()

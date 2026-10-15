@@ -1,0 +1,31 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -3908,6 +3908,28 @@
+     // Imported covariance can differ by particle, even if positions match.
+     state->covariance_uniform = false;
+     int N = state->n_particles;
++    if (N >= 65536) {
++        // The copy and original import kernel share the state stream, so the
++        // next chunk cannot overwrite scratch still consumed by the kernel.
++        int chunk_rows = (int)(((size_t)N * 9) / 16);
++        for (int offset = 0; offset < N;) {
++            int rows = std::min(chunk_rows, N - offset);
++            CUDA_CHECK(cudaMemcpyAsync(state->d_vcov_tmp, input + (size_t)offset * 16,
++                (size_t)rows * 16 * sizeof(double), cudaMemcpyHostToDevice, state->stream));
++            int grid = (rows + BLOCK_SIZE - 1) / BLOCK_SIZE;
++            pfd_set_particle_states_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
++                state->d_px + offset, state->d_py + offset, state->d_pz + offset,
++                state->d_vx + offset, state->d_vy + offset, state->d_vz + offset,
++                state->d_vcov + (size_t)offset * 9, state->d_pcb + offset,
++                state->d_vcov_tmp, rows);
++            CUDA_CHECK_LAST();
++            offset += rows;
++        }
++        pfd_reset_weights_kernel<<<state->grid_size, BLOCK_SIZE, 0, state->stream>>>(state->d_log_weights, N);
++        CUDA_CHECK_LAST();
++        CUDA_CHECK(cudaStreamSynchronize(state->stream));
++        return;
++    }
+     size_t sz_in = (size_t)N * 16 * sizeof(double);
+     double* d_in;
+     CUDA_CHECK(cudaMalloc(&d_in, sz_in));

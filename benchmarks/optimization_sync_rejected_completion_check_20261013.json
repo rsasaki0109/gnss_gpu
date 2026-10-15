@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "verified": true,
+  "both_trials_adopted": false,
+  "current_source_build_installed_match": true,
+  "pf_packed_satellite_restored_exactly": true,
+  "bvh_floor64_restored_exactly": true,
+  "signal_batch_retained": true,
+  "pf_matching_comparisons_including_rejections": 11895,
+  "bvh_bit_identical_cases": 292,
+  "pf_timed_conditions": 16,
+  "bvh_timed_conditions": 32,
+  "bvh_memory_conditions": 8,
+  "pf_unchanged_device_functions": 65,
+  "bvh_unchanged_device_functions": 10,
+  "source_patches_reconstructed": true,
+  "trial_regression_tests_run": false,
+  "trial_sanitizers_run": false,
+  "previous_bvh_validation_reference": {
+    "path": "benchmarks/bvh_tiny_order_completion_check_20261013.json",
+    "sha256": "ea898611168fbbd1528fd899129bdd9d9b075fa29642ec3392ee3c6bafc1fe8c"
+  },
+  "public_product_label_violations": 0,
+  "public_text_files_scanned": 2509,
+  "artifacts": {
+    "benchmarks/pf_packed_satellite_gpu_20261013.json": "491e511b7a5fbf774aec16b4ff01803a907e52332087d3ee5f8d6f4d683a958f",
+    "benchmarks/bvh_tiny_order_gpu_20261013.json": "3d4b9a5c6ffd9536c4da225504055cfc4a531761a1e033ecf70639cd6cd23ec1",
+    "benchmarks/signal_batch_gpu_20261012.json": "b79f96628f8302018affd8ec4e6048a2f1aa82892cd35f459d94f5d9f9b30ccb",
+    "benchmarks/pf_copy_event_rejected_20261013.json": "0b82351c5b86c64e567b0675ab32d043b6eb4efab8a9516c8fb51bca8bcfee6c",
+    "benchmarks/probes/pf_copy_event_rejected_20261013.patch": "b5f2a2a151b5332faa3885010a9302974a664623cbe65d25d265d2371a7f3460",
+    "benchmarks/bvh_copy_sync_rejected_20261013.json": "f24683cd4106554228d388a9cd0aa76fd22ca8da9ac90d993385c3f430db489f",
+    "benchmarks/probes/bvh_copy_sync_rejected_20261013.patch": "62d8e1f49277aa8f574224cf82a748b984427f153e2c8f120aa5380ae96c9857",
+    "benchmarks/RESULTS.md": "ced1b37cbec6774e817578dfb32a81ce4b6974894692ca74635d1131fedaa8e9",
+    "internal_docs/decisions.md": "e68e6a0453b89d532e9cf4665a78fae7a106fe20314b14a0395a654496191a83",
+    "benchmarks/bench_pf_copy_event_compare.py": "9d9ddac1cbda313272771db60ef8644a36ad144349658503cd1ac81f62238982",
+    "benchmarks/bench_bvh_copy_sync_compare.py": "d149827bd314ea643ea33e6e8d861c6ab63815c77be486c520aaeef11a90177b"
+  }
+}

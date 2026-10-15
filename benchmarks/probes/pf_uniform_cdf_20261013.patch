@@ -1,0 +1,243 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -10,6 +10,11 @@
+ #include <algorithm>
+ #include <cstdio>
+ #include <cstring>
++#include <array>
++#include <cstdint>
++#if defined(_M_X64) || defined(__x86_64__)
++#include <emmintrin.h>
++#endif
+ 
+ namespace gnss_gpu {
+ 
+@@ -3990,6 +3995,137 @@
+     pfd_reset_weights_kernel<<<target->grid_size, BLOCK_SIZE, 0, target->stream>>>(target->d_log_weights, N);
+     CUDA_CHECK_LAST();
+     // CDF input and both states, including source scratch, are reusable now.
++    CUDA_CHECK(cudaStreamSynchronize(target->stream));
++    return true;
++}
++
++// An exact run of repeated positive FP64 additions has a constant ULP
++// increment inside one exponent bin. A tie starting on an odd significand
++// needs one explicit step; every exponent crossing is evaluated in FP64.
++struct pfd_uniform_cdf_segment {
++    int first;
++    int last;
++    std::uint64_t base;
++    std::uint64_t stride;
++};
++static_assert(sizeof(pfd_uniform_cdf_segment) == 24);
++
++static bool pfd_uniform_cdf_segments(int N,
++    std::array<pfd_uniform_cdf_segment, 64>& segments, int& count) {
++#if defined(_M_X64) || defined(__x86_64__)
++    if ((_mm_getcsr() & _MM_ROUND_MASK) != _MM_ROUND_NEAREST) return false;
++#else
++    return false;
++#endif
++    const double step = 1.0 / static_cast<double>(N);
++    std::uint64_t step_bits;
++    std::memcpy(&step_bits, &step, sizeof(step_bits));
++    const int step_exponent = static_cast<int>(step_bits >> 52);
++    const std::uint64_t significand = (step_bits & ((1ULL << 52) - 1)) | (1ULL << 52);
++    std::uint64_t current = step_bits;
++    int index = 0;
++    count = 0;
++    while (index < N) {
++        if (count >= static_cast<int>(segments.size())) return false;
++        const int exponent = static_cast<int>(current >> 52);
++        const int shift = exponent - step_exponent;
++        if (shift < 0 || shift >= 53) return false;
++        const std::uint64_t quotient = significand >> shift;
++        const std::uint64_t remainder = significand & ((1ULL << shift) - 1);
++        const bool tie = shift > 0 && remainder == (1ULL << (shift - 1));
++        if (tie && (current & 1)) {
++            segments[count++] = {index, index, current, 0};
++            ++index;
++            if (index < N) {
++                double previous;
++                std::memcpy(&previous, &current, sizeof(previous));
++                const double next = previous + step;
++                std::memcpy(&current, &next, sizeof(current));
++            }
++            continue;
++        }
++        std::uint64_t delta = quotient;
++        if (shift > 0) {
++            const std::uint64_t half = 1ULL << (shift - 1);
++            if (remainder > half || (remainder == half && (quotient & 1))) ++delta;
++        }
++        if (delta == 0) return false;
++        const std::uint64_t boundary = static_cast<std::uint64_t>(exponent + 1) << 52;
++        const std::uint64_t advances = std::min<std::uint64_t>(
++            static_cast<std::uint64_t>(N - index - 1), (boundary - 1 - current) / delta);
++        const int last = index + static_cast<int>(advances);
++        segments[count++] = {index, last, current, delta};
++        index = last + 1;
++        if (index < N) {
++            const std::uint64_t last_bits = current + delta * advances;
++            double previous;
++            std::memcpy(&previous, &last_bits, sizeof(previous));
++            const double next = previous + step;
++            std::memcpy(&current, &next, sizeof(current));
++        }
++    }
++    return true;
++}
++
++__global__ void pfd_uniform_cdf_kernel(double* cdf, int N,
++    const pfd_uniform_cdf_segment* segments, int count) {
++    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
++    if (tid >= N) return;
++    int low = 0;
++    int high = count;
++    while (low + 1 < high) {
++        const int mid = low + (high - low) / 2;
++        if (tid >= segments[mid].first) low = mid;
++        else high = mid;
++    }
++    const pfd_uniform_cdf_segment segment = segments[low];
++    const std::uint64_t bits = segment.base + segment.stride *
++        static_cast<std::uint64_t>(tid - segment.first);
++    cdf[tid] = __longlong_as_double(static_cast<long long>(bits));
++}
++
++bool pf_device_gather_from_uniform_cdf(PFDeviceState* target, const PFDeviceState* source,
++                                      double* cdf_output) {
++    if (target == source || source->n_particles < 65536) return false;
++    std::array<pfd_uniform_cdf_segment, 64> segments;
++    int count;
++    if (!pfd_uniform_cdf_segments(source->n_particles, segments, count)) return false;
++    const size_t segment_bytes = static_cast<size_t>(count) * sizeof(segments[0]);
++    if (segment_bytes > static_cast<size_t>(target->n_particles) * sizeof(int)) return false;
++    cudaPointerAttributes src_attributes, dst_attributes;
++    CUDA_CHECK(cudaPointerGetAttributes(&src_attributes, source->d_px));
++    CUDA_CHECK(cudaPointerGetAttributes(&dst_attributes, target->d_px));
++    int current_device;
++    CUDA_CHECK(cudaGetDevice(&current_device));
++    if (src_attributes.device != dst_attributes.device ||
++        dst_attributes.device != current_device) return false;
++    CUDA_CHECK(cudaStreamSynchronize(source->stream));
++    target->ess_cached = false;
++    target->covariance_uniform = false;
++    CUDA_CHECK(cudaMemcpyAsync(target->d_megopolis_idx_b, segments.data(), segment_bytes,
++        cudaMemcpyHostToDevice, target->stream));
++    pfd_uniform_cdf_kernel<<<source->grid_size, BLOCK_SIZE, 0, target->stream>>>(
++        source->d_cdf, source->n_particles,
++        reinterpret_cast<const pfd_uniform_cdf_segment*>(target->d_megopolis_idx_b), count);
++    CUDA_CHECK_LAST();
++    const int N = target->n_particles;
++    pfd_pool_cdf_indices_kernel<<<target->grid_size, BLOCK_SIZE, 0, target->stream>>>(
++        source->d_cdf, source->n_particles, target->d_megopolis_idx_a, N);
++    CUDA_CHECK_LAST();
++    pfd_megopolis_gather_kernel<<<target->grid_size, BLOCK_SIZE, 0, target->stream>>>(
++        source->d_px, source->d_py, source->d_pz,
++        source->d_vx, source->d_vy, source->d_vz, source->d_vcov, source->d_pcb,
++        target->d_px, target->d_py, target->d_pz,
++        target->d_vx, target->d_vy, target->d_vz, target->d_vcov, target->d_pcb,
++        target->d_megopolis_idx_a, N, true);
++    CUDA_CHECK_LAST();
++    pfd_reset_weights_kernel<<<target->grid_size, BLOCK_SIZE, 0, target->stream>>>(target->d_log_weights, N);
++    CUDA_CHECK_LAST();
++    if (cdf_output != nullptr) {
++        CUDA_CHECK(cudaMemcpyAsync(cdf_output, source->d_cdf,
++            static_cast<size_t>(source->n_particles) * sizeof(double),
++            cudaMemcpyDeviceToHost, target->stream));
++    }
+     CUDA_CHECK(cudaStreamSynchronize(target->stream));
+     return true;
+ }
+--- a/include/gnss_gpu/pf_device.h
++++ b/include/gnss_gpu/pf_device.h
+@@ -276,6 +276,13 @@
+ bool pf_device_gather_from_cdf(PFDeviceState* target, const PFDeviceState* source,
+                                const double* cdf);
+ 
++// Construct the exact sequential FP64 CDF of source_n copies of 1/source_n,
++// then gather as above. Borrows source CDF and target ancestor-B scratch.
++// Declines before mutation for non-nearest CPU rounding, small source/target,
++// in-place/cross-device/unsupported host. Optional output copies all CDF bits.
++bool pf_device_gather_from_uniform_cdf(PFDeviceState* target, const PFDeviceState* source,
++                                      double* cdf_output = nullptr);
++
+ // Upload full particle states from host:
+ // [x, y, z, cb, mu_vx, mu_vy, mu_vz, Sigma_v(3x3 row-major)].
+ // Resets log-weights to uniform after upload.
+--- a/python/gnss_gpu/_pf_device_bindings.cpp
++++ b/python/gnss_gpu/_pf_device_bindings.cpp
+@@ -698,6 +698,29 @@
+     }, "Gather using exact left search on a finite monotone CPU CDF; reset weights; sync",
+        py::arg("target"), py::arg("source"), py::arg("cdf"));
+ 
++    m.attr("_uniform_cdf_checked_gather") = m.attr("pf_device_gather_from_cdf");
++    m.def("pf_device_gather_from_uniform_cdf", [](gnss_gpu::PFDeviceState* target,
++            const gnss_gpu::PFDeviceState* source, py::object cdf_output) {
++        validate_device_state(target, "pf_device_gather_from_uniform_cdf target");
++        validate_device_state(source, "pf_device_gather_from_uniform_cdf source");
++        double* output = nullptr;
++        py::array owner;
++        if (!cdf_output.is_none()) {
++            if (!py::isinstance<py::array>(cdf_output)) {
++                throw std::runtime_error("CDF output must be a writable contiguous float64 array");
++            }
++            owner = py::cast<py::array>(cdf_output);
++            auto r = owner.request();
++            if (!owner.dtype().is(py::dtype::of<double>()) || !owner.writeable() ||
++                !(owner.flags() & py::array::c_style) || r.ndim != 1 || r.size != source->n_particles) {
++                throw std::runtime_error("CDF output must be a writable contiguous float64 array matching source");
++            }
++            output = static_cast<double*>(r.ptr);
++        }
++        return gnss_gpu::pf_device_gather_from_uniform_cdf(target, source, output);
++    }, "Gather from the exact sequential uniform FP64 CDF; optional full CDF output; sync",
++       py::arg("target"), py::arg("source"), py::arg("cdf_output") = py::none());
++
+     m.def("pf_device_set_particle_states", [](gnss_gpu::PFDeviceState* state,
+                                               py::array_t<double, py::array::c_style | py::array::forcecast> input) {
+         int N = state->n_particles;
+--- a/python/gnss_gpu/pf_device_config.py
++++ b/python/gnss_gpu/pf_device_config.py
+@@ -84,6 +84,10 @@
+         pf_device_get_particles=pf_device_get_particles,
+         pf_device_get_particle_states=pf_device_get_particle_states,
+         pf_device_set_particle_states=pf_device_set_particle_states,
++        pf_device_gather_from_uniform_cdf=getattr(
++            import_module("gnss_gpu._gnss_gpu_pf_device"), "pf_device_gather_from_uniform_cdf", None),
++        pf_device_uniform_cdf_checked_gather=getattr(
++            import_module("gnss_gpu._gnss_gpu_pf_device"), "_uniform_cdf_checked_gather", None),
+         pf_device_gather_from_cdf=getattr(
+             import_module("gnss_gpu._gnss_gpu_pf_device"), "pf_device_gather_from_cdf", None),
+         pf_device_gather_from=getattr(
+@@ -144,6 +148,8 @@
+     pf._pf_device_fill_log_weights = getattr(bindings, "pf_device_fill_log_weights", None)
+     pf._pf_device_fill_log_weights_setter = getattr(bindings, "pf_device_fill_log_weights_setter", None)
+     pf._pf_device_gather_from = getattr(bindings, "pf_device_gather_from", None)
++    pf._pf_device_gather_from_uniform_cdf = getattr(bindings, "pf_device_gather_from_uniform_cdf", None)
++    pf._pf_device_uniform_cdf_checked_gather = getattr(bindings, "pf_device_uniform_cdf_checked_gather", None)
+     pf._pf_device_gather_from_cdf = getattr(bindings, "pf_device_gather_from_cdf", None)
+     pf._pf_device_position_mixture_components = getattr(
+         bindings, "pf_device_position_mixture_components", None)
+--- a/python/gnss_gpu/realtime_runtime.py
++++ b/python/gnss_gpu/realtime_runtime.py
+@@ -436,6 +436,18 @@
+                     weights[-1] == maximum and float(np.min(weights)) == maximum):
+                 # Equal finite values subtract to zero, exp to one, and sum
+                 # exactly to this array's size. Keep the sequential CDF.
++                uniform = getattr(target, "_pf_device_gather_from_uniform_cdf", None)
++                checked = getattr(target, "_pf_device_uniform_cdf_checked_gather", None)
++                if (resident and callable(uniform) and checked is not None and
++                        uniform is getattr(source, "_pf_device_gather_from_uniform_cdf", None) and
++                        checked is getattr(source, "_pf_device_uniform_cdf_checked_gather", None) and
++                        checked is getattr(target, "_pf_device_gather_from_cdf", None) and
++                        checked is getattr(source, "_pf_device_gather_from_cdf", None) and
++                        weights.size == source_count and type(target.n_particles) is int and
++                        target.n_particles == getattr(target_state, "n_particles", 0)):
++                    if uniform(target_state, source_state):
++                        PersistentParticleRuntimePool._set_migration_log_weights(target, target.n_particles)
++                        return
+                 weights.fill(1.0 / weights.size)
+             else:
+                 np.subtract(weights, maximum, out=weights)

@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "verified": true,
+  "current_source_build_installed_match": true,
+  "comparison_cases": 18941,
+  "bit_identical_output_cases": 18509,
+  "matching_pr_input_rejections": 432,
+  "timed_conditions": 39,
+  "affected_large_timed_conditions_all_five_pairs_improve": 16,
+  "rounds": 5,
+  "repeats": 20,
+  "regression_tests": 2559,
+  "sanitizer_tests": 58,
+  "sanitizer_errors": 0,
+  "leaked_bytes": 0,
+  "unchanged_device_functions": 71,
+  "new_device_functions": 2,
+  "header_abi_unchanged": true,
+  "floating_point_source_body_unchanged": true,
+  "independent_gpu_oracle_tests": 58,
+  "public_text_files_checked": 2576,
+  "public_device_label_clean": true,
+  "authored_crlf_verified": true,
+  "source_sha256": {
+    "src/particle_filter/pf_device.cu": "eaa960b24b11858e042e9d90ea8cb6ad55d2612052af6950b6d9ee2e6c5c0c5f",
+    "include/gnss_gpu/pf_device.h": "a2739ef2861995b4d769415651dc6c8f0acf5da6e5caf94d29f977fd8e9b8bc5",
+    "python/gnss_gpu/_pf_device_bindings.cpp": "56fdb9e2568d263595aae3ab66e42d5df70e8ccd6c2b6d08c61d00d4b30edaf5",
+    "python/gnss_gpu/pf_device_runtime.py": "a24c892f58e39e4cde99737273cfe23b807df9cc971269f571249f03e9d93ad2",
+    "python/gnss_gpu/pf_device_config.py": "c6c17c4f926a2182ebe27dfd23a6e9c8b1f49c59c238a51feb6dd7b2814fce69"
+  },
+  "extension_sha256": "010406b2e08b6e3c83c95273efec81a9bbdea0ebf68a00a71e1a3c74b6cee2b6",
+  "retained_other_subsystems": {
+    "benchmarks/bvh_parallel_mirror_chunks_gpu_20261013.json": "bcda1df440f75615bc2d869e031b039f3499d2318444243ef62b4e88d0215cd8",
+    "benchmarks/signal_batch_gpu_20261012.json": "b79f96628f8302018affd8ec4e6048a2f1aa82892cd35f459d94f5d9f9b30ccb"
+  },
+  "rejected_reflection_trial": {
+    "path": "benchmarks/bvh_early_intersection_rejected_20261013.json",
+    "sha256": "6d0cab7c7329cb08a4385dd7d73300d2cfc392d4a6826d35787ce5236649fa97"
+  },
+  "manifest": {
+    "path": "benchmarks/pf_kf_wide_cache_device_code_20261013.json",
+    "sha256": "4654f4669b903918a69248f911f2391e0eecb57e5a3fb6b91d618bd52652a9b7"
+  },
+  "measurement_report": {
+    "path": "benchmarks/pf_kf_wide_cache_gpu_20261013.json",
+    "sha256": "2eaa36e8e1e7ca9db8b30e74947b97bc6227a98709e2a60c59bce6254e2da9ae"
+  }
+}

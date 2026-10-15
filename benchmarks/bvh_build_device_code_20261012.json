@@ -1,0 +1,20 @@
+{
+  "normalization": "whitespace-normalized cuobjdump --dump-sass device function bodies",
+  "baseline_equals_candidate": true,
+  "function_count": 5,
+  "sha256": {
+    "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii": "ac36c4fea909ca1b067b131ead0e807a54c106ebf0c461356758cc5b6d6ab915",
+    "_ZN8gnss_gpu27multipath_candidates_kernelEPKdS1_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiii": "408d155aa283c7943a1d1c2dcfd97a24121d8a93f8c261d368ed0e1072888645",
+    "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii": "4e8ae452c1eba3d84027f7eb7600c65dfb6ae0fe2b67d9be0fc4dc54397c5f5a",
+    "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii": "d12d67b93f6b9e8dad02078a0e2c703fae7520fee4c3d4a56a50d9dd0f6fed42",
+    "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii": "b0de8f220b77b975c30e402f1db956b9700d7cecd2f034ad234a83bf4e5e9087"
+  },
+  "gpu_source_section_sha256": "de2b8bd19e05e36bcd9935341b16ca16a59bf0ba076fae0169619c00a1a6a955",
+  "baseline_reference": "bvh_combined_gpu_20261011.json",
+  "candidate_reference": "bvh_build_gpu_20261012.json",
+  "source_patch": {
+    "path": "benchmarks\\probes\\bvh_build_geometry_scratch_20261012.patch",
+    "sha256": "8d3cbdb9ad9fd6b6e66f4d9db289d60eefe2a503ba95da7180587188db27d8e6",
+    "reconstructs_measured_crlf_source": true
+  }
+}

@@ -1,0 +1,44 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -1588,6 +1588,41 @@
+     int k = i;
+     double lw_k = log_weights[i];
+     int b = 0;
++    int bulk_iterations = n_iterations > 0 ? (n_iterations / 8) * 8 : 0;
++    for (; b < bulk_iterations; b += 8) {
++        uint4 proposals0 = curand4(&block_rng);
++        float4 uniforms0 = curand_uniform4(&own_rng);
++        uint4 proposals1 = curand4(&block_rng);
++        float4 uniforms1 = curand_uniform4(&own_rng);
++        int offsets[8] = {
++            (int)(proposals0.x % (unsigned int)N),
++            (int)(proposals0.y % (unsigned int)N),
++            (int)(proposals0.z % (unsigned int)N),
++            (int)(proposals0.w % (unsigned int)N),
++            (int)(proposals1.x % (unsigned int)N),
++            (int)(proposals1.y % (unsigned int)N),
++            (int)(proposals1.z % (unsigned int)N),
++            (int)(proposals1.w % (unsigned int)N)};
++        float draws[8] = {uniforms0.x, uniforms0.y, uniforms0.z, uniforms0.w,
++                          uniforms1.x, uniforms1.y, uniforms1.z, uniforms1.w};
++        int indices[8];
++        double proposal_weights[8];
++        // Two consecutive original Philox quartets, with the same draws and
++        // acceptance order. More independent loads can overlap memory latency.
++        #pragma unroll
++        for (int t = 0; t < 8; t++) {
++            int wrap = N - offsets[t];
++            indices[t] = (i >= wrap) ? i - wrap : i + offsets[t];
++            proposal_weights[t] = log_weights[indices[t]];
++        }
++        #pragma unroll
++        for (int t = 0; t < 8; t++) {
++            if (__logf(draws[t]) <= (float)(proposal_weights[t] - lw_k)) {
++                k = indices[t];
++                lw_k = proposal_weights[t];
++            }
++        }
++    }
+     int full_iterations = n_iterations > 0 ? (n_iterations / 4) * 4 : 0;
+     for (; b < full_iterations; b += 4) {
+         uint4 proposals = curand4(&block_rng);

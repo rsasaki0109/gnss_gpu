@@ -1,0 +1,158 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -2801,6 +2801,13 @@
+     log_weights[tid] = 0.0;
+ }
+ 
++// Copy the caller's FP64 scalar bits to every log-weight without arithmetic.
++__global__ void pfd_fill_weights_kernel(double* log_weights, int N, double value) {
++    int tid = blockIdx.x * blockDim.x + threadIdx.x;
++    if (tid >= N) return;
++    log_weights[tid] = value;
++}
++
+ // --- Megopolis kernels ---
+ // Each iteration lets slot tid take over the content of slot j with an
+ // acceptance ratio that depends only on the slots' (fixed) log-weights and the
+@@ -4060,6 +4067,14 @@
+         (size_t)N * sizeof(double),
+         cudaMemcpyHostToDevice,
+         state->stream));
++    CUDA_CHECK(cudaStreamSynchronize(state->stream));
++}
++
++void pf_device_fill_log_weights(PFDeviceState* state, double value) {
++    state->ess_cached = false;
++    pfd_fill_weights_kernel<<<state->grid_size, BLOCK_SIZE, 0, state->stream>>>(
++        state->d_log_weights, state->n_particles, value);
++    CUDA_CHECK_LAST();
+     CUDA_CHECK(cudaStreamSynchronize(state->stream));
+ }
+ 
+--- a/include/gnss_gpu/pf_device.h
++++ b/include/gnss_gpu/pf_device.h
+@@ -291,6 +291,10 @@
+ // Upload log-weights from host. Synchronizes the stream.
+ void pf_device_set_log_weights(PFDeviceState* state, const double* input);
+ 
++// Broadcast a caller-computed FP64 scalar to log-weights; invalidate ESS only.
++// Synchronizes the state stream and preserves particle/covariance state.
++void pf_device_fill_log_weights(PFDeviceState* state, double value);
++
+ // Copy last systematic-resampling ancestor indices to host (out[j] = source idx).
+ // Only valid after pf_device_resample_systematic; synchronizes the stream.
+ void pf_device_get_resample_ancestors(const PFDeviceState* state, int* output);
+--- a/python/gnss_gpu/_pf_device_bindings.cpp
++++ b/python/gnss_gpu/_pf_device_bindings.cpp
+@@ -649,6 +649,14 @@
+     }, "Upload log-weights from host (H2D, sync)",
+        py::arg("state"), py::arg("input"));
+ 
++    // Keep the original array setter identity even when callers replace it.
++    m.attr("_uniform_weights_array_setter") = m.attr("pf_device_set_log_weights");
++    m.def("pf_device_fill_log_weights", [](gnss_gpu::PFDeviceState* state, double value) {
++        validate_device_state(state, "pf_device_fill_log_weights");
++        gnss_gpu::pf_device_fill_log_weights(state, value);
++    }, "Broadcast exact FP64 log-weight bits; invalidate ESS; synchronize stream",
++       py::arg("state"), py::arg("value"));
++
+     m.def("pf_device_get_resample_ancestors", [](const gnss_gpu::PFDeviceState* state,
+                                                   py::array_t<int> out) {
+         int N = state->n_particles;
+--- a/python/gnss_gpu/pf_device_runtime.py
++++ b/python/gnss_gpu/pf_device_runtime.py
+@@ -917,6 +917,27 @@
+             raise ValueError(f"log_weights size {lw.size} != {self.n_particles}")
+         self._pf_device_set_log_weights(self._state, np.ascontiguousarray(lw))
+ 
++    # Preserve original method identity across instance/class setter overrides.
++    _uniform_weights_array_setter = set_log_weights
++
++    def set_uniform_log_weights(self, log_weight):
++        """Set one exact FP64 value for every particle; synchronize completion."""
++        if not self._initialized:
++            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
++        value = float(log_weight)
++        fill = getattr(self, "_pf_device_fill_log_weights", None)
++        paired_setter = getattr(self, "_pf_device_fill_log_weights_setter", None)
++        setter = self.set_log_weights
++        if (self.n_particles >= 65536 and callable(fill) and paired_setter is not None and
++                getattr(self._state, "n_particles", 0) == self.n_particles and
++                getattr(setter, "__func__", None) is ParticleFilterDeviceRuntime._uniform_weights_array_setter and
++                self._pf_device_set_log_weights is paired_setter):
++            fill(self._state, value)
++            return
++        setter(np.full(int(self.n_particles), value, dtype=np.float64))
++
++    _uniform_weights_method = set_uniform_log_weights
++
+     def position_mixture_update(self, refs_ecef, sigma_pos=1.0, mixture_weights=None):
+         """Apply a Gaussian-mixture likelihood with bounded CPU working arrays."""
+         if not self._initialized:
+--- a/python/gnss_gpu/pf_device_config.py
++++ b/python/gnss_gpu/pf_device_config.py
+@@ -94,6 +94,10 @@
+         pf_device_position_mixture_components=getattr(
+             import_module("gnss_gpu._gnss_gpu_pf_device"),
+             "pf_device_position_mixture_components", None),
++        pf_device_fill_log_weights=getattr(
++            import_module("gnss_gpu._gnss_gpu_pf_device"), "pf_device_fill_log_weights", None),
++        pf_device_fill_log_weights_setter=getattr(
++            import_module("gnss_gpu._gnss_gpu_pf_device"), "_uniform_weights_array_setter", None),
+         pf_device_get_log_weights=pf_device_get_log_weights,
+         pf_device_set_log_weights=pf_device_set_log_weights,
+         pf_device_get_resample_ancestors=pf_device_get_resample_ancestors,
+@@ -137,6 +141,8 @@
+ def attach_pf_device_bindings(pf, bindings: SimpleNamespace) -> None:
+     for name in _BINDING_ATTRS:
+         setattr(pf, f"_{name}", getattr(bindings, name))
++    pf._pf_device_fill_log_weights = getattr(bindings, "pf_device_fill_log_weights", None)
++    pf._pf_device_fill_log_weights_setter = getattr(bindings, "pf_device_fill_log_weights_setter", None)
+     pf._pf_device_gather_from = getattr(bindings, "pf_device_gather_from", None)
+     pf._pf_device_gather_from_cdf = getattr(bindings, "pf_device_gather_from_cdf", None)
+     pf._pf_device_position_mixture_components = getattr(
+--- a/python/gnss_gpu/realtime_runtime.py
++++ b/python/gnss_gpu/realtime_runtime.py
+@@ -390,6 +390,18 @@
+         self._migrate(self.active, target)
+         self.active = target
+         return target
++
++    @staticmethod
++    def _set_migration_log_weights(target: _ParticleRuntime, count: int) -> None:
++        value = -math.log(count)
++        uniform = getattr(target, "set_uniform_log_weights", None)
++        if callable(uniform):
++            from gnss_gpu.pf_device_runtime import ParticleFilterDeviceRuntime
++            expected = getattr(ParticleFilterDeviceRuntime, "_uniform_weights_method", None)
++            if expected is not None and getattr(uniform, "__func__", None) is expected:
++                uniform(value)
++                return
++        target.set_log_weights(np.full(count, value, dtype=np.float64))
+ 
+     @staticmethod
+     def _migrate(source: _ParticleRuntime, target: _ParticleRuntime) -> None:
+@@ -438,7 +450,7 @@
+                 count == getattr(target_state, "n_particles", 0) and callable(cdf_gather) and
+                 cdf_gather is getattr(source, "_pf_device_gather_from_cdf", None)):
+             if cdf_gather(target_state, source_state, cdf):
+-                target.set_log_weights(np.full(count, -math.log(count), dtype=np.float64))
++                PersistentParticleRuntimePool._set_migration_log_weights(target, count)
+                 return
+         indices = np.searchsorted(
+             cdf,
+@@ -447,7 +459,7 @@
+         )
+         if resident:
+             if gather(target_state, source_state, np.minimum(indices, source_count - 1)):
+-                target.set_log_weights(np.full(count, -math.log(count), dtype=np.float64))
++                PersistentParticleRuntimePool._set_migration_log_weights(target, count)
+                 return
+             states = np.asarray(source.get_particle_states(), dtype=np.float64)
+         selected = states[np.minimum(indices, states.shape[0] - 1)]
+@@ -459,4 +471,4 @@
+                 spread_cb=1.0,
+             )
+         target.set_particle_states(selected)
+-        target.set_log_weights(np.full(count, -math.log(count), dtype=np.float64))
++        PersistentParticleRuntimePool._set_migration_log_weights(target, count)

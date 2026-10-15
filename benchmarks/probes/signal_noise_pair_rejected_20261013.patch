@@ -1,0 +1,26 @@
+--- a/src/signal_sim/signal_sim.cu
++++ b/src/signal_sim/signal_sim.cu
+@@ -389,8 +389,9 @@
+     if (noise_std > 0.0f) {
+         curandStatePhilox4_32_10_t state;
+         curand_init(seed, (unsigned long long)idx, 0, &state);
+-        sum_i += curand_normal(&state) * noise_std;
+-        sum_q += curand_normal(&state) * noise_std;
++        float2 noise = curand_normal2(&state);
++        sum_i += noise.x * noise_std;
++        sum_q += noise.y * noise_std;
+     }
+     iq_out[2 * idx] = sum_i;
+     iq_out[2 * idx + 1] = sum_q;
+@@ -418,8 +419,9 @@
+     if (noise_std > 0.0f) {
+         curandStatePhilox4_32_10_t state;
+         curand_init(seed, (unsigned long long)idx, 0, &state);
+-        sum_i += curand_normal(&state) * noise_std;
+-        sum_q += curand_normal(&state) * noise_std;
++        float2 noise = curand_normal2(&state);
++        sum_i += noise.x * noise_std;
++        sum_q += noise.y * noise_std;
+     }
+ 
+     iq_out[base] = sum_i;

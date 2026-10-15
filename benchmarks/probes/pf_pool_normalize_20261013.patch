@@ -1,0 +1,43 @@
+--- a/python/gnss_gpu/realtime_runtime.py
++++ b/python/gnss_gpu/realtime_runtime.py
+@@ -405,14 +405,33 @@
+         states = None if resident else np.asarray(source.get_particle_states(), dtype=np.float64)
+         log_weights = np.asarray(source.get_log_weights(), dtype=np.float64)
+         finite = np.isfinite(log_weights)
+-        if not np.any(finite):
+-            weights = np.full(log_weights.size, 1.0 / log_weights.size)
++        reuse = log_weights.ndim == 1 and log_weights.size >= 65536
++        if reuse:
++            error_modes = np.geterr().values()
++            reuse = all(mode in ("warn", "ignore") for mode in error_modes)
++            if reuse and "warn" in error_modes:
++                import warnings
++                reuse = not any(
++                    action == "error" and issubclass(RuntimeWarning, category)
++                    for action, _, category, _, _ in warnings.filters
++                )
++        if reuse and np.all(finite):
++            # A private copy preserves caller-owned weights, including views.
++            # All-finite input makes the original floor/where work redundant.
++            weights = log_weights.copy()
++            np.subtract(weights, float(np.max(weights)), out=weights)
++            np.exp(weights, out=weights)
++            weights /= np.sum(weights)
++            cdf = np.cumsum(weights, out=weights)
+         else:
+-            floor = float(np.min(log_weights[finite])) - 100.0
+-            shifted = np.where(finite, log_weights, floor)
+-            weights = np.exp(shifted - float(np.max(shifted)))
+-            weights /= np.sum(weights)
+-        cdf = np.cumsum(weights)
++            if not np.any(finite):
++                weights = np.full(log_weights.size, 1.0 / log_weights.size)
++            else:
++                floor = float(np.min(log_weights[finite])) - 100.0
++                shifted = np.where(finite, log_weights, floor)
++                weights = np.exp(shifted - float(np.max(shifted)))
++                weights /= np.sum(weights)
++            cdf = np.cumsum(weights)
+         count = int(target.n_particles)
+         cdf_gather = getattr(target, "_pf_device_gather_from_cdf", None)
+         if (resident and cdf.size == source_count and max(source_count, count) >= 65536 and

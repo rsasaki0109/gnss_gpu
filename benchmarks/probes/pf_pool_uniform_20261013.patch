@@ -1,0 +1,22 @@
+--- a/python/gnss_gpu/realtime_runtime.py
++++ b/python/gnss_gpu/realtime_runtime.py
+@@ -431,9 +431,16 @@
+             # A private copy preserves caller-owned weights, including views.
+             # All-finite input makes the original floor/where work redundant.
+             weights = log_weights.copy()
+-            np.subtract(weights, float(np.max(weights)), out=weights)
+-            np.exp(weights, out=weights)
+-            weights /= np.sum(weights)
++            maximum = float(np.max(weights))
++            if (weights[0] == maximum and weights[weights.size // 2] == maximum and
++                    weights[-1] == maximum and float(np.min(weights)) == maximum):
++                # Equal finite values subtract to zero, exp to one, and sum
++                # exactly to this array's size. Keep the sequential CDF.
++                weights.fill(1.0 / weights.size)
++            else:
++                np.subtract(weights, maximum, out=weights)
++                np.exp(weights, out=weights)
++                weights /= np.sum(weights)
+             cdf = np.cumsum(weights, out=weights)
+         else:
+             if not np.any(finite):

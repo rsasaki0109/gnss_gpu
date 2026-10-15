@@ -44,7 +44,7 @@ Heavy search also runs persistent Numba-CUDA batches for a 16x32 arc screen,
 256x64 candidate residual scores, and 256 affine refits with 16 sub-blocks.
 Kernel compilation and device/pinned-host allocation occur before timing.
 
-The locked GTX 1660 Ti result is
+The locked NVIDIA CUDA GPU result is
 `internal_docs/phase4_realtime_benchmark_2026_07_29.json`: normal maximum
 13.761 ms, search maximum 75.907 ms, zero deadline misses. Windows
 `nvidia-smi` reported process memory as unavailable, so the recorded

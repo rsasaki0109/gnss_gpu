@@ -1,0 +1,135 @@
+--- a/src/signal_sim/signal_sim.cu
++++ b/src/signal_sim/signal_sim.cu
+@@ -4,6 +4,7 @@
+ #include <chrono>
+ #include <cmath>
+ #include <cstddef>
++#include <cstring>
+ #include <mutex>
+ #include <limits>
+ #include <stdexcept>
+@@ -447,6 +448,37 @@
+     }
+ };
+ 
++// Reusable staging preserves ordinary owning caller output arrays. Grow only
++// after completed copies, and release the previous buffer before allocating so
++// locked host memory never exceeds the32MiB requested-capacity limit.
++struct PinnedOutputBuffer {
++    float* data = nullptr;
++    size_t capacity = 0;
++
++    ~PinnedOutputBuffer() { reset(); }
++    void reset() noexcept {
++        if (data) cudaFreeHost(data);
++        data = nullptr;
++        capacity = 0;
++    }
++    bool try_reserve(size_t count) {
++        if (count <= capacity) return true;
++        reset();
++        float* replacement = nullptr;
++        cudaError_t status = cudaMallocHost(&replacement, count * sizeof(float));
++        if (status == cudaErrorMemoryAllocation) {
++            // The preceding synchronization succeeded. Clear only this new
++            // optional allocation failure and retain the original copy path.
++            cudaGetLastError();
++            return false;
++        }
++        CUDA_CHECK(status);
++        data = replacement;
++        capacity = count;
++        return true;
++    }
++};
++
+ class SignalDeviceScope {
+  public:
+     explicit SignalDeviceScope(int device) {
+@@ -477,6 +509,25 @@
+     std::vector<EpochDescriptor> packed_epochs;
+     std::vector<DeviceChannel> packed_channels;
+     std::vector<int> packed_nav_bits;
++    PinnedOutputBuffer host_output;
++    unsigned int eligible_downloads = 0;
++    bool pinned_output_disabled = false;
++
++    void download(float* destination, size_t num_floats) {
++        size_t bytes = num_floats * sizeof(float);
++        bool eligible = bytes >= 1024 * 1024 && bytes <= 32 * 1024 * 1024;
++        if (eligible && !pinned_output_disabled && eligible_downloads >= 2) {
++            if (host_output.try_reserve(num_floats)) {
++                CUDA_CHECK(cudaMemcpy(host_output.data, output.data, bytes, cudaMemcpyDeviceToHost));
++                std::memcpy(destination, host_output.data, bytes);
++                return;
++            }
++            pinned_output_disabled = true;
++        }
++        CUDA_CHECK(cudaMemcpy(destination, output.data, bytes, cudaMemcpyDeviceToHost));
++        if (eligible && eligible_downloads < 2) ++eligible_downloads;
++    }
++
+ 
+     ~Impl() {
+         int previous = 0;
+@@ -501,6 +552,10 @@
+          + impl_->nav_bits.capacity * sizeof(int)
+          + impl_->output.capacity * sizeof(float)
+          + impl_->epochs.capacity * sizeof(EpochDescriptor);
++}
++
++size_t DeviceSignalWorkspace::pinned_host_bytes() const noexcept {
++    return impl_ ? impl_->host_output.capacity * sizeof(float) : 0;
+ }
+ 
+ void simulate_epoch(const SignalSimConfig& config,
+@@ -526,7 +581,6 @@
+ 
+     int blocks = (n_samples + kBlockSize - 1) / kBlockSize;
+     size_t num_floats = (size_t)n_samples * 2;
+-    size_t output_bytes = num_floats * sizeof(float);
+ 
+     auto& packed_channels = impl_->packed_channels;
+     auto& packed_nav_bits = impl_->packed_nav_bits;
+@@ -600,7 +654,7 @@
+     CUDA_CHECK(cudaGetLastError());
+     CUDA_CHECK(cudaDeviceSynchronize());
+ 
+-    CUDA_CHECK(cudaMemcpy(iq_output, d_output, output_bytes, cudaMemcpyDeviceToHost));
++    impl_->download(iq_output, num_floats);
+ 
+ }
+ 
+@@ -674,7 +728,7 @@
+     }
+     CUDA_CHECK(cudaGetLastError());
+     CUDA_CHECK(cudaDeviceSynchronize());
+-    CUDA_CHECK(cudaMemcpy(iq_output, impl_->output.data, floats * sizeof(float), cudaMemcpyDeviceToHost));
++    impl_->download(iq_output, floats);
+ }
+ 
+ void generate_single_channel(const SatChannel& ch,
+--- a/include/gnss_gpu/signal_sim.h
++++ b/include/gnss_gpu/signal_sim.h
+@@ -70,6 +70,8 @@
+                          int n_epochs, float* iq_output, int n_samples);
+     void close() noexcept;
+     std::size_t allocated_bytes() const noexcept;
++    // Optional reusable host staging; device allocated_bytes remains unchanged.
++    std::size_t pinned_host_bytes() const noexcept;
+ 
+  private:
+     struct Impl;
+--- a/python/gnss_gpu/_signal_sim_bindings.cpp
++++ b/python/gnss_gpu/_signal_sim_bindings.cpp
+@@ -217,7 +217,9 @@
+            py::arg("n_samples"), py::arg("noise_floor_db"), py::arg("noise_seed") = 0, py::arg("noise_seeds") = py::none())
+         .def("close", &gnss_gpu::DeviceSignalWorkspace::close)
+         .def_property_readonly("allocated_bytes",
+-                              &gnss_gpu::DeviceSignalWorkspace::allocated_bytes);
++                              &gnss_gpu::DeviceSignalWorkspace::allocated_bytes)
++        .def_property_readonly("pinned_host_bytes",
++                              &gnss_gpu::DeviceSignalWorkspace::pinned_host_bytes);
+ 
+     m.def("generate_single", [](int prn, double code_phase, double carrier_phase,
+                                  double doppler_hz, float amplitude, int nav_bit,

@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-14T06:14:31.106796+00:00",
+  "verified": true,
+  "adopted": true,
+  "source_build_installed_and_archive_match": true,
+  "measurement_report": {
+    "path": "benchmarks/pf_mixture_geometry_gpu_20261014.json",
+    "sha256": "4927ca198824c56cbb1f1849be642c0d53ff6b467865c56bf0bca340ad5d34b7"
+  },
+  "device_code_report": {
+    "path": "benchmarks/pf_mixture_geometry_device_code_20261013.json",
+    "sha256": "458bbb0996445269a005d2569adfba6be70f81aabab45c91caeb95c1627bc07d"
+  },
+  "bit_identical_cases": 779,
+  "output_cases": 743,
+  "matched_rejections": 36,
+  "original_public_cases": 536,
+  "new_table_cases": 216,
+  "scratch_reuse_histories": 27,
+  "stage_batch_conditions": 27,
+  "stage_rounds": 3,
+  "stage_repeats": 3,
+  "per_sample_conditions": 8,
+  "paired_rounds": 5,
+  "paired_repeats": 5,
+  "per_sample_pairs": 200,
+  "paired_full_state_snapshots": 40,
+  "traced_host_peak_cases": 15,
+  "baseline_targeted_tests_passed": 536,
+  "baseline_new_api_tests_skipped": 263,
+  "candidate_targeted_tests_passed": 799,
+  "regression_passed": 5189,
+  "memcheck_errors": 0,
+  "leaked_bytes": 0,
+  "racecheck_hazards": 0,
+  "synccheck_errors": 0,
+  "native_state_layout_unchanged": true,
+  "retained_gpu_bodies_and_resources": 78,
+  "new_geometry_kernels": 3,
+  "no_new_gpu_owner_buffers_or_allocation": true,
+  "retained_bvh_and_signal": {
+    "benchmarks/bvh_parallel_mirror_chunks_gpu_20261013.json": {
+      "sha256": "bcda1df440f75615bc2d869e031b039f3499d2318444243ef62b4e88d0215cd8",
+      "source_build_installed_match": true
+    },
+    "benchmarks/signal_wide_static_gpu_20261014.json": {
+      "sha256": "086e17293f916911ae63de639b76adf6371b15c514b535e9668fcb43b360d222",
+      "source_build_installed_match": true
+    }
+  },
+  "public_text_files_checked": 2691,
+  "public_device_model_names_absent": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  },
+  "long_real_data_position_error_curve_newly_evaluated": false
+}

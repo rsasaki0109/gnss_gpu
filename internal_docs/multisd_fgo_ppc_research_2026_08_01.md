@@ -506,7 +506,7 @@ sum from 41.96 s to 20.32 s in the same loaded-session comparison. These
 figures establish that the multi-RHS branch is real and scientifically
 equivalent, not that forced GPU is universally faster.
 
-The GTX 1660 Ti forced-CUDA route p95 values were 135.29, 109.12, 79.39,
+The NVIDIA CUDA GPU forced-CUDA route p95 values were 135.29, 109.12, 79.39,
 60.60, 78.30, and 82.42 ms. Small PPC windows have about 105 states, so PCIe
 and launch overhead still dominate on the first two Tokyo routes. Production
 therefore retains the pre-existing heterogeneous `auto` threshold: state sizes

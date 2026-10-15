@@ -237,7 +237,7 @@ validation, and a ROS 2 lifecycle safety boundary.
 - Outage recovery: {phase3["recovery_epochs"]} evidence epochs; greedy
   {phase3["legacy_greedy_error_m"]:.1f} m versus retained-hypothesis
   {phase3["multihypothesis_error_m"]:.1f} m.
-- GTX 1660 Ti runtime: normal maximum {runtime["normal_latency_max_ms"]:.3f} ms,
+- NVIDIA CUDA GPU runtime: normal maximum {runtime["normal_latency_max_ms"]:.3f} ms,
   search maximum {runtime["search_latency_max_ms"]:.3f} ms, recorded capacity
   {runtime["peak_gpu_memory_mb"]:.3f} MiB.
 - Guarded LAMBDA FIX: {wp173["fix_epochs"]}/{wp173["full_denominator_epochs"]}

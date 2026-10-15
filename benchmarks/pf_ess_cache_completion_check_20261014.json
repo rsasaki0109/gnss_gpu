@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-14T04:08:52.184241+00:00",
+  "verified": true,
+  "adopted": true,
+  "source_build_installed_and_archive_match": true,
+  "measurement_report": {
+    "path": "benchmarks/pf_ess_cache_gpu_20261014.json",
+    "sha256": "bd26d1e0648d8452fb9ac209237f1102db3702763c231fbb84dcca1582133776"
+  },
+  "device_code_report": {
+    "path": "benchmarks/pf_ess_cache_device_code_20261013.json",
+    "sha256": "75bfb7f1641f22f7ee4c4942609dd9490b521440f8e0291a70b773e209b62b36"
+  },
+  "bit_identical_cases": 25227,
+  "output_cases": 24739,
+  "matched_input_rejections": 488,
+  "new_actual_old_new_records": 240,
+  "stage_batch_conditions": 24,
+  "preliminary_conditions": 16,
+  "rounds": 5,
+  "repeats": 20,
+  "per_sample_conditions": 8,
+  "per_sample_pairs": 800,
+  "paired_full_state_snapshots": 40,
+  "baseline_targeted_tests_passed": 240,
+  "candidate_targeted_tests_passed": 240,
+  "regression_passed": 4390,
+  "memcheck_errors": 0,
+  "leaked_bytes": 0,
+  "racecheck_hazards": 0,
+  "synccheck_errors": 0,
+  "retained_old_gpu_bodies_and_resources": 78,
+  "new_kernels": 0,
+  "no_new_device_allocation": true,
+  "source_check": {
+    "verified": true,
+    "source_sha256": {
+      "baseline": {
+        "src/particle_filter/pf_device.cu": "e1bb73fc8db903896d19a54d670614f24dd417ce9dbc7db09481ed6329eb8a81",
+        "include/gnss_gpu/pf_device.h": "494c8542a701fe6b6d5b6d6ec2eb0cfc8a7c6bd78514eb6c1dd3b2a5991bbe60",
+        "python/gnss_gpu/_pf_device_bindings.cpp": "67a9f2c7eff554dd398c043bf781845559e482635dc7e750eea1fbc2d799203b",
+        "python/gnss_gpu/pf_device_runtime.py": "982841b7b1333473c99d7d2274831f3d19d01b609719f0c50223bbf4beb48b5b",
+        "python/gnss_gpu/pf_device_config.py": "d677cd9e37f1d1216ea607ebc0552ac6571845d06bc15af4f9cd9dbe0efb05c4"
+      },
+      "candidate": {
+        "src/particle_filter/pf_device.cu": "14a8592c1c21218bc10a86433f4f463d5e8d101c9a4381feefa529e30514e1aa",
+        "include/gnss_gpu/pf_device.h": "88f4486cf2b252e4408dd1b85f9e29dc8dfd0260aaa71faf2a87c0710817be2e",
+        "python/gnss_gpu/_pf_device_bindings.cpp": "67a9f2c7eff554dd398c043bf781845559e482635dc7e750eea1fbc2d799203b",
+        "python/gnss_gpu/pf_device_runtime.py": "982841b7b1333473c99d7d2274831f3d19d01b609719f0c50223bbf4beb48b5b",
+        "python/gnss_gpu/pf_device_config.py": "d677cd9e37f1d1216ea607ebc0552ac6571845d06bc15af4f9cd9dbe0efb05c4"
+      }
+    },
+    "unchanged_all_gpu_source": true,
+    "all_16_native_weight_mutators_invalidate": true,
+    "result_cached_only_after_successful_stream_completion": true,
+    "cache_hit_retains_stream_completion": true,
+    "all_prior_fields_and_declarations_retained": true,
+    "changed_public_native_state_layout": "Two host cache fields appended; native clients rebuild with matching header."
+  },
+  "retained_bvh_and_signal": {
+    "benchmarks/bvh_parallel_mirror_chunks_gpu_20261013.json": {
+      "sha256": "bcda1df440f75615bc2d869e031b039f3499d2318444243ef62b4e88d0215cd8",
+      "source_build_installed_match": true
+    },
+    "benchmarks/signal_wide_static_gpu_20261014.json": {
+      "sha256": "086e17293f916911ae63de639b76adf6371b15c514b535e9668fcb43b360d222",
+      "source_build_installed_match": true
+    }
+  },
+  "public_text_files_checked": 2677,
+  "public_device_model_names_absent": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  },
+  "long_real_data_position_error_curve_newly_evaluated": false
+}

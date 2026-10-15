@@ -28,7 +28,7 @@ python tools/build_release_bundle.py --verify dist/reproducibility
 - DDPR recovers 2 of 3 WP163 reference ranks with no WP164 false pass.
 - Retained hypotheses recover the locked outage in 3 evidence epochs; the
   greedy comparator ends 10 m away.
-- GTX 1660 Ti maxima are 13.761 ms in normal mode and 75.907 ms in search mode,
+- NVIDIA CUDA GPU maxima are 13.761 ms in normal mode and 75.907 ms in search mode,
   with no recorded deadline miss.
 - Full WP172 candidate supply replays at a conservative 42.653 ms/epoch when
   its two RTK paths are summed sequentially (21.826 ms/epoch concurrently);

@@ -50,9 +50,9 @@ struct PFDeviceState {
     cudaStream_t stream;
 
     // Persistent device buffers for satellite data (avoids per-call cudaMalloc)
-    double* d_sat_ecef;     // [pinned_capacity * 3]
-    double* d_pseudoranges; // [pinned_capacity]
-    double* d_weights_sat;  // [pinned_capacity]
+    double* d_sat_ecef;     // Owning allocation: [pinned_capacity * 5].
+    double* d_pseudoranges; // Alias at current n_sat * 3; never freed separately.
+    double* d_weights_sat;  // Alias at current n_sat * 4; never freed separately.
     // Reusable packed observation scratch for DD carrier/PR and Doppler.
     // Capacity is measured in doubles and grows on demand.
     double* d_obs_scratch;
@@ -69,6 +69,15 @@ struct PFDeviceState {
     int n_particles;
     int grid_size;  // precomputed (n_particles + 255) / 256
     bool allocated;
+    // True when initialization or an explicit covariance broadcast (and
+    // subsequent common process noise) guarantees identical nine components.
+    // Importing particle states or a Doppler KF update invalidates this fact.
+    bool covariance_uniform;
+    // Host-only ESS result, valid until an API operation can write log-weights.
+    // A cache hit still synchronizes this state's stream. Do not write the
+    // device weight pointer directly without invalidating this result.
+    mutable double cached_ess;
+    mutable bool ess_cached;
 };
 
 // Lifecycle management
@@ -239,6 +248,14 @@ void pf_device_resample_megopolis_coalesced(PFDeviceState* state, int n_iteratio
 // Estimate - compute weighted mean on device, return [4] to host
 void pf_device_estimate(const PFDeviceState* state, double* result);
 
+// Exact FP64 Gaussian components for 2-4 finite reference positions.
+// Returns false for nonfinite particle coordinates so the CPU path can retain
+// its original NaN payload/error behavior. Uses inactive covariance scratch;
+// synchronizes, and preserves every logical particle field, weight and ESS.
+bool pf_device_position_mixture_components(const PFDeviceState* state,
+    const double* refs, const double* log_mix, int n_components,
+    double sigma_squared, double* output);
+
 // Copy particles to host for visualization (only when needed)
 void pf_device_get_particles(const PFDeviceState* state, double* output);
 
@@ -247,16 +264,54 @@ void pf_device_get_particles(const PFDeviceState* state, double* output);
 // Synchronizes the stream.
 void pf_device_get_particle_states(const PFDeviceState* state, double* output);
 
+// Copy all 16 fields from source ancestors to a distinct same-device target.
+// Source producers and target completion are synchronized; reset weights once.
+// Returns false without changing states for in-place/cross-device copies.
+bool pf_device_gather_from(PFDeviceState* target, const PFDeviceState* source,
+                           const int* ancestors);
+
+// Select using a host-built finite monotone CDF and exact FP64 left search.
+// Borrows source CDF scratch; keep both states stable until synchronized return.
+// CDF must have source->n_particles elements. Same decline rules as gather_from.
+bool pf_device_gather_from_cdf(PFDeviceState* target, const PFDeviceState* source,
+                               const double* cdf);
+
+// Select from the exact sequential FP64 CDF of source_n copies of 1/source_n
+// by integer span inversion for source_n >= 262144. Smaller sources keep
+// the original full-CDF/search path. Borrows target ancestor-B
+// scratch for spans and exact integer reciprocals. If the extra table does
+// not fit, use the original full-CDF path. Source CDF is otherwise materialized
+// only for optional CDF output.
+// Declines before mutation for non-nearest CPU rounding, small source/target,
+// in-place/cross-device/unsupported host. Optional output copies all CDF bits.
+bool pf_device_gather_from_uniform_cdf(PFDeviceState* target, const PFDeviceState* source,
+                                      double* cdf_output = nullptr);
+
+// Try the same exact uniform-CDF gather after checking every current GPU
+// log-weight for finite numeric equality. Copies one integer flag to host,
+// borrows existing reduction scratch, and synchronizes source producers.
+// False leaves particle states, log-weights and ESS caches unchanged; this
+// includes nonuniform/nonfinite/small/invalid/in-place/cross-device cases.
+bool pf_device_try_gather_uniform_weights(PFDeviceState* target, const PFDeviceState* source);
+
 // Upload full particle states from host:
 // [x, y, z, cb, mu_vx, mu_vy, mu_vz, Sigma_v(3x3 row-major)].
 // Resets log-weights to uniform after upload.
 void pf_device_set_particle_states(PFDeviceState* state, const double* input);
+
+// Broadcast row-major covariance to every particle; preserve all other state
+// and weights. Nine inline kernel coefficients, no host/device state dump.
+void pf_device_set_velocity_covariance(PFDeviceState* state, const double* covariance);
 
 // Copy log-weights to host (for FFBSi / diagnostics). Synchronizes the stream.
 void pf_device_get_log_weights(const PFDeviceState* state, double* output);
 
 // Upload log-weights from host. Synchronizes the stream.
 void pf_device_set_log_weights(PFDeviceState* state, const double* input);
+
+// Broadcast a caller-computed FP64 scalar to log-weights; invalidate ESS only.
+// Synchronizes the state stream and preserves particle/covariance state.
+void pf_device_fill_log_weights(PFDeviceState* state, double value);
 
 // Copy last systematic-resampling ancestor indices to host (out[j] = source idx).
 // Only valid after pf_device_resample_systematic; synchronizes the stream.

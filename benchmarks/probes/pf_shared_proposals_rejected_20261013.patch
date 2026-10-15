@@ -1,0 +1,97 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -2733,6 +2733,80 @@
+     ancestors[i] = k;
+ }
+ 
++__global__ void pfd_megopolis_shared_proposals_kernel(const double* log_weights, int* ancestors,
++                                              int N, unsigned long long seed,
++                                              int n_iterations) {
++    // Each four-draw chunk uses the original block subsequence and absolute
++    // offset. Cooperating lanes build the identical proposal stream once.
++    __shared__ int shared_offsets[256];
++    int first_draw = threadIdx.x * 4;
++    if (first_draw < n_iterations) {
++        curandStatePhilox4_32_10_t proposal_rng;
++        curand_init(seed, (unsigned long long)N + blockIdx.x,
++                    (unsigned long long)first_draw, &proposal_rng);
++        uint4 proposals = curand4(&proposal_rng);
++        unsigned int draws[4] = {proposals.x, proposals.y, proposals.z, proposals.w};
++        #pragma unroll
++        for (int t = 0; t < 4; ++t) {
++            if (first_draw + t < n_iterations) {
++                shared_offsets[first_draw + t] = (int)(draws[t] % (unsigned int)N);
++            }
++        }
++    }
++    __syncthreads();
++
++    int i = blockIdx.x * blockDim.x + threadIdx.x;
++    if (i >= N) return;
++
++    // Block-shared offset stream (subsequence N + block) and per-particle
++    // acceptance stream (subsequence i) are disjoint Philox subsequences.
++    curandStatePhilox4_32_10_t own_rng;
++    curand_init(seed, (unsigned long long)i, 0, &own_rng);
++
++    // Draws and the acceptance test use single precision: consumer GPUs run
++    // FP64 at 1/32 rate, and float resolution is ample for u <= w_j / w_k.
++    int k = i;
++    double lw_k = log_weights[i];
++    int b = 0;
++    int full_iterations = n_iterations > 0 ? (n_iterations / 4) * 4 : 0;
++    for (; b < full_iterations; b += 4) {
++        float4 uniforms = curand_uniform4(&own_rng);
++        int offsets[4] = {
++            shared_offsets[b + 0], shared_offsets[b + 1],
++            shared_offsets[b + 2], shared_offsets[b + 3]};
++        float draws[4] = {uniforms.x, uniforms.y, uniforms.z, uniforms.w};
++        int indices[4];
++        double proposal_weights[4];
++        // Proposal addresses do not depend on the accepted ancestor. Fetch
++        // four ahead, then retain the original sequential acceptance order.
++        #pragma unroll
++        for (int t = 0; t < 4; t++) {
++            int wrap = N - offsets[t];
++            indices[t] = (i >= wrap) ? i - wrap : i + offsets[t];
++            proposal_weights[t] = log_weights[indices[t]];
++        }
++        #pragma unroll
++        for (int t = 0; t < 4; t++) {
++            if (__logf(draws[t]) <= (float)(proposal_weights[t] - lw_k)) {
++                k = indices[t];
++                lw_k = proposal_weights[t];
++            }
++        }
++    }
++    for (; b < n_iterations; b++) {
++        int offset = shared_offsets[b];
++        int wrap = N - offset;
++        int j = (i >= wrap) ? i - wrap : i + offset;
++        double lw_j = log_weights[j];
++        float u = curand_uniform(&own_rng);
++        if (__logf(u) <= (float)(lw_j - lw_k)) {
++            k = j;
++            lw_k = lw_j;
++        }
++    }
++    ancestors[i] = k;
++}
++
+ __global__ void pfd_megopolis_gather_kernel(const double* src_px, const double* src_py,
+                                            const double* src_pz,
+                                            const double* src_vx, const double* src_vy,
+@@ -3480,8 +3554,13 @@
+     int N = state->n_particles;
+     int grid = state->grid_size;
+ 
++    if (n_iterations > 0 && n_iterations <= 256) {
++        pfd_megopolis_shared_proposals_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
++            state->d_log_weights, state->d_megopolis_idx_a, N, seed, n_iterations);
++    } else {
+     pfd_megopolis_coalesced_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
+         state->d_log_weights, state->d_megopolis_idx_a, N, seed, n_iterations);
++    }
+     pfd_megopolis_gather_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
+         state->d_px, state->d_py, state->d_pz,
+         state->d_vx, state->d_vy, state->d_vz, state->d_vcov, state->d_pcb,

@@ -1,0 +1,160 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -92,13 +92,12 @@
+         vz[tid] += curand_normal_double(&state) * spread_vel;
+     }
+     double init_vel_var = init_vel_sigma * init_vel_sigma;
+-    int cov_off = tid * 9;
+     for (int k = 0; k < 9; k++) {
+-        vcov[cov_off + k] = 0.0;
+-    }
+-    vcov[cov_off + 0] = init_vel_var;
+-    vcov[cov_off + 4] = init_vel_var;
+-    vcov[cov_off + 8] = init_vel_var;
++        vcov[(size_t)k * N + tid] = 0.0;
++    }
++    vcov[(size_t)0 * N + tid] = init_vel_var;
++    vcov[(size_t)4 * N + tid] = init_vel_var;
++    vcov[(size_t)8 * N + tid] = init_vel_var;
+     pcb[tid] = init_cb + curand_normal_double(&state) * spread_cb;
+     log_weights[tid] = 0.0;
+ }
+@@ -146,15 +145,14 @@
+     double ny = 0.0;
+     double nz = 0.0;
+     if constexpr (VELOCITY_KF) {
+-        int cov_off = tid * 9;
+         double dt2 = dt * dt;
+         double sigma_pos2 = sigma_pos * sigma_pos;
+-        double a00 = sigma_pos2 + dt2 * vcov[cov_off + 0];
+-        double a01 = dt2 * vcov[cov_off + 1];
+-        double a02 = dt2 * vcov[cov_off + 2];
+-        double a11 = sigma_pos2 + dt2 * vcov[cov_off + 4];
+-        double a12 = dt2 * vcov[cov_off + 5];
+-        double a22 = sigma_pos2 + dt2 * vcov[cov_off + 8];
++        double a00 = sigma_pos2 + dt2 * vcov[(size_t)0 * N + tid];
++        double a01 = dt2 * vcov[(size_t)1 * N + tid];
++        double a02 = dt2 * vcov[(size_t)2 * N + tid];
++        double a11 = sigma_pos2 + dt2 * vcov[(size_t)4 * N + tid];
++        double a12 = dt2 * vcov[(size_t)5 * N + tid];
++        double a22 = sigma_pos2 + dt2 * vcov[(size_t)8 * N + tid];
+ 
+         double l00 = sqrt(fmax(a00, 0.0));
+         double l10 = 0.0;
+@@ -178,9 +176,9 @@
+         nz = l20 * z0 + l21 * z1 + l22 * z2;
+ 
+         double qdt = fmax(velocity_process_noise, 0.0) * fmax(dt, 0.0);
+-        vcov[cov_off + 0] += qdt;
+-        vcov[cov_off + 4] += qdt;
+-        vcov[cov_off + 8] += qdt;
++        vcov[(size_t)0 * N + tid] += qdt;
++        vcov[(size_t)4 * N + tid] += qdt;
++        vcov[(size_t)8 * N + tid] += qdt;
+     } else {
+         nx = curand_normal_double(&state) * sigma_pos;
+         ny = curand_normal_double(&state) * sigma_pos;
+@@ -1818,10 +1816,9 @@
+     double z = pz[tid];
+     double mui[3] = {vx[tid], vy[tid], vz[tid]};
+ 
+-    int cov_off = tid * 9;
+     double P[9];
+     for (int k = 0; k < 9; k++) {
+-        P[k] = vcov[cov_off + k];
++        P[k] = vcov[(size_t)k * N + tid];
+     }
+ 
+     double h_mean[3] = {0.0, 0.0, 0.0};
+@@ -1941,7 +1938,7 @@
+     vy[tid] = mui[1];
+     vz[tid] = mui[2];
+     for (int k = 0; k < 9; k++) {
+-        vcov[cov_off + k] = P[k];
++        vcov[(size_t)k * N + tid] = P[k];
+     }
+     log_weights[tid] += log_w;
+ }
+@@ -2304,7 +2301,6 @@
+     int tid = blockIdx.x * blockDim.x + threadIdx.x;
+     if (tid >= N) return;
+     int out_off = tid * 16;
+-    int cov_off = tid * 9;
+     output[out_off + 0] = px[tid];
+     output[out_off + 1] = py[tid];
+     output[out_off + 2] = pz[tid];
+@@ -2313,7 +2309,7 @@
+     output[out_off + 5] = vy[tid];
+     output[out_off + 6] = vz[tid];
+     for (int k = 0; k < 9; k++) {
+-        output[out_off + 7 + k] = vcov[cov_off + k];
++        output[out_off + 7 + k] = vcov[(size_t)k * N + tid];
+     }
+ }
+ 
+@@ -2327,7 +2323,6 @@
+     int tid = blockIdx.x * blockDim.x + threadIdx.x;
+     if (tid >= N) return;
+     int in_off = tid * 16;
+-    int cov_off = tid * 9;
+     px[tid] = input[in_off + 0];
+     py[tid] = input[in_off + 1];
+     pz[tid] = input[in_off + 2];
+@@ -2336,7 +2331,7 @@
+     vy[tid] = input[in_off + 5];
+     vz[tid] = input[in_off + 6];
+     for (int k = 0; k < 9; k++) {
+-        vcov[cov_off + k] = input[in_off + 7 + k];
++        vcov[(size_t)k * N + tid] = input[in_off + 7 + k];
+     }
+ }
+ 
+@@ -2448,10 +2443,8 @@
+     vx_out[tid] = vx_in[lo];
+     vy_out[tid] = vy_in[lo];
+     vz_out[tid] = vz_in[lo];
+-    int dst_cov = tid * 9;
+-    int src_cov = lo * 9;
+     for (int k = 0; k < 9; k++) {
+-        vcov_out[dst_cov + k] = vcov_in[src_cov + k];
++        vcov_out[(size_t)k * N + tid] = vcov_in[(size_t)k * N + lo];
+     }
+     pcb_out[tid] = pcb_in[lo];
+     if (ancestor_out != nullptr) {
+@@ -2586,18 +2579,13 @@
+     }
+     if (!copy_covariance) return;
+ 
+-    // Covariance is packed as nine doubles per particle. Assign consecutive
+-    // components to consecutive lanes so stores are contiguous and neighboring
+-    // lanes read the same ancestor's covariance, rather than nine strided
+-    // warp accesses to unrelated ancestors. Tail threads still copy components
+-    // belonging to valid particles in their block; no early return is allowed.
+-    int first = blockIdx.x * blockDim.x;
+-    int count = min((int)blockDim.x, N - first);
+-    for (int local = threadIdx.x; local < count * 9; local += blockDim.x) {
+-        int particle = first + local / 9;
+-        int component = local % 9;
+-        dst_vcov[(size_t)first * 9 + local] =
+-            src_vcov[(size_t)idx[particle] * 9 + component];
++    // Consecutive lanes write consecutive particles of each component plane.
++    if (tid < N) {
++        int ancestor = idx[tid];
++        for (int component = 0; component < 9; ++component) {
++            dst_vcov[(size_t)component * N + tid] =
++                src_vcov[(size_t)component * N + ancestor];
++        }
+     }
+ }
+ 
+--- a/include/gnss_gpu/pf_device.h
++++ b/include/gnss_gpu/pf_device.h
+@@ -11,7 +11,7 @@
+     double* d_vx;
+     double* d_vy;
+     double* d_vz;
+-    double* d_vcov;  // [N * 9] per-particle velocity covariance, row-major 3x3
++    double* d_vcov;  // [9 * N] component planes; component is row-major 3x3
+     double* d_pcb;
+     double* d_log_weights;
+ 

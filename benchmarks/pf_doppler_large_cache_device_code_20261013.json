@@ -1,0 +1,1996 @@
+{
+  "schema_version": 1,
+  "source_sha256": {
+    "baseline": {
+      "src/particle_filter/pf_device.cu": "f07fa8046c255185366a76439bc6b005481c0dc3b73a7adef8e54c01b7e18b9d",
+      "include/gnss_gpu/pf_device.h": "a2739ef2861995b4d769415651dc6c8f0acf5da6e5caf94d29f977fd8e9b8bc5",
+      "python/gnss_gpu/_pf_device_bindings.cpp": "56fdb9e2568d263595aae3ab66e42d5df70e8ccd6c2b6d08c61d00d4b30edaf5",
+      "python/gnss_gpu/pf_device_runtime.py": "a24c892f58e39e4cde99737273cfe23b807df9cc971269f571249f03e9d93ad2",
+      "python/gnss_gpu/pf_device_config.py": "c6c17c4f926a2182ebe27dfd23a6e9c8b1f49c59c238a51feb6dd7b2814fce69"
+    },
+    "candidate": {
+      "src/particle_filter/pf_device.cu": "a2a34de934bf5debe45da9a1ce66f5b7983e7e783ad2c269f431169b9d638d38",
+      "include/gnss_gpu/pf_device.h": "a2739ef2861995b4d769415651dc6c8f0acf5da6e5caf94d29f977fd8e9b8bc5",
+      "python/gnss_gpu/_pf_device_bindings.cpp": "56fdb9e2568d263595aae3ab66e42d5df70e8ccd6c2b6d08c61d00d4b30edaf5",
+      "python/gnss_gpu/pf_device_runtime.py": "a24c892f58e39e4cde99737273cfe23b807df9cc971269f571249f03e9d93ad2",
+      "python/gnss_gpu/pf_device_config.py": "c6c17c4f926a2182ebe27dfd23a6e9c8b1f49c59c238a51feb6dd7b2814fce69"
+    }
+  },
+  "extension_sha256": {
+    "baseline": "8d10a95f78ef282b9a393ff085ae44d756268027869f8a64b60df82a5ab89b06",
+    "candidate": "8d8c3e3fe2876beef0ae070565b3a4da039fd15fc33160dc41964e950b89ed87"
+  },
+  "measurement_report": {
+    "path": "benchmarks/pf_doppler_large_cache_gpu_20261013.json",
+    "sha256": "9c8fa2c0d1ab475fb897d68813e863ecae19de59a5bb97ecda7a21512968c556"
+  },
+  "build_configuration": "CUDA 12.8 / MSVC Release / compute 7.5 / C++20 / no fast math",
+  "normalization": "cuobjdump instruction bodies; collapse whitespace only; retain offsets/encodings/attributes",
+  "baseline_functions": 67,
+  "candidate_functions": 69,
+  "unchanged_instruction_bodies": 67,
+  "unchanged_preceding_resource_counts": 67,
+  "functions": {
+    "_ZN3cub17CUB_200700_750_NS16DeviceScanKernelINS0_16DeviceScanPolicyIdN6thrust20THRUST_200700_750_NS4plusIvEEE9Policy900ENS4_10device_ptrIdEESA_NS0_13ScanTileStateIdLb1EEES6_NS0_8NullTypeEydLb0EEEvT0_T1_T2_iT3_T4_T5_": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "d817eb0391a856c93a5e39791d5ceb354d41d197d8583079b26be57fcb7b775d",
+      "candidate_normalized_sass_sha256": "d817eb0391a856c93a5e39791d5ceb354d41d197d8583079b26be57fcb7b775d"
+    },
+    "_ZN3cub17CUB_200700_750_NS16DeviceScanKernelINS0_16DeviceScanPolicyIdN6thrust20THRUST_200700_750_NS4plusIvEEE9Policy900ENS4_10device_ptrIdEESA_NS0_13ScanTileStateIdLb1EEES6_NS0_8NullTypeEjdLb0EEEvT0_T1_T2_iT3_T4_T5_": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "84bed8f6f82bba7a568eb112b1e09dd806214053970a48a6990a61aad7979970",
+      "candidate_normalized_sass_sha256": "84bed8f6f82bba7a568eb112b1e09dd806214053970a48a6990a61aad7979970"
+    },
+    "_ZN3cub17CUB_200700_750_NS20DeviceScanInitKernelINS0_13ScanTileStateIdLb1EEEEEvT_i": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "5896d20478578ba9d53d2d23dfae7eb871feb5f90e1f9bcf32b410f59b48077a",
+      "candidate_normalized_sass_sha256": "5896d20478578ba9d53d2d23dfae7eb871feb5f90e1f9bcf32b410f59b48077a"
+    },
+    "_ZN3cub17CUB_200700_750_NS11EmptyKernelIvEEvv": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "01e3c7f257978184d992da10776474e53e8f0b40d63db53923419f5d27170f49",
+      "candidate_normalized_sass_sha256": "01e3c7f257978184d992da10776474e53e8f0b40d63db53923419f5d27170f49"
+    },
+    "_ZN8gnss_gpu28pfd_doppler_kf_update_kernelILi0EEEvPKdS2_S2_PdS3_S3_S3_S2_S3_iidd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "476ee0bddbdc937f90e378461cfdf19bd548ed63f159c961659032b518a8afdb",
+      "candidate_normalized_sass_sha256": "476ee0bddbdc937f90e378461cfdf19bd548ed63f159c961659032b518a8afdb"
+    },
+    "_ZN8gnss_gpu28pfd_doppler_kf_update_kernelILi32EEEvPKdS2_S2_PdS3_S3_S3_S2_S3_iidd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "3d58a5d931246cd783bd779c79c61a3bf603442b1bbe3a804cb8130b38802c72",
+      "candidate_normalized_sass_sha256": "3d58a5d931246cd783bd779c79c61a3bf603442b1bbe3a804cb8130b38802c72"
+    },
+    "_ZN8gnss_gpu28pfd_doppler_kf_update_kernelILi16EEEvPKdS2_S2_PdS3_S3_S3_S2_S3_iidd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "c9e53af64efec40bff771557549fc4b61458127bfb76a3f434c7ae333192a505",
+      "candidate_normalized_sass_sha256": "c9e53af64efec40bff771557549fc4b61458127bfb76a3f434c7ae333192a505"
+    },
+    "_ZN8gnss_gpu32pfd_weight_doppler_cached_kernelILi16EEEvPKdS2_S2_PdS3_S3_S2_S3_iidddd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "a07db0bd3e2c02cd5a4a05fd7bbc65a77a2b7996bb95edc131eb982bad65fe74",
+      "candidate_normalized_sass_sha256": "a07db0bd3e2c02cd5a4a05fd7bbc65a77a2b7996bb95edc131eb982bad65fe74"
+    },
+    "_ZN8gnss_gpu32pfd_weight_doppler_cached_kernelILi8EEEvPKdS2_S2_PdS3_S3_S2_S3_iidddd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "0586d68ed76ae9076c9e1911846c0ed255c8296890bfe28382a2e8338aaadb7e",
+      "candidate_normalized_sass_sha256": "0586d68ed76ae9076c9e1911846c0ed255c8296890bfe28382a2e8338aaadb7e"
+    },
+    "_ZN8gnss_gpu26pfd_weight_dd_joint_kernelILb0ELb0EEEvPKdS2_S2_S2_Pdiiddddbdd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "57d395078c361afd0d818dd17eeb9795417aad5f7f4ce4d9e98e62c07dffb1b7",
+      "candidate_normalized_sass_sha256": "57d395078c361afd0d818dd17eeb9795417aad5f7f4ce4d9e98e62c07dffb1b7"
+    },
+    "_ZN8gnss_gpu38pfd_weight_dd_joint_mixed_gated_kernelILb0EEEvPKdS2_S2_S2_Pdiidddddd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "d81ff4290687cfe081c019777c1d958a90932edc9daa4beec07c7a62c0b8042e",
+      "candidate_normalized_sass_sha256": "d81ff4290687cfe081c019777c1d958a90932edc9daa4beec07c7a62c0b8042e"
+    },
+    "_ZN8gnss_gpu38pfd_weight_dd_joint_mixed_gated_kernelILb1EEEvPKdS2_S2_S2_Pdiidddddd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "53a7bef804f46c110aa4743f7d5ad5ead438684d81ddaf74b1099a30434e7bf6",
+      "candidate_normalized_sass_sha256": "53a7bef804f46c110aa4743f7d5ad5ead438684d81ddaf74b1099a30434e7bf6"
+    },
+    "_ZN8gnss_gpu26pfd_weight_dd_joint_kernelILb1ELb0EEEvPKdS2_S2_S2_Pdiiddddbdd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "cedeb0c441de21b0fdf51111af9c0d3d97abf50378436ebf1b1946fbc4729066",
+      "candidate_normalized_sass_sha256": "cedeb0c441de21b0fdf51111af9c0d3d97abf50378436ebf1b1946fbc4729066"
+    },
+    "_ZN8gnss_gpu26pfd_weight_dd_joint_kernelILb1ELb1EEEvPKdS2_S2_S2_Pdiiddddbdd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "737e920a2ee9a18b1e54950c72473c5b1475230f381a3146ca5fbf9268fff5a5",
+      "candidate_normalized_sass_sha256": "737e920a2ee9a18b1e54950c72473c5b1475230f381a3146ca5fbf9268fff5a5"
+    },
+    "_ZN8gnss_gpu32pfd_weight_dd_carrier_afv_kernelILb0ELb0EEEvPKdS2_S2_S2_Pdiiddbd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "726eeda31400cc41f7fb5b914be6827e7950df80b4b5051ce36bc5abffc91bbc",
+      "candidate_normalized_sass_sha256": "726eeda31400cc41f7fb5b914be6827e7950df80b4b5051ce36bc5abffc91bbc"
+    },
+    "_ZN8gnss_gpu32pfd_weight_dd_mixed_gated_kernelILb1ELb0EEEvPKdS2_S2_S2_Pdiiddd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "31723bdc040ac761e285b1eca55ef8a139410931341a10618aea241362463154",
+      "candidate_normalized_sass_sha256": "31723bdc040ac761e285b1eca55ef8a139410931341a10618aea241362463154"
+    },
+    "_ZN8gnss_gpu32pfd_weight_dd_mixed_gated_kernelILb1ELb1EEEvPKdS2_S2_S2_Pdiiddd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "0e1015c642e7481e163db917f6855c7893dc0390847c8775fc4e2f5c13731828",
+      "candidate_normalized_sass_sha256": "0e1015c642e7481e163db917f6855c7893dc0390847c8775fc4e2f5c13731828"
+    },
+    "_ZN8gnss_gpu32pfd_weight_dd_carrier_afv_kernelILb1ELb0EEEvPKdS2_S2_S2_Pdiiddbd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "c6d8710d175e434d26eca4e1ed925ae05641724e386d0d18d7703c36c20b9fde",
+      "candidate_normalized_sass_sha256": "c6d8710d175e434d26eca4e1ed925ae05641724e386d0d18d7703c36c20b9fde"
+    },
+    "_ZN8gnss_gpu32pfd_weight_dd_carrier_afv_kernelILb1ELb1EEEvPKdS2_S2_S2_Pdiiddbd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "3cd8fc8741edde5da8d79bccd7c833e5df98d765caa0c04c0ce033c2277cf564",
+      "candidate_normalized_sass_sha256": "3cd8fc8741edde5da8d79bccd7c833e5df98d765caa0c04c0ce033c2277cf564"
+    },
+    "_ZN8gnss_gpu33pfd_weight_dd_single_gated_kernelILb1EEEvPKdS2_S2_S2_Pdiidd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "4ed3f7520e1af6f3e975a76d9f8297a94960cc469f85cbf54751eda3373f0b11",
+      "candidate_normalized_sass_sha256": "4ed3f7520e1af6f3e975a76d9f8297a94960cc469f85cbf54751eda3373f0b11"
+    },
+    "_ZN8gnss_gpu39pfd_weight_dd_single_huber_gated_kernelILb1EEEvPKdS2_S2_S2_Pdiiddd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "3f798820f9cec130496896605112032afbe01f84cf1385e068455fb293269bd2",
+      "candidate_normalized_sass_sha256": "3f798820f9cec130496896605112032afbe01f84cf1385e068455fb293269bd2"
+    },
+    "_ZN8gnss_gpu32pfd_weight_dd_pseudorange_kernelILb0ELb0EEEvPKdS2_S2_S2_Pdiiddbd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "0937fb1de1496a87d50ec21d6a3fb77ef7169d7d5ceab4894acd24174550b1ad",
+      "candidate_normalized_sass_sha256": "0937fb1de1496a87d50ec21d6a3fb77ef7169d7d5ceab4894acd24174550b1ad"
+    },
+    "_ZN8gnss_gpu32pfd_weight_dd_mixed_gated_kernelILb0ELb0EEEvPKdS2_S2_S2_Pdiiddd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "7fb5643aa9a8199fceca4ea1a80aa4bd2d30309f5d36f974df2630ea90dc2c38",
+      "candidate_normalized_sass_sha256": "7fb5643aa9a8199fceca4ea1a80aa4bd2d30309f5d36f974df2630ea90dc2c38"
+    },
+    "_ZN8gnss_gpu32pfd_weight_dd_mixed_gated_kernelILb0ELb1EEEvPKdS2_S2_S2_Pdiiddd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "12e809798597e31dd51425311aedf34d3058cde508e3614a027494316ba39c36",
+      "candidate_normalized_sass_sha256": "12e809798597e31dd51425311aedf34d3058cde508e3614a027494316ba39c36"
+    },
+    "_ZN8gnss_gpu32pfd_weight_dd_pseudorange_kernelILb1ELb1EEEvPKdS2_S2_S2_Pdiiddbd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "f61912fec689c3ddf7914f51abd10dcfcd48c8ce032ea18752664998398d5845",
+      "candidate_normalized_sass_sha256": "f61912fec689c3ddf7914f51abd10dcfcd48c8ce032ea18752664998398d5845"
+    },
+    "_ZN8gnss_gpu33pfd_weight_dd_single_gated_kernelILb0EEEvPKdS2_S2_S2_Pdiidd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "b998a820343aa4164d3378db7ec4b16a006cdce3b8eba1ba0b80fde88ca20853",
+      "candidate_normalized_sass_sha256": "b998a820343aa4164d3378db7ec4b16a006cdce3b8eba1ba0b80fde88ca20853"
+    },
+    "_ZN8gnss_gpu39pfd_weight_dd_single_huber_gated_kernelILb0EEEvPKdS2_S2_S2_Pdiiddd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "3fe44cbac865275c7ac543d78d2c09f8cd97eedb465fa1063baeb35ab75b3a0c",
+      "candidate_normalized_sass_sha256": "3fe44cbac865275c7ac543d78d2c09f8cd97eedb465fa1063baeb35ab75b3a0c"
+    },
+    "_ZN8gnss_gpu25pfd_weight_pr_gate_kernelILi0EEEvPKdS2_S2_S2_S2_S2_S2_Pdiidddd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "e219f9c6dfedd1c00df032cc9d862b305a35333ed8578b9774ba006fd434cae1",
+      "candidate_normalized_sass_sha256": "e219f9c6dfedd1c00df032cc9d862b305a35333ed8578b9774ba006fd434cae1"
+    },
+    "_ZN8gnss_gpu25pfd_weight_pr_gate_kernelILi1EEEvPKdS2_S2_S2_S2_S2_S2_Pdiidddd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "77fe2e4a35702e8275984389862ff31d340a2ae1d6a19ac7389668bed252bc99",
+      "candidate_normalized_sass_sha256": "77fe2e4a35702e8275984389862ff31d340a2ae1d6a19ac7389668bed252bc99"
+    },
+    "_ZN8gnss_gpu25pfd_weight_pr_gate_kernelILi2EEEvPKdS2_S2_S2_S2_S2_S2_Pdiidddd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "55d30ea2a87390c5860d53426b25b4d41e5415e8dfd8b7c453637a1a3d5e435a",
+      "candidate_normalized_sass_sha256": "55d30ea2a87390c5860d53426b25b4d41e5415e8dfd8b7c453637a1a3d5e435a"
+    },
+    "_ZN8gnss_gpu18pfd_predict_kernelILb0ELb0EEEvPdS1_S1_S1_S1_S1_S1_S1_dddddddddiyi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "1a4e99dbd5c7dfd4ed103330d4069ee94ba9e7f761c3597df2c775714753c07c",
+      "candidate_normalized_sass_sha256": "1a4e99dbd5c7dfd4ed103330d4069ee94ba9e7f761c3597df2c775714753c07c"
+    },
+    "_ZN8gnss_gpu18pfd_predict_kernelILb0ELb1EEEvPdS1_S1_S1_S1_S1_S1_S1_dddddddddiyi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "b40d9ad2da77f167ab703617c56592debd2c79dd6fa02a3aa8005b67372a45eb",
+      "candidate_normalized_sass_sha256": "b40d9ad2da77f167ab703617c56592debd2c79dd6fa02a3aa8005b67372a45eb"
+    },
+    "_ZN8gnss_gpu18pfd_predict_kernelILb1ELb0EEEvPdS1_S1_S1_S1_S1_S1_S1_dddddddddiyi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "0218bf7de55152309b9a64349c8d2b45ba48c20c38853afaddd1a9b9c67bcf6e",
+      "candidate_normalized_sass_sha256": "0218bf7de55152309b9a64349c8d2b45ba48c20c38853afaddd1a9b9c67bcf6e"
+    },
+    "_ZN8gnss_gpu27pfd_megopolis_gather_kernelEPKdS1_S1_S1_S1_S1_S1_S1_PdS2_S2_S2_S2_S2_S2_S2_PKiib": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "344c7fac04e0bc2522a1d5f206650e3b116362e27309a837e02d48f3c7912203",
+      "candidate_normalized_sass_sha256": "344c7fac04e0bc2522a1d5f206650e3b116362e27309a837e02d48f3c7912203"
+    },
+    "_ZN8gnss_gpu30pfd_megopolis_coalesced_kernelEPKdPiiyi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "56524fda2f7675f4940006f957ca1a5f6b952234a1ec0229befec62ca477cd76",
+      "candidate_normalized_sass_sha256": "56524fda2f7675f4940006f957ca1a5f6b952234a1ec0229befec62ca477cd76"
+    },
+    "_ZN8gnss_gpu26pfd_megopolis_index_kernelEPKiPiPKdiyi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "71bf7a3116b486e57ce1afbf196dcf2fc143e8b4f5ce1c0da5519fcab857e82f",
+      "candidate_normalized_sass_sha256": "71bf7a3116b486e57ce1afbf196dcf2fc143e8b4f5ce1c0da5519fcab857e82f"
+    },
+    "_ZN8gnss_gpu31pfd_megopolis_index_init_kernelEPii": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "f59997707eea1d7b0e903764750b246c6b893a0cfd30b844d366147fe1af534d",
+      "candidate_normalized_sass_sha256": "f59997707eea1d7b0e903764750b246c6b893a0cfd30b844d366147fe1af534d"
+    },
+    "_ZN8gnss_gpu24pfd_reset_weights_kernelEPdi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "b43455106daf49fde956d6a3324e0201dd6a6f1273dd4f30811481e6f9027fe4",
+      "candidate_normalized_sass_sha256": "b43455106daf49fde956d6a3324e0201dd6a6f1273dd4f30811481e6f9027fe4"
+    },
+    "_ZN8gnss_gpu30pfd_systematic_resample_kernelEPKdS1_S1_S1_S1_S1_S1_S1_S1_PdS2_S2_S2_S2_S2_S2_S2_Piid": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "b596eb20b3c9823425f93347dc9ad86f32c2017ee1cc2090692ce265ce096da5",
+      "candidate_normalized_sass_sha256": "b596eb20b3c9823425f93347dc9ad86f32c2017ee1cc2090692ce265ce096da5"
+    },
+    "_ZN8gnss_gpu23pfd_finalize_sum_kernelEPKdPdi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "4db95d47d269a05de8b8ba1009169fc401d0d209e24b264e4190f02f0d673091",
+      "candidate_normalized_sass_sha256": "4db95d47d269a05de8b8ba1009169fc401d0d209e24b264e4190f02f0d673091"
+    },
+    "_ZN8gnss_gpu23pfd_finalize_max_kernelEPKdPdi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "24afb8ed0743422fc27275e6e8edd32d1d8dea88f51e9f1a4cc591aac96430a9",
+      "candidate_normalized_sass_sha256": "24afb8ed0743422fc27275e6e8edd32d1d8dea88f51e9f1a4cc591aac96430a9"
+    },
+    "_ZN8gnss_gpu20pfd_normalize_kernelEPdPKdi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "69849618e4dbee6c56d979833f54e1d406b9e6988baff430d311ae4de334c6ab",
+      "candidate_normalized_sass_sha256": "69849618e4dbee6c56d979833f54e1d406b9e6988baff430d311ae4de334c6ab"
+    },
+    "_ZN8gnss_gpu18pfd_exp_sum_kernelEPKdPdS1_S2_i": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "9dcee96797dee35e76a1113834671d6c47d2aaf0b34ca8142c08529a7634a4dd",
+      "candidate_normalized_sass_sha256": "9dcee96797dee35e76a1113834671d6c47d2aaf0b34ca8142c08529a7634a4dd"
+    },
+    "_ZN8gnss_gpu19pfd_find_max_kernelEPKdPdi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "48f3dee4e96d201b6ca54733c70e0c959d0f1aeed3b8343abdef46f2d0cc2df8",
+      "candidate_normalized_sass_sha256": "48f3dee4e96d201b6ca54733c70e0c959d0f1aeed3b8343abdef46f2d0cc2df8"
+    },
+    "_ZN8gnss_gpu30pfd_set_particle_states_kernelEPdS0_S0_S0_S0_S0_S0_S0_PKdi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "5d239894cfbb61740d70e969501add984944c92398bf5bbe9b47a0ac8314428e",
+      "candidate_normalized_sass_sha256": "5d239894cfbb61740d70e969501add984944c92398bf5bbe9b47a0ac8314428e"
+    },
+    "_ZN8gnss_gpu30pfd_get_particle_states_kernelEPKdS1_S1_S1_S1_S1_S1_S1_Pdi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "b87ef00004222502d84dabb2b054dc71e042f60f90c8f2302a7a4df2d5011be1",
+      "candidate_normalized_sass_sha256": "b87ef00004222502d84dabb2b054dc71e042f60f90c8f2302a7a4df2d5011be1"
+    },
+    "_ZN8gnss_gpu24pfd_get_particles_kernelEPKdS1_S1_S1_Pdi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "8f43f39475735c660d235ba8e76a8cdc090d8fd3b34020689fa3cc49fb4fcd1d",
+      "candidate_normalized_sass_sha256": "8f43f39475735c660d235ba8e76a8cdc090d8fd3b34020689fa3cc49fb4fcd1d"
+    },
+    "_ZN8gnss_gpu28pfd_finalize_estimate_kernelEPKdS1_S1_Pdi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "d5f96b482a2c61d4e203b8cd7997a78f197c6485853880c3217474988a43f0b2",
+      "candidate_normalized_sass_sha256": "d5f96b482a2c61d4e203b8cd7997a78f197c6485853880c3217474988a43f0b2"
+    },
+    "_ZN8gnss_gpu26pfd_finalize_spread_kernelEPKdS1_S1_Pdi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "6e42b3e0c384972a696d19dd562266b6adf67069bdeb67a603751da2dee01e3c",
+      "candidate_normalized_sass_sha256": "6e42b3e0c384972a696d19dd562266b6adf67069bdeb67a603751da2dee01e3c"
+    },
+    "_ZN8gnss_gpu23pfd_finalize_ess_kernelEPKdS1_S1_Pdi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "6468854f4ae445ee8049e1e4ec3f15e7162d0dc9a2047d4d513033f55c5d955d",
+      "candidate_normalized_sass_sha256": "6468854f4ae445ee8049e1e4ec3f15e7162d0dc9a2047d4d513033f55c5d955d"
+    },
+    "_ZN8gnss_gpu26pfd_position_spread_kernelEPKdS1_S1_S1_dddPdS2_S2_i": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "2e36632bf240a6e766c3b5ac99343a2d0cabc768b77d527d7f1a7802ea23c750",
+      "candidate_normalized_sass_sha256": "2e36632bf240a6e766c3b5ac99343a2d0cabc768b77d527d7f1a7802ea23c750"
+    },
+    "_ZN8gnss_gpu19pfd_estimate_kernelEPKdS1_S1_S1_S1_PdS2_S2_i": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "b690fe636fc37aa6a401b8d87c5a820a2f9d34d2ca2eadb327a0131b9a82c20f",
+      "candidate_normalized_sass_sha256": "b690fe636fc37aa6a401b8d87c5a820a2f9d34d2ca2eadb327a0131b9a82c20f"
+    },
+    "_ZN8gnss_gpu14pfd_ess_kernelEPKdPdS2_S2_i": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "6d10f20e6d9f5fa72d724ae96ebbab5c32ede71053e882a1b4bb39df4a334e95",
+      "candidate_normalized_sass_sha256": "6d10f20e6d9f5fa72d724ae96ebbab5c32ede71053e882a1b4bb39df4a334e95"
+    },
+    "_ZN8gnss_gpu25pfd_reset_position_kernelEPdS0_S0_S0_ddddiyi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "dc90e9ca930dd735e89a7b311264edd1831abd6a860e5ac346f690d656f8d067",
+      "candidate_normalized_sass_sha256": "dc90e9ca930dd735e89a7b311264edd1831abd6a860e5ac346f690d656f8d067"
+    },
+    "_ZN8gnss_gpu25pfd_shift_position_kernelEPdS0_S0_dddi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "aec4409fdbe014ba35293fc7cf40f49d1070d96e8cbf197dbfaa3603c553ac7f",
+      "candidate_normalized_sass_sha256": "aec4409fdbe014ba35293fc7cf40f49d1070d96e8cbf197dbfaa3603c553ac7f"
+    },
+    "_ZN8gnss_gpu27pfd_shift_clock_bias_kernelEPddi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "e3a140028fd4fae6643478db5a7c4e712473f245cc94e597a73a8e6841694d0a",
+      "candidate_normalized_sass_sha256": "e3a140028fd4fae6643478db5a7c4e712473f245cc94e597a73a8e6841694d0a"
+    },
+    "_ZN8gnss_gpu26pfd_position_update_kernelEPKdS1_S1_Pdddddi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "31dcf842ef8d2a4cd850ab4e4771ede2b2515bd12892a2acc9500a9702a8e315",
+      "candidate_normalized_sass_sha256": "31dcf842ef8d2a4cd850ab4e4771ede2b2515bd12892a2acc9500a9702a8e315"
+    },
+    "_ZN8gnss_gpu25pfd_weight_doppler_kernelEPKdS1_S1_PdS2_S2_S1_S2_iidddd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "8d817664f430c96a9030089e42f99dc2fd2b17e69af11fed0db79d2a3bf79b5e",
+      "candidate_normalized_sass_sha256": "8d817664f430c96a9030089e42f99dc2fd2b17e69af11fed0db79d2a3bf79b5e"
+    },
+    "_ZN8gnss_gpu38pfd_weight_dd_joint_huber_gated_kernelEPKdS1_S1_S1_Pdiidddddd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "4ca30ab90054b602f357fe2e7a46c2fb61de54edc7341d3bf31ef22d8c415bf6",
+      "candidate_normalized_sass_sha256": "4ca30ab90054b602f357fe2e7a46c2fb61de54edc7341d3bf31ef22d8c415bf6"
+    },
+    "_ZN8gnss_gpu32pfd_weight_dd_joint_gated_kernelEPKdS1_S1_S1_Pdiidddd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "532e7ec3d65cf32349cf583ad10c3815cf3ea0453f2eb5d514b80371478a3cb4",
+      "candidate_normalized_sass_sha256": "532e7ec3d65cf32349cf583ad10c3815cf3ea0453f2eb5d514b80371478a3cb4"
+    },
+    "_ZN8gnss_gpu29pfd_weight_carrier_afv_kernelEPKdS1_S1_S1_S1_S1_S1_Pdiidd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "73c844fd4f861e1ccc1be99fe98bf53e8ff382c9b77ccf0bcc87099e046743a6",
+      "candidate_normalized_sass_sha256": "73c844fd4f861e1ccc1be99fe98bf53e8ff382c9b77ccf0bcc87099e046743a6"
+    },
+    "_ZN8gnss_gpu28pfd_weight_gmm_shared_kernelEPKdS1_S1_S1_S1_S1_S1_Pdiidddd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "f4a37bb90ea9465aad0cc930ae5b26acc7761bc00212388a5b8143364ce85bc0",
+      "candidate_normalized_sass_sha256": "f4a37bb90ea9465aad0cc930ae5b26acc7761bc00212388a5b8143364ce85bc0"
+    },
+    "_ZN8gnss_gpu21pfd_weight_gmm_kernelEPKdS1_S1_S1_S1_S1_S1_Pdiidddd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "fbcf892fa68d971a7482379af101b22b0ec2398e72a5ad4c0d036cfae7cecd3d",
+      "candidate_normalized_sass_sha256": "fbcf892fa68d971a7482379af101b22b0ec2398e72a5ad4c0d036cfae7cecd3d"
+    },
+    "_ZN8gnss_gpu17pfd_weight_kernelEPKdS1_S1_S1_S1_S1_S1_Pdiidddbd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "6291143092a1b05b952b8c8d54bf91096293534ab78e2dd75f5925129251d99e",
+      "candidate_normalized_sass_sha256": "6291143092a1b05b952b8c8d54bf91096293534ab78e2dd75f5925129251d99e"
+    },
+    "_ZN8gnss_gpu25pfd_weight_student_kernelEPKdS1_S1_S1_S1_S1_S1_Pdiidd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "4334f2b0509d81e682724056e7bcd8362a3b372d37c6e627033698a3c0e21204",
+      "candidate_normalized_sass_sha256": "4334f2b0509d81e682724056e7bcd8362a3b372d37c6e627033698a3c0e21204"
+    },
+    "_ZN8gnss_gpu26pfd_weight_gaussian_kernelEPKdS1_S1_S1_S1_S1_S1_Pdiid": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "011df031da7ac5f456ae6f27208cd4df620087c2e10f9afaf8648e6d2965912f",
+      "candidate_normalized_sass_sha256": "011df031da7ac5f456ae6f27208cd4df620087c2e10f9afaf8648e6d2965912f"
+    },
+    "_ZN8gnss_gpu15pfd_init_kernelEPdS0_S0_S0_S0_S0_S0_S0_S0_dddddddddddiy": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "60d2467a06c2b9d0af2417edd8779ce3f603e9cea5629159aecf165d04530690",
+      "candidate_normalized_sass_sha256": "60d2467a06c2b9d0af2417edd8779ce3f603e9cea5629159aecf165d04530690"
+    }
+  },
+  "added_functions": {
+    "_ZN8gnss_gpu32pfd_weight_doppler_cached_kernelILi24EEEvPKdS2_S2_PdS3_S3_S2_S3_iidddd": {
+      "normalized_sass_sha256": "1d2a5321acb2d85174560e02f95f18468afd9945c8e39c8f5724fc3e8e5c2168",
+      "registers": 70,
+      "stack_bytes": 736,
+      "static_shared_bytes": 0,
+      "local_bytes": 0
+    },
+    "_ZN8gnss_gpu32pfd_weight_doppler_cached_kernelILi32EEEvPKdS2_S2_PdS3_S3_S2_S3_iidddd": {
+      "normalized_sass_sha256": "17d8448e9769deda76ffb780351ddf1188f643d2f54bbf9f4ebd031e74db20e3",
+      "registers": 70,
+      "stack_bytes": 928,
+      "static_shared_bytes": 0,
+      "local_bytes": 0
+    }
+  },
+  "resources": {
+    "baseline": {
+      "_ZN3cub17CUB_200700_750_NS16DeviceScanKernelINS0_16DeviceScanPolicyIdN6thrust20THRUST_200700_750_NS4plusIvEEE9Policy900ENS4_10device_ptrIdEESA_NS0_13ScanTileStateIdLb1EEES6_NS0_8NullTypeEydLb0EEEvT0_T1_T2_iT3_T4_T5_": {
+        "registers": 49,
+        "stack_bytes": 0,
+        "static_shared_bytes": 7184,
+        "local_bytes": 0
+      },
+      "_ZN3cub17CUB_200700_750_NS16DeviceScanKernelINS0_16DeviceScanPolicyIdN6thrust20THRUST_200700_750_NS4plusIvEEE9Policy900ENS4_10device_ptrIdEESA_NS0_13ScanTileStateIdLb1EEES6_NS0_8NullTypeEjdLb0EEEvT0_T1_T2_iT3_T4_T5_": {
+        "registers": 49,
+        "stack_bytes": 0,
+        "static_shared_bytes": 7184,
+        "local_bytes": 0
+      },
+      "_ZN3cub17CUB_200700_750_NS20DeviceScanInitKernelINS0_13ScanTileStateIdLb1EEEEEvT_i": {
+        "registers": 12,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN3cub17CUB_200700_750_NS11EmptyKernelIvEEvv": {
+        "registers": 4,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu28pfd_doppler_kf_update_kernelILi0EEEvPKdS2_S2_PdS3_S3_S3_S2_S3_iidd": {
+        "registers": 94,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu28pfd_doppler_kf_update_kernelILi32EEEvPKdS2_S2_PdS3_S3_S3_S2_S3_iidd": {
+        "registers": 86,
+        "stack_bytes": 1024,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu28pfd_doppler_kf_update_kernelILi16EEEvPKdS2_S2_PdS3_S3_S3_S2_S3_iidd": {
+        "registers": 86,
+        "stack_bytes": 512,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_doppler_cached_kernelILi16EEEvPKdS2_S2_PdS3_S3_S2_S3_iidddd": {
+        "registers": 70,
+        "stack_bytes": 544,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_doppler_cached_kernelILi8EEEvPKdS2_S2_PdS3_S3_S2_S3_iidddd": {
+        "registers": 70,
+        "stack_bytes": 352,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26pfd_weight_dd_joint_kernelILb0ELb0EEEvPKdS2_S2_S2_Pdiiddddbdd": {
+        "registers": 48,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu38pfd_weight_dd_joint_mixed_gated_kernelILb0EEEvPKdS2_S2_S2_Pdiidddddd": {
+        "registers": 50,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu38pfd_weight_dd_joint_mixed_gated_kernelILb1EEEvPKdS2_S2_S2_Pdiidddddd": {
+        "registers": 54,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26pfd_weight_dd_joint_kernelILb1ELb0EEEvPKdS2_S2_S2_Pdiiddddbdd": {
+        "registers": 51,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26pfd_weight_dd_joint_kernelILb1ELb1EEEvPKdS2_S2_S2_Pdiiddddbdd": {
+        "registers": 51,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_dd_carrier_afv_kernelILb0ELb0EEEvPKdS2_S2_S2_Pdiiddbd": {
+        "registers": 48,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_dd_mixed_gated_kernelILb1ELb0EEEvPKdS2_S2_S2_Pdiiddd": {
+        "registers": 46,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_dd_mixed_gated_kernelILb1ELb1EEEvPKdS2_S2_S2_Pdiiddd": {
+        "registers": 54,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_dd_carrier_afv_kernelILb1ELb0EEEvPKdS2_S2_S2_Pdiiddbd": {
+        "registers": 42,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_dd_carrier_afv_kernelILb1ELb1EEEvPKdS2_S2_S2_Pdiiddbd": {
+        "registers": 42,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu33pfd_weight_dd_single_gated_kernelILb1EEEvPKdS2_S2_S2_Pdiidd": {
+        "registers": 40,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu39pfd_weight_dd_single_huber_gated_kernelILb1EEEvPKdS2_S2_S2_Pdiiddd": {
+        "registers": 53,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_dd_pseudorange_kernelILb0ELb0EEEvPKdS2_S2_S2_Pdiiddbd": {
+        "registers": 44,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_dd_mixed_gated_kernelILb0ELb0EEEvPKdS2_S2_S2_Pdiiddd": {
+        "registers": 44,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_dd_mixed_gated_kernelILb0ELb1EEEvPKdS2_S2_S2_Pdiiddd": {
+        "registers": 54,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_dd_pseudorange_kernelILb1ELb1EEEvPKdS2_S2_S2_Pdiiddbd": {
+        "registers": 44,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu33pfd_weight_dd_single_gated_kernelILb0EEEvPKdS2_S2_S2_Pdiidd": {
+        "registers": 46,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu39pfd_weight_dd_single_huber_gated_kernelILb0EEEvPKdS2_S2_S2_Pdiiddd": {
+        "registers": 52,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25pfd_weight_pr_gate_kernelILi0EEEvPKdS2_S2_S2_S2_S2_S2_Pdiidddd": {
+        "registers": 42,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25pfd_weight_pr_gate_kernelILi1EEEvPKdS2_S2_S2_S2_S2_S2_Pdiidddd": {
+        "registers": 51,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25pfd_weight_pr_gate_kernelILi2EEEvPKdS2_S2_S2_S2_S2_S2_Pdiidddd": {
+        "registers": 44,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu18pfd_predict_kernelILb0ELb0EEEvPdS1_S1_S1_S1_S1_S1_S1_dddddddddiyi": {
+        "registers": 48,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu18pfd_predict_kernelILb0ELb1EEEvPdS1_S1_S1_S1_S1_S1_S1_dddddddddiyi": {
+        "registers": 58,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu18pfd_predict_kernelILb1ELb0EEEvPdS1_S1_S1_S1_S1_S1_S1_dddddddddiyi": {
+        "registers": 60,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27pfd_megopolis_gather_kernelEPKdS1_S1_S1_S1_S1_S1_S1_PdS2_S2_S2_S2_S2_S2_S2_PKiib": {
+        "registers": 24,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu30pfd_megopolis_coalesced_kernelEPKdPiiyi": {
+        "registers": 42,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26pfd_megopolis_index_kernelEPKiPiPKdiyi": {
+        "registers": 26,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu31pfd_megopolis_index_init_kernelEPii": {
+        "registers": 8,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu24pfd_reset_weights_kernelEPdi": {
+        "registers": 6,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu30pfd_systematic_resample_kernelEPKdS1_S1_S1_S1_S1_S1_S1_S1_PdS2_S2_S2_S2_S2_S2_S2_Piid": {
+        "registers": 26,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu23pfd_finalize_sum_kernelEPKdPdi": {
+        "registers": 12,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu23pfd_finalize_max_kernelEPKdPdi": {
+        "registers": 14,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu20pfd_normalize_kernelEPdPKdi": {
+        "registers": 26,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu18pfd_exp_sum_kernelEPKdPdS1_S2_i": {
+        "registers": 16,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu19pfd_find_max_kernelEPKdPdi": {
+        "registers": 14,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu30pfd_set_particle_states_kernelEPdS0_S0_S0_S0_S0_S0_S0_PKdi": {
+        "registers": 26,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu30pfd_get_particle_states_kernelEPKdS1_S1_S1_S1_S1_S1_S1_Pdi": {
+        "registers": 20,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu24pfd_get_particles_kernelEPKdS1_S1_S1_Pdi": {
+        "registers": 14,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu28pfd_finalize_estimate_kernelEPKdS1_S1_Pdi": {
+        "registers": 38,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26pfd_finalize_spread_kernelEPKdS1_S1_Pdi": {
+        "registers": 24,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu23pfd_finalize_ess_kernelEPKdS1_S1_Pdi": {
+        "registers": 24,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26pfd_position_spread_kernelEPKdS1_S1_S1_dddPdS2_S2_i": {
+        "registers": 22,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu19pfd_estimate_kernelEPKdS1_S1_S1_S1_PdS2_S2_i": {
+        "registers": 30,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu14pfd_ess_kernelEPKdPdS2_S2_i": {
+        "registers": 19,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25pfd_reset_position_kernelEPdS0_S0_S0_ddddiyi": {
+        "registers": 44,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25pfd_shift_position_kernelEPdS0_S0_dddi": {
+        "registers": 16,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27pfd_shift_clock_bias_kernelEPddi": {
+        "registers": 8,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26pfd_position_update_kernelEPKdS1_S1_Pdddddi": {
+        "registers": 20,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25pfd_weight_doppler_kernelEPKdS1_S1_PdS2_S2_S1_S2_iidddd": {
+        "registers": 90,
+        "stack_bytes": 160,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu38pfd_weight_dd_joint_huber_gated_kernelEPKdS1_S1_S1_Pdiidddddd": {
+        "registers": 59,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_dd_joint_gated_kernelEPKdS1_S1_S1_Pdiidddd": {
+        "registers": 56,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu29pfd_weight_carrier_afv_kernelEPKdS1_S1_S1_S1_S1_S1_Pdiidd": {
+        "registers": 42,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu28pfd_weight_gmm_shared_kernelEPKdS1_S1_S1_S1_S1_S1_Pdiidddd": {
+        "registers": 48,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu21pfd_weight_gmm_kernelEPKdS1_S1_S1_S1_S1_S1_Pdiidddd": {
+        "registers": 46,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu17pfd_weight_kernelEPKdS1_S1_S1_S1_S1_S1_Pdiidddbd": {
+        "registers": 44,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25pfd_weight_student_kernelEPKdS1_S1_S1_S1_S1_S1_Pdiidd": {
+        "registers": 48,
+        "stack_bytes": 0,
+        "static_shared_bytes": 16,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26pfd_weight_gaussian_kernelEPKdS1_S1_S1_S1_S1_S1_Pdiid": {
+        "registers": 38,
+        "stack_bytes": 0,
+        "static_shared_bytes": 16,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu15pfd_init_kernelEPdS0_S0_S0_S0_S0_S0_S0_S0_dddddddddddiy": {
+        "registers": 50,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      }
+    },
+    "candidate": {
+      "_ZN3cub17CUB_200700_750_NS16DeviceScanKernelINS0_16DeviceScanPolicyIdN6thrust20THRUST_200700_750_NS4plusIvEEE9Policy900ENS4_10device_ptrIdEESA_NS0_13ScanTileStateIdLb1EEES6_NS0_8NullTypeEydLb0EEEvT0_T1_T2_iT3_T4_T5_": {
+        "registers": 49,
+        "stack_bytes": 0,
+        "static_shared_bytes": 7184,
+        "local_bytes": 0
+      },
+      "_ZN3cub17CUB_200700_750_NS16DeviceScanKernelINS0_16DeviceScanPolicyIdN6thrust20THRUST_200700_750_NS4plusIvEEE9Policy900ENS4_10device_ptrIdEESA_NS0_13ScanTileStateIdLb1EEES6_NS0_8NullTypeEjdLb0EEEvT0_T1_T2_iT3_T4_T5_": {
+        "registers": 49,
+        "stack_bytes": 0,
+        "static_shared_bytes": 7184,
+        "local_bytes": 0
+      },
+      "_ZN3cub17CUB_200700_750_NS20DeviceScanInitKernelINS0_13ScanTileStateIdLb1EEEEEvT_i": {
+        "registers": 12,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN3cub17CUB_200700_750_NS11EmptyKernelIvEEvv": {
+        "registers": 4,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu28pfd_doppler_kf_update_kernelILi0EEEvPKdS2_S2_PdS3_S3_S3_S2_S3_iidd": {
+        "registers": 94,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu28pfd_doppler_kf_update_kernelILi32EEEvPKdS2_S2_PdS3_S3_S3_S2_S3_iidd": {
+        "registers": 86,
+        "stack_bytes": 1024,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu28pfd_doppler_kf_update_kernelILi16EEEvPKdS2_S2_PdS3_S3_S3_S2_S3_iidd": {
+        "registers": 86,
+        "stack_bytes": 512,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_doppler_cached_kernelILi32EEEvPKdS2_S2_PdS3_S3_S2_S3_iidddd": {
+        "registers": 70,
+        "stack_bytes": 928,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_doppler_cached_kernelILi24EEEvPKdS2_S2_PdS3_S3_S2_S3_iidddd": {
+        "registers": 70,
+        "stack_bytes": 736,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_doppler_cached_kernelILi16EEEvPKdS2_S2_PdS3_S3_S2_S3_iidddd": {
+        "registers": 70,
+        "stack_bytes": 544,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_doppler_cached_kernelILi8EEEvPKdS2_S2_PdS3_S3_S2_S3_iidddd": {
+        "registers": 70,
+        "stack_bytes": 352,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26pfd_weight_dd_joint_kernelILb0ELb0EEEvPKdS2_S2_S2_Pdiiddddbdd": {
+        "registers": 48,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu38pfd_weight_dd_joint_mixed_gated_kernelILb0EEEvPKdS2_S2_S2_Pdiidddddd": {
+        "registers": 50,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu38pfd_weight_dd_joint_mixed_gated_kernelILb1EEEvPKdS2_S2_S2_Pdiidddddd": {
+        "registers": 54,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26pfd_weight_dd_joint_kernelILb1ELb0EEEvPKdS2_S2_S2_Pdiiddddbdd": {
+        "registers": 51,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26pfd_weight_dd_joint_kernelILb1ELb1EEEvPKdS2_S2_S2_Pdiiddddbdd": {
+        "registers": 51,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_dd_carrier_afv_kernelILb0ELb0EEEvPKdS2_S2_S2_Pdiiddbd": {
+        "registers": 48,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_dd_mixed_gated_kernelILb1ELb0EEEvPKdS2_S2_S2_Pdiiddd": {
+        "registers": 46,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_dd_mixed_gated_kernelILb1ELb1EEEvPKdS2_S2_S2_Pdiiddd": {
+        "registers": 54,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_dd_carrier_afv_kernelILb1ELb0EEEvPKdS2_S2_S2_Pdiiddbd": {
+        "registers": 42,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_dd_carrier_afv_kernelILb1ELb1EEEvPKdS2_S2_S2_Pdiiddbd": {
+        "registers": 42,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu33pfd_weight_dd_single_gated_kernelILb1EEEvPKdS2_S2_S2_Pdiidd": {
+        "registers": 40,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu39pfd_weight_dd_single_huber_gated_kernelILb1EEEvPKdS2_S2_S2_Pdiiddd": {
+        "registers": 53,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_dd_pseudorange_kernelILb0ELb0EEEvPKdS2_S2_S2_Pdiiddbd": {
+        "registers": 44,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_dd_mixed_gated_kernelILb0ELb0EEEvPKdS2_S2_S2_Pdiiddd": {
+        "registers": 44,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_dd_mixed_gated_kernelILb0ELb1EEEvPKdS2_S2_S2_Pdiiddd": {
+        "registers": 54,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_dd_pseudorange_kernelILb1ELb1EEEvPKdS2_S2_S2_Pdiiddbd": {
+        "registers": 44,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu33pfd_weight_dd_single_gated_kernelILb0EEEvPKdS2_S2_S2_Pdiidd": {
+        "registers": 46,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu39pfd_weight_dd_single_huber_gated_kernelILb0EEEvPKdS2_S2_S2_Pdiiddd": {
+        "registers": 52,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25pfd_weight_pr_gate_kernelILi0EEEvPKdS2_S2_S2_S2_S2_S2_Pdiidddd": {
+        "registers": 42,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25pfd_weight_pr_gate_kernelILi1EEEvPKdS2_S2_S2_S2_S2_S2_Pdiidddd": {
+        "registers": 51,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25pfd_weight_pr_gate_kernelILi2EEEvPKdS2_S2_S2_S2_S2_S2_Pdiidddd": {
+        "registers": 44,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu18pfd_predict_kernelILb0ELb0EEEvPdS1_S1_S1_S1_S1_S1_S1_dddddddddiyi": {
+        "registers": 48,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu18pfd_predict_kernelILb0ELb1EEEvPdS1_S1_S1_S1_S1_S1_S1_dddddddddiyi": {
+        "registers": 58,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu18pfd_predict_kernelILb1ELb0EEEvPdS1_S1_S1_S1_S1_S1_S1_dddddddddiyi": {
+        "registers": 60,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27pfd_megopolis_gather_kernelEPKdS1_S1_S1_S1_S1_S1_S1_PdS2_S2_S2_S2_S2_S2_S2_PKiib": {
+        "registers": 24,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu30pfd_megopolis_coalesced_kernelEPKdPiiyi": {
+        "registers": 42,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26pfd_megopolis_index_kernelEPKiPiPKdiyi": {
+        "registers": 26,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu31pfd_megopolis_index_init_kernelEPii": {
+        "registers": 8,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu24pfd_reset_weights_kernelEPdi": {
+        "registers": 6,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu30pfd_systematic_resample_kernelEPKdS1_S1_S1_S1_S1_S1_S1_S1_PdS2_S2_S2_S2_S2_S2_S2_Piid": {
+        "registers": 26,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu23pfd_finalize_sum_kernelEPKdPdi": {
+        "registers": 12,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu23pfd_finalize_max_kernelEPKdPdi": {
+        "registers": 14,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu20pfd_normalize_kernelEPdPKdi": {
+        "registers": 26,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu18pfd_exp_sum_kernelEPKdPdS1_S2_i": {
+        "registers": 16,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu19pfd_find_max_kernelEPKdPdi": {
+        "registers": 14,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu30pfd_set_particle_states_kernelEPdS0_S0_S0_S0_S0_S0_S0_PKdi": {
+        "registers": 26,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu30pfd_get_particle_states_kernelEPKdS1_S1_S1_S1_S1_S1_S1_Pdi": {
+        "registers": 20,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu24pfd_get_particles_kernelEPKdS1_S1_S1_Pdi": {
+        "registers": 14,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu28pfd_finalize_estimate_kernelEPKdS1_S1_Pdi": {
+        "registers": 38,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26pfd_finalize_spread_kernelEPKdS1_S1_Pdi": {
+        "registers": 24,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu23pfd_finalize_ess_kernelEPKdS1_S1_Pdi": {
+        "registers": 24,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26pfd_position_spread_kernelEPKdS1_S1_S1_dddPdS2_S2_i": {
+        "registers": 22,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu19pfd_estimate_kernelEPKdS1_S1_S1_S1_PdS2_S2_i": {
+        "registers": 30,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu14pfd_ess_kernelEPKdPdS2_S2_i": {
+        "registers": 19,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25pfd_reset_position_kernelEPdS0_S0_S0_ddddiyi": {
+        "registers": 44,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25pfd_shift_position_kernelEPdS0_S0_dddi": {
+        "registers": 16,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27pfd_shift_clock_bias_kernelEPddi": {
+        "registers": 8,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26pfd_position_update_kernelEPKdS1_S1_Pdddddi": {
+        "registers": 20,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25pfd_weight_doppler_kernelEPKdS1_S1_PdS2_S2_S1_S2_iidddd": {
+        "registers": 90,
+        "stack_bytes": 160,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu38pfd_weight_dd_joint_huber_gated_kernelEPKdS1_S1_S1_Pdiidddddd": {
+        "registers": 59,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu32pfd_weight_dd_joint_gated_kernelEPKdS1_S1_S1_Pdiidddd": {
+        "registers": 56,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu29pfd_weight_carrier_afv_kernelEPKdS1_S1_S1_S1_S1_S1_Pdiidd": {
+        "registers": 42,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu28pfd_weight_gmm_shared_kernelEPKdS1_S1_S1_S1_S1_S1_Pdiidddd": {
+        "registers": 48,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu21pfd_weight_gmm_kernelEPKdS1_S1_S1_S1_S1_S1_Pdiidddd": {
+        "registers": 46,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu17pfd_weight_kernelEPKdS1_S1_S1_S1_S1_S1_Pdiidddbd": {
+        "registers": 44,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25pfd_weight_student_kernelEPKdS1_S1_S1_S1_S1_S1_Pdiidd": {
+        "registers": 48,
+        "stack_bytes": 0,
+        "static_shared_bytes": 16,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26pfd_weight_gaussian_kernelEPKdS1_S1_S1_S1_S1_S1_Pdiid": {
+        "registers": 38,
+        "stack_bytes": 0,
+        "static_shared_bytes": 16,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu15pfd_init_kernelEPdS0_S0_S0_S0_S0_S0_S0_S0_dddddddddddiy": {
+        "registers": 50,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      }
+    }
+  },
+  "patch": {
+    "path": "benchmarks/probes/pf_doppler_large_cache_20261013.patch",
+    "sha256": "bc1e35bf9cdb7b140c2b978c46ddc12226955c3587ed6e44db96b7af8a4444d6",
+    "files": {
+      "src/particle_filter/pf_device.cu": {
+        "baseline_sha256": "f07fa8046c255185366a76439bc6b005481c0dc3b73a7adef8e54c01b7e18b9d",
+        "candidate_sha256": "a2a34de934bf5debe45da9a1ce66f5b7983e7e783ad2c269f431169b9d638d38",
+        "reconstructs_crlf_bytes": true
+      }
+    }
+  },
+  "oracle_accounting_patch": {
+    "path": "benchmarks/probes/pf_doppler_large_cache_oracle_20261013.patch",
+    "sha256": "928f648281f84e17f193e3fcec638585e262f805025a1dff2cf3ee3d925fcf8d",
+    "files": {
+      "tests/test_pf_doppler_weight_cache.py": {
+        "baseline_sha256": "63e6fb24d37b16cc8e52642653615774e37ab14a0ec7526d9eb0e5e014ceb675",
+        "candidate_sha256": "6d8f6a4b49f50fc74ccfc051ef23e0dd0ad2618520857e05380173fce99fc04a",
+        "reconstructs_exact_bytes": true
+      }
+    }
+  },
+  "header_declarations_and_abi_unchanged": true,
+  "dispatch": "Retain cache8/cache16, add cache24 for17..24 and cache32 for25..32 satellites, block128; >32 retains original block256 kernel, zero observations retain early return; original67 device bodies/resources unchanged",
+  "semantics": "Original FP64 template body unchanged; cache lx/ly/lz once per particle/observation; preserve range<1 including NaN, ordered clock/likelihood/WLS sums, solver/gain/clipping, particle/observation count, RNG and model; no WLS fusion adopted",
+  "memory": "3*24/3*32 FP64 automatic cache plus32bit validity; new stack736/928 bytes vs original160, registers70 vs90. Owner observation payload, shared8*nSat doubles, allocations/H2D/launch count unchanged; original stream ownership retained",
+  "validation": {
+    "comparison_cases": 14202,
+    "bit_identical_output_cases": 13770,
+    "matching_pr_input_rejections": 432,
+    "regression_tests": 2426,
+    "sanitizer_tests": 160,
+    "memcheck_errors": 0,
+    "leaked_bytes": 0,
+    "racecheck_hazards": 0,
+    "synccheck_errors": 0
+  },
+  "test_sha256": {
+    "tests/test_pf_doppler_large_cache.py": "0f42d39d518b90d5b35c0ff86a4d86573160634617945b94af998b5b1ddf15ae",
+    "tests/test_pf_doppler_weight_cache.py": "6d8f6a4b49f50fc74ccfc051ef23e0dd0ad2618520857e05380173fce99fc04a"
+  },
+  "validation_log_sha256": {
+    "dist/pf_doppler_large_cache_regression_20261013.log": "1b0e1eccc3b19337e8800b74a80a450278edcc070764bce6427730145e32e266",
+    "dist/pf_doppler_large_cache_memcheck_console_20261013.log": "9318b47f298dcf8b21408a27e19f08dc76d37473131f34ca216609c2c1aa982c",
+    "dist/pf_doppler_large_cache_memcheck_20261013.log": "3ef41833580c07952672569330729d3a908130c68e7a514d721c5b0a3ddbd7d6",
+    "dist/pf_doppler_large_cache_racecheck_console_20261013.log": "698fbdb177582e2fab1303f2accca56626bf2f03496d85dcfbb28ffee8a158c8",
+    "dist/pf_doppler_large_cache_racecheck_20261013.log": "c69d09b31a66173faf98f267db57c7eb988035ce364fa0f0f184ffc933c541a7",
+    "dist/pf_doppler_large_cache_synccheck_console_20261013.log": "bbfff57ebca08fd719e4cba9df195aa702436f99c22c90bfb299197276af10d7",
+    "dist/pf_doppler_large_cache_synccheck_20261013.log": "adba10db853bd67fe9009b776eefe7b61210d2cbe3eee029ba6fa188978b5832"
+  },
+  "affected_large_timed_conditions_all_five_pairs_improve": [
+    "N100000/doppler_sat17_gain0",
+    "N100000/doppler_sat17_gain0.25",
+    "N100000/doppler_sat24_gain0",
+    "N100000/doppler_sat24_gain0.25",
+    "N100000/doppler_sat25_gain0",
+    "N100000/doppler_sat25_gain0.25",
+    "N100000/doppler_sat32_gain0",
+    "N100000/doppler_sat32_gain0.25",
+    "N100000/public_doppler_sat17_gain0",
+    "N100000/public_doppler_sat17_gain0.25",
+    "N100000/public_doppler_sat24_gain0",
+    "N100000/public_doppler_sat24_gain0.25",
+    "N100000/public_doppler_sat25_gain0",
+    "N100000/public_doppler_sat25_gain0.25",
+    "N100000/public_doppler_sat32_gain0",
+    "N100000/public_doppler_sat32_gain0.25",
+    "N1000000/doppler_sat17_gain0",
+    "N1000000/doppler_sat17_gain0.25",
+    "N1000000/doppler_sat24_gain0",
+    "N1000000/doppler_sat24_gain0.25",
+    "N1000000/doppler_sat25_gain0",
+    "N1000000/doppler_sat25_gain0.25",
+    "N1000000/doppler_sat32_gain0",
+    "N1000000/doppler_sat32_gain0.25",
+    "N1000000/public_doppler_sat17_gain0",
+    "N1000000/public_doppler_sat17_gain0.25",
+    "N1000000/public_doppler_sat24_gain0",
+    "N1000000/public_doppler_sat24_gain0.25",
+    "N1000000/public_doppler_sat25_gain0",
+    "N1000000/public_doppler_sat25_gain0.25",
+    "N1000000/public_doppler_sat32_gain0",
+    "N1000000/public_doppler_sat32_gain0.25"
+  ],
+  "exploratory_probe": {
+    "path": "dist/pf_doppler_large_cache_probe_20261013.json",
+    "sha256": "bfd58cf3bb7bd95b35a4dc7842244184ad060e2ff9dd5ebb712c9e96f3c4a8a2"
+  },
+  "quick_diagnostics": {
+    "path": "dist/pf_doppler_large_cache_quick_20261013.json",
+    "sha256": "497cbdca3c28b36d7c42807d9357de38165506abae45e8ce447599da955d8f7c",
+    "cases": 324,
+    "bit_mismatches": 0,
+    "helper_sha256": "908c6bd6495154a31f64728a3d3d3255586d189a1f82db5e296be2f61c9ce81d"
+  },
+  "rejected_wls_fusion": {
+    "path": "benchmarks/pf_doppler_wls_fusion_rejected_20261013.json",
+    "sha256": "76895edac6b43eefc275ed6811afe65fcc3cc912a8bc8f622ddfc8b83e17fbe6"
+  },
+  "adopted_archive_sha256": {
+    "dist/pf_doppler_large_cache_adopted/bench_pf_coalesced_compare.py": "961a0b5afa647b719ddd36f6532032eadeb1d90a2239d1a537711fb46bda1040",
+    "dist/pf_doppler_large_cache_adopted/bench_pf_covariance_compare.py": "9bd2dcdf8ac9448cb83d5bbc411059aeb6b5ea960eb4284103caf2eea93fb8e0",
+    "dist/pf_doppler_large_cache_adopted/bench_pf_dd_gate_compare.py": "31793ebc57bd0ce1047417cd3c26ce649d151b2767225cd7437075fa9d22e7ea",
+    "dist/pf_doppler_large_cache_adopted/bench_pf_dd_huber_gate_compare.py": "ba74dfcba0ce5a23414c67bf50c0436d0d33c3f3f6e460a2973840e95cc65fcc",
+    "dist/pf_doppler_large_cache_adopted/bench_pf_dd_joint_options_check.py": "ef1faf0cadc5cc829213c927022b2bfc8c7145ac6694d47272b54cee2bae22d4",
+    "dist/pf_doppler_large_cache_adopted/bench_pf_dd_joint_reference_compare.py": "bb5dc738248b1412e6ae6dbe102eb52bca32ff8401ec0351da327f6994651935",
+    "dist/pf_doppler_large_cache_adopted/bench_pf_dd_mixed_gate_compare.py": "cf64ac2df60151f1c24409169ead66f8c23162c4df7647158e609edac0411d78",
+    "dist/pf_doppler_large_cache_adopted/bench_pf_dd_mixed_joint_gate_compare.py": "a3d5453758e712d0353ee9adc2c64b2fd8d9488ed85159ca457fb5e9ef1ceba5",
+    "dist/pf_doppler_large_cache_adopted/bench_pf_dd_reference_compare.py": "6c426dbf7926b56ff969bc3aca0d75a3500a05a228eee2f225f779868bba8370",
+    "dist/pf_doppler_large_cache_adopted/bench_pf_dd_sigma_compare.py": "bb18429a1f6e92ab78d75b27e253e7c30c42ed2b33adf33fa3b915f2d9c27ce2",
+    "dist/pf_doppler_large_cache_adopted/bench_pf_dd_single_gate_compare.py": "31caeb50078dc714c518933a8f728b99456f6db63932ca7ec7bb32f6c3936917",
+    "dist/pf_doppler_large_cache_adopted/bench_pf_dd_single_huber_gate_compare.py": "a5b2ba14d31dc935de85665683b73c6a68e7c23d84cae5735453d786556c1c99",
+    "dist/pf_doppler_large_cache_adopted/bench_pf_doppler_compare.py": "b7b4c95560bd9a222d7d5b6be32cf453603334701b3ad91a2edc988e580731f5",
+    "dist/pf_doppler_large_cache_adopted/bench_pf_doppler_large_cache_compare.py": "9181b38d8fb57168df24183c0b28313ed546862cb4fa6e9ed3c7403a58767753",
+    "dist/pf_doppler_large_cache_adopted/bench_pf_doppler_weight_cache_compare.py": "d0eb69e802f4cc909e845502204733c4b38c595f7a69bcc87e4412af06389541",
+    "dist/pf_doppler_large_cache_adopted/bench_pf_gaussian_compare.py": "8e81fbe521b5c491dc04a575d83cb03768794ca2a1cbba1ae858305929c8b16a",
+    "dist/pf_doppler_large_cache_adopted/bench_pf_gmm_compare.py": "a906e56ae724c3c229463b3fb7f299eb6344d5c957ed543e75cb7af66e1af080",
+    "dist/pf_doppler_large_cache_adopted/bench_pf_packed_satellite_compare.py": "098ac03e63379479f6af0ab660a350df796aae1ad0d788ea97d9d974e5846e76",
+    "dist/pf_doppler_large_cache_adopted/bench_pf_pr_gate_compare.py": "067af74eb297fc24599b85fab8bbdfb8f1420c819b9db95a937ea5c8e8333215",
+    "dist/pf_doppler_large_cache_adopted/check_pf_doppler_large_cache_quick_20261013.py": "908c6bd6495154a31f64728a3d3d3255586d189a1f82db5e296be2f61c9ce81d",
+    "dist/pf_doppler_large_cache_adopted/pf_device.cu": "a2a34de934bf5debe45da9a1ce66f5b7983e7e783ad2c269f431169b9d638d38",
+    "dist/pf_doppler_large_cache_adopted/pf_device.h": "a2739ef2861995b4d769415651dc6c8f0acf5da6e5caf94d29f977fd8e9b8bc5",
+    "dist/pf_doppler_large_cache_adopted/pf_device_config.py": "c6c17c4f926a2182ebe27dfd23a6e9c8b1f49c59c238a51feb6dd7b2814fce69",
+    "dist/pf_doppler_large_cache_adopted/pf_device_runtime.py": "a24c892f58e39e4cde99737273cfe23b807df9cc971269f571249f03e9d93ad2",
+    "dist/pf_doppler_large_cache_adopted/pf_device_smoother.py": "4ca024cf224eab4a472642127a838028afcda647ba5aef6807d0b5f365ee85b7",
+    "dist/pf_doppler_large_cache_adopted/pf_doppler_large_cache_final_20261013.json": "9c8fa2c0d1ab475fb897d68813e863ecae19de59a5bb97ecda7a21512968c556",
+    "dist/pf_doppler_large_cache_adopted/pf_doppler_large_cache_probe_20261013.json": "bfd58cf3bb7bd95b35a4dc7842244184ad060e2ff9dd5ebb712c9e96f3c4a8a2",
+    "dist/pf_doppler_large_cache_adopted/pf_doppler_large_cache_quick_20261013.json": "497cbdca3c28b36d7c42807d9357de38165506abae45e8ce447599da955d8f7c",
+    "dist/pf_doppler_large_cache_adopted/pf_doppler_large_cache_resources_20261013.log": "20fb006817665a907a6c5907865df1c98d6ac8435063aa5269d0c83b063af071",
+    "dist/pf_doppler_large_cache_adopted/pf_doppler_large_cache_sass_20261013.log": "e417f18b785d5289115273018732478138f2bad4b82eafb69c2d6170b27a42e4",
+    "dist/pf_doppler_large_cache_adopted/test_pf_doppler_large_cache.py": "0f42d39d518b90d5b35c0ff86a4d86573160634617945b94af998b5b1ddf15ae",
+    "dist/pf_doppler_large_cache_adopted/test_pf_doppler_weight_cache.py": "6d8f6a4b49f50fc74ccfc051ef23e0dd0ad2618520857e05380173fce99fc04a",
+    "dist/pf_doppler_large_cache_adopted/_gnss_gpu_pf_device.cp312-win_amd64.pyd": "8d8c3e3fe2876beef0ae070565b3a4da039fd15fc33160dc41964e950b89ed87",
+    "dist/pf_doppler_large_cache_adopted/_pf_device_bindings.cpp": "56fdb9e2568d263595aae3ab66e42d5df70e8ccd6c2b6d08c61d00d4b30edaf5",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat17_gain0.0_masked_update1.npz": "1e0630c720cab6a495412538314c081151c554cefdad00e16bafb00720143afa",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat17_gain0.0_masked_update2.npz": "e132929b411c69accdfb205c6de0ae842b6780cd80ab9001a507876c8290188f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat17_gain0.0_nonfinite_update1.npz": "fdee3103673ae0566460b4d215cdaa13e5b348c69080349ee9234a8350ce89c7",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat17_gain0.0_nonfinite_update2.npz": "fdee3103673ae0566460b4d215cdaa13e5b348c69080349ee9234a8350ce89c7",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat17_gain0.0_normal_update1.npz": "6dbe3d1a826e48485329a13735ab76dde5db08f259be4b3ecceb0ccee5946574",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat17_gain0.0_normal_update2.npz": "e8db48dd3574185e2fb96fcfea1adc8c9a5b95e9026eb990ec168139ef25bcc4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat17_gain0.25_masked_update1.npz": "193c8f844c2eb5d12168fe3aab469e86d1ea0f343f2233a4798f264a056bb12a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat17_gain0.25_masked_update2.npz": "a004136b59fb1677d69ec1e0fc5f40e821c28fbee89760e5717dcca81deb49fe",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat17_gain0.25_nonfinite_update1.npz": "bde5be4688159736d80c50c60240373861d434eb0dc218b1b20e12bbbbf574f4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat17_gain0.25_nonfinite_update2.npz": "bde5be4688159736d80c50c60240373861d434eb0dc218b1b20e12bbbbf574f4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat17_gain0.25_normal_update1.npz": "7e9ef7c406887e1532dc93dbf6b70965967f16fe6bcc7775881e48ce7522be7a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat17_gain0.25_normal_update2.npz": "328784d9d7a95967a52e9b87c71f399f896fa8e84f4508588e31514da26613e5",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat17_gain1.5_masked_update1.npz": "0fbaad41db8c38c7fc40c9e2c6fda638f6978b6720bf43c6df0a86af5ceb6f21",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat17_gain1.5_masked_update2.npz": "d13176b80eb8734be33b9ffce715c268298672725de766727682e8103376e52a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat17_gain1.5_nonfinite_update1.npz": "6a7f945e2957f3492a3ed82909b0dbed8a29990542cea7e00654aec293d84b4b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat17_gain1.5_nonfinite_update2.npz": "6a7f945e2957f3492a3ed82909b0dbed8a29990542cea7e00654aec293d84b4b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat17_gain1.5_normal_update1.npz": "4fcde1d512391baf0ed7d1835fb287485fc1c32d361f9ad3a176283dbdf7e972",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat17_gain1.5_normal_update2.npz": "d4013762ec6b196bd5370bd3ec18be96ec66ca4dd50f12de4a87c81adb62ff6c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat24_gain0.0_masked_update1.npz": "27b5946470a0d10bac3fba12a77d30d76b4d046b3290e09815cc890796915dcf",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat24_gain0.0_masked_update2.npz": "5051982ac8f253308e2ae0818eda8d994fc2aa7cf9a4157550ef508f46981674",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat24_gain0.0_nonfinite_update1.npz": "c482a63ab12cb48f3599c1604e6be38fa25411272481b5603fcafe89c3d7b40a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat24_gain0.0_nonfinite_update2.npz": "c482a63ab12cb48f3599c1604e6be38fa25411272481b5603fcafe89c3d7b40a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat24_gain0.0_normal_update1.npz": "3d6a0c01d32921bd7be304434081c8a78b39df5b160870fd54c29948c94f7caa",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat24_gain0.0_normal_update2.npz": "dda7ee2098459aceeab24c6a19302e752fcb7c56302b6746a6ab02c55a6567d4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat24_gain0.25_masked_update1.npz": "b36b27fe581c885d9bafbd2f65f298fc2ec7ce52e3f0bb6c62192b5228d91feb",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat24_gain0.25_masked_update2.npz": "d7ccbd8d5b91c63119e81bef450a2efe90d111bfdfa553d022225924ee6ea3b5",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat24_gain0.25_nonfinite_update1.npz": "0341493043bd8f19c578da1fd5087b7923be6095df1810f865ef491d888ceb20",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat24_gain0.25_nonfinite_update2.npz": "0341493043bd8f19c578da1fd5087b7923be6095df1810f865ef491d888ceb20",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat24_gain0.25_normal_update1.npz": "416dd52e8a9d34a4b01312f793da5fad78cdc62bc43c53b31bf32bb90d28bfd7",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat24_gain0.25_normal_update2.npz": "df122d983e32b1351a8b865aa0e08c9ce8b65481f6f144506138611fc576b924",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat24_gain1.5_masked_update1.npz": "252cc4a7702bcd71545bbf30ee0747341afdf29ff95a5f0e7dda417e3e8c2b8a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat24_gain1.5_masked_update2.npz": "0252e09e08e85bd13516b3d3298cccf1bfa208e70b9df9b7af397f9d11c129d5",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat24_gain1.5_nonfinite_update1.npz": "7c8f2c9ca9c044ef24a92f9ef61d8e70ca37fd2a110354ee17da0629edfd1912",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat24_gain1.5_nonfinite_update2.npz": "7c8f2c9ca9c044ef24a92f9ef61d8e70ca37fd2a110354ee17da0629edfd1912",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat24_gain1.5_normal_update1.npz": "2352e0713e782508913df0ed02a7b1b996ee5cd640551440b6fc7d0da3a92f62",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat24_gain1.5_normal_update2.npz": "3cd03bca399bb24333b5de93debf3282fbcb68d199ca8105b32002ec234ad577",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat25_gain0.0_masked_update1.npz": "5042b47446c77552e1e1e1fbb028c27a6ae27bd57870f12e282de5518db84555",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat25_gain0.0_masked_update2.npz": "1cda6a0aa07f6330852a9e08c2287aed94db1ea57789dddce57fa05f70b9ae89",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat25_gain0.0_nonfinite_update1.npz": "5cc3050ed66cba30c02b1c51d5fe529e0a367bd5a92261b606cb5499e02ea0a3",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat25_gain0.0_nonfinite_update2.npz": "5cc3050ed66cba30c02b1c51d5fe529e0a367bd5a92261b606cb5499e02ea0a3",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat25_gain0.0_normal_update1.npz": "3432969264f9f21f2794bfcf6a20d0347df206bf7fa2faf5132e2f771c1dd097",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat25_gain0.0_normal_update2.npz": "046fcef4ae4ae757c834a53cae4c65c734a8eedc6376af28eaac2efffb3c8889",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat25_gain0.25_masked_update1.npz": "ca9a43c790ef69fcc670a62e3df32e233edb7d78dace692172ed9287c170c699",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat25_gain0.25_masked_update2.npz": "632039ed03dc57b73a04ff76c83f15ae66c36055b5eb6b3a33a03f5494060b70",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat25_gain0.25_nonfinite_update1.npz": "d720348dfe700ec254ffe3c2fb968521905cc60c1b10341a1dae33df725e5fc2",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat25_gain0.25_nonfinite_update2.npz": "d720348dfe700ec254ffe3c2fb968521905cc60c1b10341a1dae33df725e5fc2",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat25_gain0.25_normal_update1.npz": "88af6be2a34eb44e76eda76694fef5e021bac02396dca6e46e630889d33f8dfb",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat25_gain0.25_normal_update2.npz": "b1e5b4480c4e735b7e2c16acc6d8290bb5efb9d922147f501ef25c70a9a4d3c1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat25_gain1.5_masked_update1.npz": "3fa025dc2baf1148b9844e430a1bd06957e5c6dc8ca20b482a0db3f47f1f086c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat25_gain1.5_masked_update2.npz": "9c6cb6e7c08c60e0315a77c013ee41fc3c2806f7d102eeec5500190b2570d747",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat25_gain1.5_nonfinite_update1.npz": "b60f0fba3ab4ffd292173515919ea6e6e030569fbfeb784c2d8383487c5ff86b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat25_gain1.5_nonfinite_update2.npz": "b60f0fba3ab4ffd292173515919ea6e6e030569fbfeb784c2d8383487c5ff86b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat25_gain1.5_normal_update1.npz": "ce1c5d4239c61b46ba99bedbb6854367bf2eb171540ab052571fa757e11815b1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat25_gain1.5_normal_update2.npz": "4506c6d7c419493d7ba9acff3e3af0264cbb287af84df557dc064e9dc5b80037",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat31_gain0.0_masked_update1.npz": "43705c7409f8fd100426ed1b09e58bfc697e32e7537dfeaf0b8b72c57d625de4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat31_gain0.0_masked_update2.npz": "840ccd224a69c6608de7207e259e34b39b90a503663c0842b217f070b50176d9",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat31_gain0.0_nonfinite_update1.npz": "fd649f8e196bd0fb6122f6a0714f4fa6215d31dd64c675b0594a2be547ef9174",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat31_gain0.0_nonfinite_update2.npz": "fd649f8e196bd0fb6122f6a0714f4fa6215d31dd64c675b0594a2be547ef9174",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat31_gain0.0_normal_update1.npz": "ee6c1af70548f2bb97fbaee7d8fefb865009fa11fc1523662fdc5806d3855654",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat31_gain0.0_normal_update2.npz": "6b535a86a022a97f568966250106eaf3574afaa4afc01b231d1380b3249e3501",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat31_gain0.25_masked_update1.npz": "5be2b51ff427bb3f5a1bcfa5f73037ecfd64b7b4de16842bbb711e5297a942b1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat31_gain0.25_masked_update2.npz": "81ef3c1cc357bd5364ada960747b1df515744bad3a43e4b4389f95c24a78a66d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat31_gain0.25_nonfinite_update1.npz": "1c915613994f9604c7b8632f2a64c478688e94972665ac148383a66f54c6ed49",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat31_gain0.25_nonfinite_update2.npz": "1c915613994f9604c7b8632f2a64c478688e94972665ac148383a66f54c6ed49",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat31_gain0.25_normal_update1.npz": "2c73df0648eb74adb2e195e7a030fb2df083029cb9de10cd57bb4550d2905526",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat31_gain0.25_normal_update2.npz": "1050204807aa26f782ef53ce625d15ecd04f6ce7f41f30101bfe1b6489a0e712",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat31_gain1.5_masked_update1.npz": "04188877938532d024be0d7d6f498d82739dc127ee705cf2f645c9d2025bbcdf",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat31_gain1.5_masked_update2.npz": "05b129792831f0f60e2739a6a7adc664566ea917141621223ba1588943f5b51e",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat31_gain1.5_nonfinite_update1.npz": "1955a44c0c3fa35b5451f64e58cef1ee1ac7c74dea70aae9e349c43cc95697d4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat31_gain1.5_nonfinite_update2.npz": "1955a44c0c3fa35b5451f64e58cef1ee1ac7c74dea70aae9e349c43cc95697d4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat31_gain1.5_normal_update1.npz": "5ebdb674d125f073378cb858c874e2b8ea170a89bd081b6ee4ff28a5a252eee2",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat31_gain1.5_normal_update2.npz": "951bd1cddf3dca3bcf7f19170583020c6005b893e417a4f62e28eab53964b07c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat32_gain0.0_masked_update1.npz": "67250557e27627cdcbe1265af63b81a92455b7621844c8716d07408a13f15fd1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat32_gain0.0_masked_update2.npz": "0416cc8d182a903b6a65a86bba2a6fe83fd999a0c0ef3f121e28c08cba16478b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat32_gain0.0_nonfinite_update1.npz": "23ca44b83a7c5f154df3eff37d7e3553fcc81fdbd0b6b945a408237294ae6961",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat32_gain0.0_nonfinite_update2.npz": "23ca44b83a7c5f154df3eff37d7e3553fcc81fdbd0b6b945a408237294ae6961",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat32_gain0.0_normal_update1.npz": "5ff5221630f33f8c726531e4132e26a3b54ad755eb1bfb0e82b6171cf8d34330",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat32_gain0.0_normal_update2.npz": "ec16afe083fcb4dad66fafc523c139828d7819b9f6bb9dbaaf026e6fcfb66779",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat32_gain0.25_masked_update1.npz": "e58478a3d24db4286ccd80e65307a17f4d1c4b29a34e58729c05c3d30d2a3413",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat32_gain0.25_masked_update2.npz": "d78aa46ef002fe73ef921fd463c95200ac778949d230d4e2d3605106461bdc62",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat32_gain0.25_nonfinite_update1.npz": "b8c85b7b2ca827fc37ff4440a7e4e6baa44371ed33aa1d41f8a077d60f26d950",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat32_gain0.25_nonfinite_update2.npz": "b8c85b7b2ca827fc37ff4440a7e4e6baa44371ed33aa1d41f8a077d60f26d950",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat32_gain0.25_normal_update1.npz": "a96640f380bd3ee1897ae3734c258225e6a22ae082d4acdc92abedb2caefd35a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat32_gain0.25_normal_update2.npz": "0ccfb706cc38c43923f38350d7867c6503c30cc75aabe97f948dbc7d9ab58858",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat32_gain1.5_masked_update1.npz": "0e06d73c1189ecf7585c352436b3d8fe6bdeaf0961620d706ba52786f6c54a94",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat32_gain1.5_masked_update2.npz": "5edaee3e44666e5357cf12110c443b22f6170f234c2e620b7c0ed9d92f1dd46b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat32_gain1.5_nonfinite_update1.npz": "6747a9720bfb832b1a5e1616b1544f9214652cb770f0cced49139bfac5a5a15c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat32_gain1.5_nonfinite_update2.npz": "6747a9720bfb832b1a5e1616b1544f9214652cb770f0cced49139bfac5a5a15c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat32_gain1.5_normal_update1.npz": "1c3e29ce4f0a4d9875d6896396f3f099b1f36711eb16c21e7641c4372118f7b6",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat32_gain1.5_normal_update2.npz": "7a79c0ccb5aecf110570a2cb4832dc5d613eb96063c947cb1d8abf1cdb84da63",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat33_gain0.0_masked_update1.npz": "ef5248c90bc2cc790f716e9b82b8637fd9f9909eee7742cf95bf656c3c39c44e",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat33_gain0.0_masked_update2.npz": "bcf0faab1fe50bb4c972cf069ea3b0ec598be3893e8c9385e95435b37fa380c0",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat33_gain0.0_nonfinite_update1.npz": "325157d9741ec0f4b5a5e1db8a1070c5a567c1c55fc5753fb926b36249b29ee9",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat33_gain0.0_nonfinite_update2.npz": "325157d9741ec0f4b5a5e1db8a1070c5a567c1c55fc5753fb926b36249b29ee9",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat33_gain0.0_normal_update1.npz": "56c8cc353822279313f0a50e750dab8188c68603d6ef0bcceffb188ce0e45a96",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat33_gain0.0_normal_update2.npz": "a6d95cea3320e834a8e6e3321577f44705e38cbd1157725a3efbc4dbebe334f0",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat33_gain0.25_masked_update1.npz": "c8e9be463e3f3cff83dc7bbadc0f91d2e161eb20b44f1b737d95ac3239f050ac",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat33_gain0.25_masked_update2.npz": "5b4bcb2d9f10a6635a3e2c5d55c1fef6251c320a4c3db8fa48748c423e9771a4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat33_gain0.25_nonfinite_update1.npz": "0423966c7136cf557958327b5de21bae60e479d6e03c9e6af546d3be9234563f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat33_gain0.25_nonfinite_update2.npz": "0423966c7136cf557958327b5de21bae60e479d6e03c9e6af546d3be9234563f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat33_gain0.25_normal_update1.npz": "cb3025402bd5b7862f9c08f6ef095e3c244eab0aec043d71f4de3350bd6605f2",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat33_gain0.25_normal_update2.npz": "cb55e78ce89a5936f72680281848fff06b2fcf5810b38d3387d9dbe646002e28",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat33_gain1.5_masked_update1.npz": "1f923844bc7f694a57fa4678ad3b79a263f5bf5fdf180468d184c7d6704cae61",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat33_gain1.5_masked_update2.npz": "7d8d77d2afd30696b1bab5e75b8f481c8ff33a8d90de3f3bf77bbbd5a181f521",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat33_gain1.5_nonfinite_update1.npz": "e58a8a8db52922970ec058892d08e789527e35cdb962e0e3501776f671ad5eaf",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat33_gain1.5_nonfinite_update2.npz": "e58a8a8db52922970ec058892d08e789527e35cdb962e0e3501776f671ad5eaf",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat33_gain1.5_normal_update1.npz": "2d76a3addf609c598c2dc380b79e54833e11f6f2faf58aa750f34221abd83bbd",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N1_sat33_gain1.5_normal_update2.npz": "70a9bd02d77746c5011a37ad49e2fd6c6ebbf7f1730eb8b919e0c9947a0edf27",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat17_gain0.0_masked_update1.npz": "64fbc179103b2ccbe5a476d78d28308650d8b79c1ba2df2f476834687a3403a7",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat17_gain0.0_masked_update2.npz": "aaa751e68ad6b5a1b863735b3e26c1bc05438e8c3ce6662e38da66f15dccfb74",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat17_gain0.0_nonfinite_update1.npz": "94928f8776b2f17f76f4e7827bb2a2dfca415876fd5de587f2c0a7395588d5f1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat17_gain0.0_nonfinite_update2.npz": "94928f8776b2f17f76f4e7827bb2a2dfca415876fd5de587f2c0a7395588d5f1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat17_gain0.0_normal_update1.npz": "7383f09981aea2baa55b0fb5703f4a68cfa1b488946156875c327e2d0ba15d5f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat17_gain0.0_normal_update2.npz": "2cdedb3670b1b4494a20639e19c7b11e9781336b8d37ce08433cac47e2b04eb1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat17_gain0.25_masked_update1.npz": "4f2cdadad86401f05c1ad596b8a9da3ac27644fc145d129140efec2f703142d1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat17_gain0.25_masked_update2.npz": "694cb736205e21bfc5ba3883ce0f4805933b83504d295dfe6bbeccd95d5711d7",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat17_gain0.25_nonfinite_update1.npz": "dc2b5ae06091823a2602a3f71dede35f4551851ea89833e0562b42bba4b8ef26",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat17_gain0.25_nonfinite_update2.npz": "dc2b5ae06091823a2602a3f71dede35f4551851ea89833e0562b42bba4b8ef26",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat17_gain0.25_normal_update1.npz": "f3f1830811a61ef821f5db358306dae7bb20afefcac41e4d1c7775ebdcd1f99e",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat17_gain0.25_normal_update2.npz": "bf49ec4e43b4ede7e1596885b68bd0d271c8c2b9096e921b2db799c62ef785c1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat17_gain1.5_masked_update1.npz": "08c0b65a6a5870906df6a55ec56ec2d0b298a29e47ef28591472f8e4e0394b00",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat17_gain1.5_masked_update2.npz": "ccf2887516d9be5ad13a9f5df07e110211882dbb266e264ec793c93ed1a4619a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat17_gain1.5_nonfinite_update1.npz": "50b6d40d0fbcd764e0ea705e19d61a33f637d91511d685943fd0b3b9004898f0",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat17_gain1.5_nonfinite_update2.npz": "50b6d40d0fbcd764e0ea705e19d61a33f637d91511d685943fd0b3b9004898f0",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat17_gain1.5_normal_update1.npz": "b3dc7adb99c57c78bd00823dcb8d2478c492e1e27c88e42ed7fec719c9fca257",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat17_gain1.5_normal_update2.npz": "b9fd26abf9cd9338a7c3e21c04aee028c535be909c89f531eb066845dccff124",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat24_gain0.0_masked_update1.npz": "db33acbbf4b6beecd4d50241b1bf0aae285e59f5932660553ea7dc7ef78eb03a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat24_gain0.0_masked_update2.npz": "16077cbd17829c6ae253a4fb0b3db33ed49822eb975e19fb6bb90bc53d1652b3",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat24_gain0.0_nonfinite_update1.npz": "a7f9d01a82bf1782ededdd2210bc81d76f8298d2451640084ffe8d2cd6c55703",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat24_gain0.0_nonfinite_update2.npz": "a7f9d01a82bf1782ededdd2210bc81d76f8298d2451640084ffe8d2cd6c55703",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat24_gain0.0_normal_update1.npz": "63a7b7d10565579cd398db4f2d265df4a8249ddc82f6a91651f36c2900af5e16",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat24_gain0.0_normal_update2.npz": "df7417e87cdaebdf8233e1cbcf1e63b729710df9b4aa1d97b172f2a54481446d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat24_gain0.25_masked_update1.npz": "1670a8e8fd65e6db7e3f965401c1215f4197f6d78cd3c9e9addc27322e07d073",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat24_gain0.25_masked_update2.npz": "da08e1f77c66fe4a2561312ac7be14cb6a540b69f5ad290bcb6e947cbcb08970",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat24_gain0.25_nonfinite_update1.npz": "ab59ae849a8ff102310fd5d4255f0b63190a6d3e45e2b1120c5bb78e8191feb9",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat24_gain0.25_nonfinite_update2.npz": "ab59ae849a8ff102310fd5d4255f0b63190a6d3e45e2b1120c5bb78e8191feb9",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat24_gain0.25_normal_update1.npz": "b28dd978c9edce5d09129c075a5bbf779fe7006298859955e0d9da53b6071bdc",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat24_gain0.25_normal_update2.npz": "7a8f58858dcf2dda96640bdea39979a251763ff54e5a90df896259a3d0229189",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat24_gain1.5_masked_update1.npz": "52c21022ebbbab977a096920d80661298668924a8a9b7d486986b9a9d68bbd3c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat24_gain1.5_masked_update2.npz": "1936361631091a9556a8c65e9f96854053b3f107d8b8a7b04bc68a4765de37b1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat24_gain1.5_nonfinite_update1.npz": "85f5a88ecc1f4282f2e55a4fa4098a76bd7b0176e1492a57a74719d7707fcdb0",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat24_gain1.5_nonfinite_update2.npz": "85f5a88ecc1f4282f2e55a4fa4098a76bd7b0176e1492a57a74719d7707fcdb0",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat24_gain1.5_normal_update1.npz": "0605a3fcc89adff853bedaf6c5c9d73b7a1aa1868f4373a91d8d50a5fa03548b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat24_gain1.5_normal_update2.npz": "9770b17f3113bdb24948cb86eab32ce11735cca5826e7b1d011310a7e420e4db",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat25_gain0.0_masked_update1.npz": "07157ad9bbf17cec8e67d62000a2ffeec97f68d6b7537a8ba157a89e0a27ec44",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat25_gain0.0_masked_update2.npz": "c06ada7167643366af676cb89ef2c7272f6064107f07543d9ba791d8e51d679e",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat25_gain0.0_nonfinite_update1.npz": "8a73a953ee6eaba1e0ee7aebfa8fe91795874ce260ffd81393a43cea8f6b68c3",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat25_gain0.0_nonfinite_update2.npz": "8a73a953ee6eaba1e0ee7aebfa8fe91795874ce260ffd81393a43cea8f6b68c3",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat25_gain0.0_normal_update1.npz": "cb6763d42be9e06f3b43307a693fdd3b4b7cdcace7ff69ed755a396c251360ca",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat25_gain0.0_normal_update2.npz": "6ed726d620fa8e00b3dd24fbc370baa5a99b99aa41059343937012547c3eaf8f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat25_gain0.25_masked_update1.npz": "fa974be1d5af7e8969af631ccf6852e20c5a96f6d799783fde2c4898101eeb55",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat25_gain0.25_masked_update2.npz": "a5042748fcf2f7855190c4de4cbc58caad4cdd8d7600013309c70cbd3dcc0fbc",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat25_gain0.25_nonfinite_update1.npz": "3c926f446007d9a5f45c96bad68cc144fcf0c57516430f883c819c9c736e31a8",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat25_gain0.25_nonfinite_update2.npz": "3c926f446007d9a5f45c96bad68cc144fcf0c57516430f883c819c9c736e31a8",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat25_gain0.25_normal_update1.npz": "81e602e6d8775ac763ec8242e9388b2ec8962b24130be92bdc2277e0a10cb280",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat25_gain0.25_normal_update2.npz": "d33d0e1ca4b197411242d0e73fd5d4103bc4abf6687260de51c0382312d30bc7",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat25_gain1.5_masked_update1.npz": "b8d06dc2033321506ba80a66ddbf13d80f81394f0b4759587d4290c91ebf1e13",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat25_gain1.5_masked_update2.npz": "8f3a6d5a96cb73f891f01081456651b808ec21503de8c4dc2dae77a0b5adbb17",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat25_gain1.5_nonfinite_update1.npz": "08d39cc59abdbcabdac71dd02d78d0155e2b15e9753d590b4703ad0f7acbce63",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat25_gain1.5_nonfinite_update2.npz": "08d39cc59abdbcabdac71dd02d78d0155e2b15e9753d590b4703ad0f7acbce63",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat25_gain1.5_normal_update1.npz": "b3c251d38e1a1245d29dbd49cbcfe92c2cb2bacd594a58b5d6d3b0a9adf117e7",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat25_gain1.5_normal_update2.npz": "4ad1f352553663d5d58832c2f1c7cdb298114461447ad6001d6dfab4acf5197d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat31_gain0.0_masked_update1.npz": "6a73283da39356ef90238e3824ce79e3cdb7b3766d870a9def918333a7dde890",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat31_gain0.0_masked_update2.npz": "446dde1667e3134a336287e2b800a14094c68e75e533dd82c3f3c778918a4cb9",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat31_gain0.0_nonfinite_update1.npz": "5127a9ef9203f5acd07c45155422dacec88c1214dad169b09115ac75ee567621",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat31_gain0.0_nonfinite_update2.npz": "5127a9ef9203f5acd07c45155422dacec88c1214dad169b09115ac75ee567621",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat31_gain0.0_normal_update1.npz": "b9e1efa0c09b1f3c90b5a2b7315dc60ae61bb07f94505a1872322eaa6c193c5a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat31_gain0.0_normal_update2.npz": "83537a942a546fd9b51db59b3e4d306b611dfaabde37d96cc051dcbfe5a165a4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat31_gain0.25_masked_update1.npz": "072f4ce9051bd17350f3e141b64d39750db89397ec954ac9c2eb971087ed444f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat31_gain0.25_masked_update2.npz": "b95e47f26e8d288a544216d988f50d0da876bac7897093d3925a68557a7ec104",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat31_gain0.25_nonfinite_update1.npz": "6bec5c3db1d7bb30ae9e20552a78a70d83adce854f4ea5dadcc5d0792394553d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat31_gain0.25_nonfinite_update2.npz": "6bec5c3db1d7bb30ae9e20552a78a70d83adce854f4ea5dadcc5d0792394553d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat31_gain0.25_normal_update1.npz": "0015352794a5d812cd5c392bae80a63eccf01a8ccacd3c280d13ca17077e4dcc",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat31_gain0.25_normal_update2.npz": "2b5282b4f6cd75aeb07a9c93f308e49b471208292e8f50fcf3aa662543fc3994",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat31_gain1.5_masked_update1.npz": "0e8b57beb031decbee36c0b284ef4eb59ac0faa7dacf92999e17e07f90cf257b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat31_gain1.5_masked_update2.npz": "02cfd086e08389bcc98469e38369e144d3508123ddd9e6b49e151b0c97364ded",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat31_gain1.5_nonfinite_update1.npz": "9e072e32733d4d02d88678e89d5a858f6d95a504dc1f57c152f4c9da17fb8953",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat31_gain1.5_nonfinite_update2.npz": "9e072e32733d4d02d88678e89d5a858f6d95a504dc1f57c152f4c9da17fb8953",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat31_gain1.5_normal_update1.npz": "743c418e7b02c65c022aa118c7dd538eaa2dfe32c482049d91d981485a2bd36d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat31_gain1.5_normal_update2.npz": "640c3c0bb2911aaf114b7d748d7ee10e671ccb9d22511646e4d968e18290e694",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat32_gain0.0_masked_update1.npz": "5c02d18bd7a7a2bdc2953ef7f9cf1eb0ae5e994ae4506fe1734b69dc2dd68599",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat32_gain0.0_masked_update2.npz": "a667b86e9ffbf77c0e57d885da6f7b28986acd5a109b145b9daf4be0f5134229",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat32_gain0.0_nonfinite_update1.npz": "4a81cd9e6bf7584eb290c4470eaf29d61f76aa085577933a480c0893e3cd1724",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat32_gain0.0_nonfinite_update2.npz": "4a81cd9e6bf7584eb290c4470eaf29d61f76aa085577933a480c0893e3cd1724",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat32_gain0.0_normal_update1.npz": "8a432610e9539c9ef34fa34924ce514d40dafbad8ca70b02b0eb5745f5e99106",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat32_gain0.0_normal_update2.npz": "b63e122d3498f6ab1818a086b95f5af035c9bf663f136bf073fb5735d8791cbe",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat32_gain0.25_masked_update1.npz": "2275a066a60cf55478477e37a51adf2398bc365e0661ecdda8b909a4f35a74ce",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat32_gain0.25_masked_update2.npz": "7b700a37960d1982d98109f91b1c8750fd015d2b23252e5e9a24ffdd3d3d3d5f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat32_gain0.25_nonfinite_update1.npz": "1657c92cfa156e06c1685ee124273f6507cb66fc462098165e1d2ffd2e2a0503",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat32_gain0.25_nonfinite_update2.npz": "1657c92cfa156e06c1685ee124273f6507cb66fc462098165e1d2ffd2e2a0503",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat32_gain0.25_normal_update1.npz": "0d981941ea01d9edd3b4cf5a4c141e7debba9a2c70dad083590654553683a102",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat32_gain0.25_normal_update2.npz": "d5b7a308a6b01a39119e59a14efc3212ee7d4b441a74d8b69cd7325a5429e87f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat32_gain1.5_masked_update1.npz": "2731f3ecc3ab3c86e0b6b6b6b04446ed3b76511d7a95a687797d90b601b9a02b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat32_gain1.5_masked_update2.npz": "da97d4d555ffda1ca7fcd91355a965eb918f4cf6a1734af98dbc61b982fcc22c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat32_gain1.5_nonfinite_update1.npz": "61467fea0387ae861b08b7090723e7920ec62651ffd25efd7e9855ffcadf7257",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat32_gain1.5_nonfinite_update2.npz": "61467fea0387ae861b08b7090723e7920ec62651ffd25efd7e9855ffcadf7257",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat32_gain1.5_normal_update1.npz": "b9761536674eaec40f8dd3ce2772ae477f568cf98cae22ad979e8687539a27c2",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat32_gain1.5_normal_update2.npz": "dcb752e76fb96bb5e77f955285fbda21637296d8b21117e6beece3a6ab88ede4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat33_gain0.0_masked_update1.npz": "dd4b801731f616082d19caeef779873ce3b307a7e26439a4cb57f16f198ce997",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat33_gain0.0_masked_update2.npz": "aa9b50b875544c7c5281b90809bc806a13460dcb3de78f99634fc8e9583f8617",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat33_gain0.0_nonfinite_update1.npz": "0ae3a16a12506405ca5cbf4938bc299a8e1d09353f5fb38ab3743f5cd2ae2879",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat33_gain0.0_nonfinite_update2.npz": "0ae3a16a12506405ca5cbf4938bc299a8e1d09353f5fb38ab3743f5cd2ae2879",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat33_gain0.0_normal_update1.npz": "395dce614924d1c673224ef727263151826f698cc2831e581694c0dde27b66cc",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat33_gain0.0_normal_update2.npz": "da1ac024a8fe7d9657a7f2f846b761db89ace642d1054d80351dfa26e875b3fe",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat33_gain0.25_masked_update1.npz": "dc660b1eef546bc0a9930ba627b4c621d7ab07ba7685e993a1c8444e0b6d1b50",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat33_gain0.25_masked_update2.npz": "82cb9c0f1bda42b528ffc4050e9550b2a6ec8b041f31b3a04270df5b577644f4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat33_gain0.25_nonfinite_update1.npz": "66621f76c13e73df86b120e40ade5f976cc2f6e46716c7b9f4b73f06f0d2289c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat33_gain0.25_nonfinite_update2.npz": "66621f76c13e73df86b120e40ade5f976cc2f6e46716c7b9f4b73f06f0d2289c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat33_gain0.25_normal_update1.npz": "65884e166a5e0e58c23a09ede10dc6abe4aa0900b7bdbc0f10e20edff8a6bb12",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat33_gain0.25_normal_update2.npz": "98084391be8574be9b9d823737780e7edcc9fd3d65c647cd2ec51028cc47356b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat33_gain1.5_masked_update1.npz": "43d7d6255420913eb47963db5603ec0184bd1174e802891d45f6c45b2157908c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat33_gain1.5_masked_update2.npz": "1f15db416e32aca250baaf753ea3dadf19eeb97b281a253cb4794d5f2282490f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat33_gain1.5_nonfinite_update1.npz": "0434de9ddb240df6cdbd8d084a8a0df6a7ecbee2522a60010982b632c88aec3c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat33_gain1.5_nonfinite_update2.npz": "0434de9ddb240df6cdbd8d084a8a0df6a7ecbee2522a60010982b632c88aec3c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat33_gain1.5_normal_update1.npz": "a34f36487317ce48a204885fa33eda9533db6d50ae00e798a892eb432959a943",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N257_sat33_gain1.5_normal_update2.npz": "03336a58afd88afd569e92da6593b6757a52389c94e0a03b2de8e56cf7b808c3",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat17_gain0.0_masked_update1.npz": "d2f802cc1fb7cb9d17e296e60424be140f0e6f05979442eb4cc82ce6d8aed891",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat17_gain0.0_masked_update2.npz": "b582e2909d561cb3fdcea32f4b6413e6524f20d0132af6d04e276cbe755da207",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat17_gain0.0_nonfinite_update1.npz": "0e121fc4215037bcaab1fced84463dab3dbeb3eb80ee4451afd8d6723f4bc62a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat17_gain0.0_nonfinite_update2.npz": "0e121fc4215037bcaab1fced84463dab3dbeb3eb80ee4451afd8d6723f4bc62a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat17_gain0.0_normal_update1.npz": "7178db12f3c65c7f825f43b3771f6b9f6e887fd2231ec8d4cf1d757399be787f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat17_gain0.0_normal_update2.npz": "5c3c7f651e96f418943aceb215c17d4adb50686b184ce497090f03e7879ae904",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat17_gain0.25_masked_update1.npz": "bda1c4e736536e08dc3cd1e8af71d60f61d4dc44cc002c4eb8a43acae9fffc53",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat17_gain0.25_masked_update2.npz": "933c5d19ede428bbc7da3f82f41a563c7ff2760dd8380ca9b29b7ca41d726b52",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat17_gain0.25_nonfinite_update1.npz": "fcf150a4ae0ef093b1e9572b5d2904db9a7175e0c8a58a13067868d3232e82f9",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat17_gain0.25_nonfinite_update2.npz": "fcf150a4ae0ef093b1e9572b5d2904db9a7175e0c8a58a13067868d3232e82f9",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat17_gain0.25_normal_update1.npz": "66ab864f6409145ab3e86d5bcbf6ee80dc502562c4a8c8c7b3695eefe22189fa",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat17_gain0.25_normal_update2.npz": "7426cd6647bd4f18c5aedf9a00a49656db276833fd17e66827bb4471f8e5a6ab",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat17_gain1.5_masked_update1.npz": "8f41f320ac77199dd51a576dea508c8ccee8e40ac873c3408132d4b2ecdb0cf8",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat17_gain1.5_masked_update2.npz": "a6ba5338bc4de43ec2a27fa66bf7d69faa45af14f9990998e4943743d6453bea",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat17_gain1.5_nonfinite_update1.npz": "662f18d9c030d5bc411feee72b3d7fe049c81c71295adbc11b37f82e3531fe58",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat17_gain1.5_nonfinite_update2.npz": "662f18d9c030d5bc411feee72b3d7fe049c81c71295adbc11b37f82e3531fe58",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat17_gain1.5_normal_update1.npz": "146a15890df5625997ade1d1a08634dddf56696c772304afee48af68d53840a9",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat17_gain1.5_normal_update2.npz": "adff4799252a9dad8f38a5fa1b22d968304010e5c81c4318011a44c247974022",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat24_gain0.0_masked_update1.npz": "72e6d40f16f6affd6936b3df882fea1bc3d85f5bb972536b341f9cd7da7fd3e1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat24_gain0.0_masked_update2.npz": "8c5485d1c48711503af289a49950cfb049356fc94ae6b5cc1817e68c9e27ea4c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat24_gain0.0_nonfinite_update1.npz": "51b9b3d56e57532287172e6f28f10e63b6914d798b1e2e5b870c821e9d56582e",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat24_gain0.0_nonfinite_update2.npz": "51b9b3d56e57532287172e6f28f10e63b6914d798b1e2e5b870c821e9d56582e",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat24_gain0.0_normal_update1.npz": "330a6c7e194c8637375c851f325e2831186bb81ed4768a8fb2b99c7bcdc0721f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat24_gain0.0_normal_update2.npz": "5112d81737e4b2666ed6f277b81572e584f611569f675bd1cf70cd88f3f8525f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat24_gain0.25_masked_update1.npz": "3c5d7f255ef09d9fa233cc94da945c7acb1b3e31413ee281abe814b2cf4bb8e2",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat24_gain0.25_masked_update2.npz": "c3536b566a02bd091265382bdc71bb3bdfb92dcc56fffbc674dc7f36fb9123e2",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat24_gain0.25_nonfinite_update1.npz": "9d07ed1594a9dcdf59290994e5cbc32cb45b4958164d21bfca3924ba82b3b17f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat24_gain0.25_nonfinite_update2.npz": "9d07ed1594a9dcdf59290994e5cbc32cb45b4958164d21bfca3924ba82b3b17f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat24_gain0.25_normal_update1.npz": "2f3f0925381b09ebda24e9e020da8e1f6d42571dabd857f4a9b9ee7d943c828d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat24_gain0.25_normal_update2.npz": "ffe7ea3b9b05c914cbfcec74f18b2f64c431d6cacc9254deb8ecd60eb831cb66",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat24_gain1.5_masked_update1.npz": "03e13ebc365ae5b1d029b517862bc62cffd3569c4ee7217e9ab3f99847c6c3af",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat24_gain1.5_masked_update2.npz": "27c873e311d7da11cd48dc05a9feedd24070b3b625e4e52d745c92268d574f92",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat24_gain1.5_nonfinite_update1.npz": "57da3aa6247cf56683a4d99cc9f39994fc878641174573e4d8a3ea718090bef8",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat24_gain1.5_nonfinite_update2.npz": "57da3aa6247cf56683a4d99cc9f39994fc878641174573e4d8a3ea718090bef8",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat24_gain1.5_normal_update1.npz": "51d1f8f36cd410a7916c3c35e22458f3fa9467c2846d6b1a3814c6fbc1c9c497",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat24_gain1.5_normal_update2.npz": "1159f702b92a91fd92f91f6b8d628981709cc054d0bd2275b6f1604fb1e54742",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat25_gain0.0_masked_update1.npz": "3b2ee9a22fd1edc311f0bd1e7da4b10e2a63814c0965d3ea7156443de93e4ea9",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat25_gain0.0_masked_update2.npz": "d1937b904874b1ac3beb280adb3de959a19e96d8e73b841a9fe03d30ccfa1d83",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat25_gain0.0_nonfinite_update1.npz": "15086b5d5443ce4c7df9d863ab2d96fab159609c0b86c0d9e118aadcd79a5686",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat25_gain0.0_nonfinite_update2.npz": "15086b5d5443ce4c7df9d863ab2d96fab159609c0b86c0d9e118aadcd79a5686",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat25_gain0.0_normal_update1.npz": "b8ec9fe3d55093f000b4c628d09852e873e66691690cdbb73053a90e41987de4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat25_gain0.0_normal_update2.npz": "b71ba06759638a878fd3b957ff82a07363e625f9b2b3bf8a63b6fca187199ecd",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat25_gain0.25_masked_update1.npz": "7d5d12755cb1f70dc6e2eb2050cf54c47eaa0330ea230b809eca315810bae411",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat25_gain0.25_masked_update2.npz": "2d40c092da91d73987c1dde4ede910d12b9d6dba829bda39b3f062ffad365b63",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat25_gain0.25_nonfinite_update1.npz": "956343313d39d899cf2b0c09cbc09e54ceb6d2236ffb4d14c29aea17d221142f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat25_gain0.25_nonfinite_update2.npz": "956343313d39d899cf2b0c09cbc09e54ceb6d2236ffb4d14c29aea17d221142f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat25_gain0.25_normal_update1.npz": "29d5b718688499bfbdc9e417bcf3943cd20e03d465aafc46267e8065efe701b8",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat25_gain0.25_normal_update2.npz": "185481dc40b027e6b77b6aff3a96b745968eeea6c01f84607ea1e8c0a9a3d47e",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat25_gain1.5_masked_update1.npz": "418a4945761ce5398a8ee6067fdcf54b0faaad04350bc134e1086362bcc64be8",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat25_gain1.5_masked_update2.npz": "cc9fef6dc69ad1262180e4ed4345cc94698bef7f7ce7d8549ed33aaf4650898e",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat25_gain1.5_nonfinite_update1.npz": "779b034bd2a853d5c1c869e50d0cee9ca6a19dd573617c5051b2353edc9be679",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat25_gain1.5_nonfinite_update2.npz": "779b034bd2a853d5c1c869e50d0cee9ca6a19dd573617c5051b2353edc9be679",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat25_gain1.5_normal_update1.npz": "59ba37fb9781f553f209ed79eb68f8636e1d654a89aeef2d6cd39639432c168e",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat25_gain1.5_normal_update2.npz": "510da02b901cb37753227acb7a86376a4949a10bcff44743372eb9e83744f60d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat31_gain0.0_masked_update1.npz": "4b6a26feb9f37084e1cb280188199a38dfda1680281e1fb497aa7a3fd9142764",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat31_gain0.0_masked_update2.npz": "b52f7b7a40016387e1375cdc472c25b51a54db6a2b6dd0c8e0438c688fae572f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat31_gain0.0_nonfinite_update1.npz": "b7ddd0bcc2c04e8c369284d8a3ee775776a1ccdcc0a77c73b3a804593efa6539",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat31_gain0.0_nonfinite_update2.npz": "b7ddd0bcc2c04e8c369284d8a3ee775776a1ccdcc0a77c73b3a804593efa6539",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat31_gain0.0_normal_update1.npz": "beb446b47ff57826ffd12a24205fb9237fc993326c186ec6970363c89bf589e4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat31_gain0.0_normal_update2.npz": "417ae53450a88858d746a02b89666915dd5bece942ff248b5091a50536591378",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat31_gain0.25_masked_update1.npz": "021771dd85c68272b38d9d8b39b940b5e1738ed27fb230eaa4876d90211a5058",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat31_gain0.25_masked_update2.npz": "bdafd9b516542bdf80de4f0f16ec0d29c0f5f3e8e2bcce4bb0f48ef837cfd7be",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat31_gain0.25_nonfinite_update1.npz": "9e53468a00011d612c1c4f033b7771f751e0d3ad9812446dcde3b737b369dffb",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat31_gain0.25_nonfinite_update2.npz": "9e53468a00011d612c1c4f033b7771f751e0d3ad9812446dcde3b737b369dffb",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat31_gain0.25_normal_update1.npz": "8d02e2cca02b73b64faf5279b9de76f1ecd94ef548d21720e02ac3e4004d53e5",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat31_gain0.25_normal_update2.npz": "64768d28792eb5900dffd9e6843f47e11f974a86a5f398096a3e7051eca0d084",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat31_gain1.5_masked_update1.npz": "24a94467793232a4a62c8cacf05ead2a4aa7c2db70903f3bd74aba22a54a1c14",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat31_gain1.5_masked_update2.npz": "6ab4fbd126ec0cb7a67335f826f3294fe9a5c811262bd443c35d92bff9fea8e8",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat31_gain1.5_nonfinite_update1.npz": "febd5ddcea96936828dab07f80f9ff9022987d8ea2b0899769fccedba5391b96",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat31_gain1.5_nonfinite_update2.npz": "febd5ddcea96936828dab07f80f9ff9022987d8ea2b0899769fccedba5391b96",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat31_gain1.5_normal_update1.npz": "a5f0ac83756124302cb35c91fd0f39e0aa5b1477f0a2a3d1b6394aa3c3aa939a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat31_gain1.5_normal_update2.npz": "41a84b9d9564b218bbb5db9b47bd5966128396c18b8b323a18163ae2564bafe4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat32_gain0.0_masked_update1.npz": "4b67882e17b179d347fbb92530f99227c5e4b15d35ba721a481621e053d136de",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat32_gain0.0_masked_update2.npz": "3757e46e98cab179cd1b45b419553d5b74ee0802f685cfe33cbf11f7d9830bb8",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat32_gain0.0_nonfinite_update1.npz": "20047bdd087c446d683775c0e596dfbf62e1985a358cfd847c5ee514a5cfbcf0",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat32_gain0.0_nonfinite_update2.npz": "20047bdd087c446d683775c0e596dfbf62e1985a358cfd847c5ee514a5cfbcf0",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat32_gain0.0_normal_update1.npz": "9e84c3b165527db1f466ad30c76828778bf7dd09ff2dd76fdf422412caf1e7f7",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat32_gain0.0_normal_update2.npz": "a6d4bcfe700db9a6b4b2ed3d452d0e921f5668d91d0d0647614e26f674a2becd",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat32_gain0.25_masked_update1.npz": "a57b6ce99986e4e5d170f28bf84a03062a5435dd458e6cbc54308703fcf5223b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat32_gain0.25_masked_update2.npz": "7639e48c4636b62aec1e3925b4876fafd04f91d45298574dbcc2db613ebcc6f4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat32_gain0.25_nonfinite_update1.npz": "33b142715ce8bf07503b2a363da8568e99b8189025844161972fe1647170d33d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat32_gain0.25_nonfinite_update2.npz": "33b142715ce8bf07503b2a363da8568e99b8189025844161972fe1647170d33d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat32_gain0.25_normal_update1.npz": "1ab6d5a06ac5e3f057706b0d0fb0177250d5c0e56737da60062861bed7fd6ab1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat32_gain0.25_normal_update2.npz": "35bcffcd6b32655c3c284b36c9864aaba50679c2f159c872f4d5e55a900919c7",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat32_gain1.5_masked_update1.npz": "53ebfe4e9d92cfc6b01df2da528d23deedbca02e31e9e040aedefa1f552ca75b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat32_gain1.5_masked_update2.npz": "41e0ae2b0e71c6a7ef098e8a80266bb0afa456c1d745f9e4286e98285ba25303",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat32_gain1.5_nonfinite_update1.npz": "efe111e70e4943f7bb5cbc3b2767f5edef86ae8e9f3cd98f6d262ff40f35fe6d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat32_gain1.5_nonfinite_update2.npz": "efe111e70e4943f7bb5cbc3b2767f5edef86ae8e9f3cd98f6d262ff40f35fe6d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat32_gain1.5_normal_update1.npz": "d40d7a90362d86717ca1c857fde30112a7db7b60b3e5a49bacdb1c889fddf415",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat32_gain1.5_normal_update2.npz": "21cd0b0e02e384a3b77fca586d1cd480c962822799eb8b9c5f6d3f8e505d0624",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat33_gain0.0_masked_update1.npz": "0b8f105f28c401e3cbc3cd041a398a004f848bd02bcf8312929060495bb31198",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat33_gain0.0_masked_update2.npz": "5238eed265f56e588171ca120c5343580e872523e7d1b4ba796eaa043456aa32",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat33_gain0.0_nonfinite_update1.npz": "ad98ff74217846d32e1d439cf7496e1667e1d424d53570bde7ece92dd862f1f0",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat33_gain0.0_nonfinite_update2.npz": "ad98ff74217846d32e1d439cf7496e1667e1d424d53570bde7ece92dd862f1f0",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat33_gain0.0_normal_update1.npz": "1228093f4baba35f93f8909535e6c67bed6d3c9093972406d7a600c2942f8cc8",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat33_gain0.0_normal_update2.npz": "46a96540a631ac99cf7e0822c70ec9319b78a86f223dfa3b1806d81d4c0b7d81",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat33_gain0.25_masked_update1.npz": "a65b432274e86d4350aefc5f5e45b654647a8b7a2e120bc6971f27212f18ab22",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat33_gain0.25_masked_update2.npz": "f1e36b0876e8746ac11bc0e6ad1734bd1121781b1c4b020d4147ba0a49f964ca",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat33_gain0.25_nonfinite_update1.npz": "0c0e2b9b9a91c819b7e21d1110424a0337afc39b02c379f5fe08904f7b25fd6f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat33_gain0.25_nonfinite_update2.npz": "0c0e2b9b9a91c819b7e21d1110424a0337afc39b02c379f5fe08904f7b25fd6f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat33_gain0.25_normal_update1.npz": "5467207310d76b8dbb9b2fff3bd667ebe7cbfd54a24608ca6a2884d207acc982",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat33_gain0.25_normal_update2.npz": "a1fff521288a126d94c67ca90cfa6f080e8b764ec7da1167d59f153d9a1956e9",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat33_gain1.5_masked_update1.npz": "4be1186e7654d1fac0b8281f20238edb029109214d79c352596fc066f57a791c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat33_gain1.5_masked_update2.npz": "26638d76ec335f3f9050de5e7f3d3a4c44f26ad040369ed1f3d3b67e48ae29bd",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat33_gain1.5_nonfinite_update1.npz": "2b1205a66566139d260bdbb88c1f26adc66c667915bd43ca30822febcb2a166f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat33_gain1.5_nonfinite_update2.npz": "2b1205a66566139d260bdbb88c1f26adc66c667915bd43ca30822febcb2a166f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat33_gain1.5_normal_update1.npz": "2afa6bc82006fe285852d26b69131d3888182e9959350508c22628d28acc863b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_baseline/N33_sat33_gain1.5_normal_update2.npz": "7f467b69e1d8cde909896d424394bb51e68653fca10b79cfd0edad4ad472ff7a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat17_gain0.0_masked_update1.npz": "1e0630c720cab6a495412538314c081151c554cefdad00e16bafb00720143afa",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat17_gain0.0_masked_update2.npz": "e132929b411c69accdfb205c6de0ae842b6780cd80ab9001a507876c8290188f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat17_gain0.0_nonfinite_update1.npz": "fdee3103673ae0566460b4d215cdaa13e5b348c69080349ee9234a8350ce89c7",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat17_gain0.0_nonfinite_update2.npz": "fdee3103673ae0566460b4d215cdaa13e5b348c69080349ee9234a8350ce89c7",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat17_gain0.0_normal_update1.npz": "6dbe3d1a826e48485329a13735ab76dde5db08f259be4b3ecceb0ccee5946574",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat17_gain0.0_normal_update2.npz": "e8db48dd3574185e2fb96fcfea1adc8c9a5b95e9026eb990ec168139ef25bcc4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat17_gain0.25_masked_update1.npz": "193c8f844c2eb5d12168fe3aab469e86d1ea0f343f2233a4798f264a056bb12a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat17_gain0.25_masked_update2.npz": "a004136b59fb1677d69ec1e0fc5f40e821c28fbee89760e5717dcca81deb49fe",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat17_gain0.25_nonfinite_update1.npz": "bde5be4688159736d80c50c60240373861d434eb0dc218b1b20e12bbbbf574f4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat17_gain0.25_nonfinite_update2.npz": "bde5be4688159736d80c50c60240373861d434eb0dc218b1b20e12bbbbf574f4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat17_gain0.25_normal_update1.npz": "7e9ef7c406887e1532dc93dbf6b70965967f16fe6bcc7775881e48ce7522be7a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat17_gain0.25_normal_update2.npz": "328784d9d7a95967a52e9b87c71f399f896fa8e84f4508588e31514da26613e5",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat17_gain1.5_masked_update1.npz": "0fbaad41db8c38c7fc40c9e2c6fda638f6978b6720bf43c6df0a86af5ceb6f21",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat17_gain1.5_masked_update2.npz": "d13176b80eb8734be33b9ffce715c268298672725de766727682e8103376e52a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat17_gain1.5_nonfinite_update1.npz": "6a7f945e2957f3492a3ed82909b0dbed8a29990542cea7e00654aec293d84b4b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat17_gain1.5_nonfinite_update2.npz": "6a7f945e2957f3492a3ed82909b0dbed8a29990542cea7e00654aec293d84b4b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat17_gain1.5_normal_update1.npz": "4fcde1d512391baf0ed7d1835fb287485fc1c32d361f9ad3a176283dbdf7e972",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat17_gain1.5_normal_update2.npz": "d4013762ec6b196bd5370bd3ec18be96ec66ca4dd50f12de4a87c81adb62ff6c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat24_gain0.0_masked_update1.npz": "27b5946470a0d10bac3fba12a77d30d76b4d046b3290e09815cc890796915dcf",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat24_gain0.0_masked_update2.npz": "5051982ac8f253308e2ae0818eda8d994fc2aa7cf9a4157550ef508f46981674",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat24_gain0.0_nonfinite_update1.npz": "c482a63ab12cb48f3599c1604e6be38fa25411272481b5603fcafe89c3d7b40a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat24_gain0.0_nonfinite_update2.npz": "c482a63ab12cb48f3599c1604e6be38fa25411272481b5603fcafe89c3d7b40a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat24_gain0.0_normal_update1.npz": "3d6a0c01d32921bd7be304434081c8a78b39df5b160870fd54c29948c94f7caa",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat24_gain0.0_normal_update2.npz": "dda7ee2098459aceeab24c6a19302e752fcb7c56302b6746a6ab02c55a6567d4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat24_gain0.25_masked_update1.npz": "b36b27fe581c885d9bafbd2f65f298fc2ec7ce52e3f0bb6c62192b5228d91feb",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat24_gain0.25_masked_update2.npz": "d7ccbd8d5b91c63119e81bef450a2efe90d111bfdfa553d022225924ee6ea3b5",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat24_gain0.25_nonfinite_update1.npz": "0341493043bd8f19c578da1fd5087b7923be6095df1810f865ef491d888ceb20",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat24_gain0.25_nonfinite_update2.npz": "0341493043bd8f19c578da1fd5087b7923be6095df1810f865ef491d888ceb20",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat24_gain0.25_normal_update1.npz": "416dd52e8a9d34a4b01312f793da5fad78cdc62bc43c53b31bf32bb90d28bfd7",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat24_gain0.25_normal_update2.npz": "df122d983e32b1351a8b865aa0e08c9ce8b65481f6f144506138611fc576b924",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat24_gain1.5_masked_update1.npz": "252cc4a7702bcd71545bbf30ee0747341afdf29ff95a5f0e7dda417e3e8c2b8a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat24_gain1.5_masked_update2.npz": "0252e09e08e85bd13516b3d3298cccf1bfa208e70b9df9b7af397f9d11c129d5",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat24_gain1.5_nonfinite_update1.npz": "7c8f2c9ca9c044ef24a92f9ef61d8e70ca37fd2a110354ee17da0629edfd1912",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat24_gain1.5_nonfinite_update2.npz": "7c8f2c9ca9c044ef24a92f9ef61d8e70ca37fd2a110354ee17da0629edfd1912",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat24_gain1.5_normal_update1.npz": "2352e0713e782508913df0ed02a7b1b996ee5cd640551440b6fc7d0da3a92f62",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat24_gain1.5_normal_update2.npz": "3cd03bca399bb24333b5de93debf3282fbcb68d199ca8105b32002ec234ad577",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat25_gain0.0_masked_update1.npz": "5042b47446c77552e1e1e1fbb028c27a6ae27bd57870f12e282de5518db84555",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat25_gain0.0_masked_update2.npz": "1cda6a0aa07f6330852a9e08c2287aed94db1ea57789dddce57fa05f70b9ae89",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat25_gain0.0_nonfinite_update1.npz": "5cc3050ed66cba30c02b1c51d5fe529e0a367bd5a92261b606cb5499e02ea0a3",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat25_gain0.0_nonfinite_update2.npz": "5cc3050ed66cba30c02b1c51d5fe529e0a367bd5a92261b606cb5499e02ea0a3",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat25_gain0.0_normal_update1.npz": "3432969264f9f21f2794bfcf6a20d0347df206bf7fa2faf5132e2f771c1dd097",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat25_gain0.0_normal_update2.npz": "046fcef4ae4ae757c834a53cae4c65c734a8eedc6376af28eaac2efffb3c8889",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat25_gain0.25_masked_update1.npz": "ca9a43c790ef69fcc670a62e3df32e233edb7d78dace692172ed9287c170c699",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat25_gain0.25_masked_update2.npz": "632039ed03dc57b73a04ff76c83f15ae66c36055b5eb6b3a33a03f5494060b70",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat25_gain0.25_nonfinite_update1.npz": "d720348dfe700ec254ffe3c2fb968521905cc60c1b10341a1dae33df725e5fc2",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat25_gain0.25_nonfinite_update2.npz": "d720348dfe700ec254ffe3c2fb968521905cc60c1b10341a1dae33df725e5fc2",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat25_gain0.25_normal_update1.npz": "88af6be2a34eb44e76eda76694fef5e021bac02396dca6e46e630889d33f8dfb",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat25_gain0.25_normal_update2.npz": "b1e5b4480c4e735b7e2c16acc6d8290bb5efb9d922147f501ef25c70a9a4d3c1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat25_gain1.5_masked_update1.npz": "3fa025dc2baf1148b9844e430a1bd06957e5c6dc8ca20b482a0db3f47f1f086c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat25_gain1.5_masked_update2.npz": "9c6cb6e7c08c60e0315a77c013ee41fc3c2806f7d102eeec5500190b2570d747",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat25_gain1.5_nonfinite_update1.npz": "b60f0fba3ab4ffd292173515919ea6e6e030569fbfeb784c2d8383487c5ff86b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat25_gain1.5_nonfinite_update2.npz": "b60f0fba3ab4ffd292173515919ea6e6e030569fbfeb784c2d8383487c5ff86b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat25_gain1.5_normal_update1.npz": "ce1c5d4239c61b46ba99bedbb6854367bf2eb171540ab052571fa757e11815b1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat25_gain1.5_normal_update2.npz": "4506c6d7c419493d7ba9acff3e3af0264cbb287af84df557dc064e9dc5b80037",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat31_gain0.0_masked_update1.npz": "43705c7409f8fd100426ed1b09e58bfc697e32e7537dfeaf0b8b72c57d625de4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat31_gain0.0_masked_update2.npz": "840ccd224a69c6608de7207e259e34b39b90a503663c0842b217f070b50176d9",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat31_gain0.0_nonfinite_update1.npz": "fd649f8e196bd0fb6122f6a0714f4fa6215d31dd64c675b0594a2be547ef9174",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat31_gain0.0_nonfinite_update2.npz": "fd649f8e196bd0fb6122f6a0714f4fa6215d31dd64c675b0594a2be547ef9174",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat31_gain0.0_normal_update1.npz": "ee6c1af70548f2bb97fbaee7d8fefb865009fa11fc1523662fdc5806d3855654",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat31_gain0.0_normal_update2.npz": "6b535a86a022a97f568966250106eaf3574afaa4afc01b231d1380b3249e3501",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat31_gain0.25_masked_update1.npz": "5be2b51ff427bb3f5a1bcfa5f73037ecfd64b7b4de16842bbb711e5297a942b1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat31_gain0.25_masked_update2.npz": "81ef3c1cc357bd5364ada960747b1df515744bad3a43e4b4389f95c24a78a66d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat31_gain0.25_nonfinite_update1.npz": "1c915613994f9604c7b8632f2a64c478688e94972665ac148383a66f54c6ed49",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat31_gain0.25_nonfinite_update2.npz": "1c915613994f9604c7b8632f2a64c478688e94972665ac148383a66f54c6ed49",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat31_gain0.25_normal_update1.npz": "2c73df0648eb74adb2e195e7a030fb2df083029cb9de10cd57bb4550d2905526",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat31_gain0.25_normal_update2.npz": "1050204807aa26f782ef53ce625d15ecd04f6ce7f41f30101bfe1b6489a0e712",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat31_gain1.5_masked_update1.npz": "04188877938532d024be0d7d6f498d82739dc127ee705cf2f645c9d2025bbcdf",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat31_gain1.5_masked_update2.npz": "05b129792831f0f60e2739a6a7adc664566ea917141621223ba1588943f5b51e",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat31_gain1.5_nonfinite_update1.npz": "1955a44c0c3fa35b5451f64e58cef1ee1ac7c74dea70aae9e349c43cc95697d4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat31_gain1.5_nonfinite_update2.npz": "1955a44c0c3fa35b5451f64e58cef1ee1ac7c74dea70aae9e349c43cc95697d4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat31_gain1.5_normal_update1.npz": "5ebdb674d125f073378cb858c874e2b8ea170a89bd081b6ee4ff28a5a252eee2",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat31_gain1.5_normal_update2.npz": "951bd1cddf3dca3bcf7f19170583020c6005b893e417a4f62e28eab53964b07c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat32_gain0.0_masked_update1.npz": "67250557e27627cdcbe1265af63b81a92455b7621844c8716d07408a13f15fd1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat32_gain0.0_masked_update2.npz": "0416cc8d182a903b6a65a86bba2a6fe83fd999a0c0ef3f121e28c08cba16478b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat32_gain0.0_nonfinite_update1.npz": "23ca44b83a7c5f154df3eff37d7e3553fcc81fdbd0b6b945a408237294ae6961",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat32_gain0.0_nonfinite_update2.npz": "23ca44b83a7c5f154df3eff37d7e3553fcc81fdbd0b6b945a408237294ae6961",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat32_gain0.0_normal_update1.npz": "5ff5221630f33f8c726531e4132e26a3b54ad755eb1bfb0e82b6171cf8d34330",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat32_gain0.0_normal_update2.npz": "ec16afe083fcb4dad66fafc523c139828d7819b9f6bb9dbaaf026e6fcfb66779",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat32_gain0.25_masked_update1.npz": "e58478a3d24db4286ccd80e65307a17f4d1c4b29a34e58729c05c3d30d2a3413",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat32_gain0.25_masked_update2.npz": "d78aa46ef002fe73ef921fd463c95200ac778949d230d4e2d3605106461bdc62",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat32_gain0.25_nonfinite_update1.npz": "b8c85b7b2ca827fc37ff4440a7e4e6baa44371ed33aa1d41f8a077d60f26d950",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat32_gain0.25_nonfinite_update2.npz": "b8c85b7b2ca827fc37ff4440a7e4e6baa44371ed33aa1d41f8a077d60f26d950",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat32_gain0.25_normal_update1.npz": "a96640f380bd3ee1897ae3734c258225e6a22ae082d4acdc92abedb2caefd35a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat32_gain0.25_normal_update2.npz": "0ccfb706cc38c43923f38350d7867c6503c30cc75aabe97f948dbc7d9ab58858",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat32_gain1.5_masked_update1.npz": "0e06d73c1189ecf7585c352436b3d8fe6bdeaf0961620d706ba52786f6c54a94",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat32_gain1.5_masked_update2.npz": "5edaee3e44666e5357cf12110c443b22f6170f234c2e620b7c0ed9d92f1dd46b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat32_gain1.5_nonfinite_update1.npz": "6747a9720bfb832b1a5e1616b1544f9214652cb770f0cced49139bfac5a5a15c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat32_gain1.5_nonfinite_update2.npz": "6747a9720bfb832b1a5e1616b1544f9214652cb770f0cced49139bfac5a5a15c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat32_gain1.5_normal_update1.npz": "1c3e29ce4f0a4d9875d6896396f3f099b1f36711eb16c21e7641c4372118f7b6",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat32_gain1.5_normal_update2.npz": "7a79c0ccb5aecf110570a2cb4832dc5d613eb96063c947cb1d8abf1cdb84da63",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat33_gain0.0_masked_update1.npz": "ef5248c90bc2cc790f716e9b82b8637fd9f9909eee7742cf95bf656c3c39c44e",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat33_gain0.0_masked_update2.npz": "bcf0faab1fe50bb4c972cf069ea3b0ec598be3893e8c9385e95435b37fa380c0",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat33_gain0.0_nonfinite_update1.npz": "325157d9741ec0f4b5a5e1db8a1070c5a567c1c55fc5753fb926b36249b29ee9",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat33_gain0.0_nonfinite_update2.npz": "325157d9741ec0f4b5a5e1db8a1070c5a567c1c55fc5753fb926b36249b29ee9",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat33_gain0.0_normal_update1.npz": "56c8cc353822279313f0a50e750dab8188c68603d6ef0bcceffb188ce0e45a96",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat33_gain0.0_normal_update2.npz": "a6d95cea3320e834a8e6e3321577f44705e38cbd1157725a3efbc4dbebe334f0",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat33_gain0.25_masked_update1.npz": "c8e9be463e3f3cff83dc7bbadc0f91d2e161eb20b44f1b737d95ac3239f050ac",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat33_gain0.25_masked_update2.npz": "5b4bcb2d9f10a6635a3e2c5d55c1fef6251c320a4c3db8fa48748c423e9771a4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat33_gain0.25_nonfinite_update1.npz": "0423966c7136cf557958327b5de21bae60e479d6e03c9e6af546d3be9234563f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat33_gain0.25_nonfinite_update2.npz": "0423966c7136cf557958327b5de21bae60e479d6e03c9e6af546d3be9234563f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat33_gain0.25_normal_update1.npz": "cb3025402bd5b7862f9c08f6ef095e3c244eab0aec043d71f4de3350bd6605f2",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat33_gain0.25_normal_update2.npz": "cb55e78ce89a5936f72680281848fff06b2fcf5810b38d3387d9dbe646002e28",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat33_gain1.5_masked_update1.npz": "1f923844bc7f694a57fa4678ad3b79a263f5bf5fdf180468d184c7d6704cae61",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat33_gain1.5_masked_update2.npz": "7d8d77d2afd30696b1bab5e75b8f481c8ff33a8d90de3f3bf77bbbd5a181f521",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat33_gain1.5_nonfinite_update1.npz": "e58a8a8db52922970ec058892d08e789527e35cdb962e0e3501776f671ad5eaf",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat33_gain1.5_nonfinite_update2.npz": "e58a8a8db52922970ec058892d08e789527e35cdb962e0e3501776f671ad5eaf",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat33_gain1.5_normal_update1.npz": "2d76a3addf609c598c2dc380b79e54833e11f6f2faf58aa750f34221abd83bbd",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N1_sat33_gain1.5_normal_update2.npz": "70a9bd02d77746c5011a37ad49e2fd6c6ebbf7f1730eb8b919e0c9947a0edf27",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat17_gain0.0_masked_update1.npz": "64fbc179103b2ccbe5a476d78d28308650d8b79c1ba2df2f476834687a3403a7",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat17_gain0.0_masked_update2.npz": "aaa751e68ad6b5a1b863735b3e26c1bc05438e8c3ce6662e38da66f15dccfb74",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat17_gain0.0_nonfinite_update1.npz": "94928f8776b2f17f76f4e7827bb2a2dfca415876fd5de587f2c0a7395588d5f1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat17_gain0.0_nonfinite_update2.npz": "94928f8776b2f17f76f4e7827bb2a2dfca415876fd5de587f2c0a7395588d5f1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat17_gain0.0_normal_update1.npz": "7383f09981aea2baa55b0fb5703f4a68cfa1b488946156875c327e2d0ba15d5f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat17_gain0.0_normal_update2.npz": "2cdedb3670b1b4494a20639e19c7b11e9781336b8d37ce08433cac47e2b04eb1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat17_gain0.25_masked_update1.npz": "4f2cdadad86401f05c1ad596b8a9da3ac27644fc145d129140efec2f703142d1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat17_gain0.25_masked_update2.npz": "694cb736205e21bfc5ba3883ce0f4805933b83504d295dfe6bbeccd95d5711d7",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat17_gain0.25_nonfinite_update1.npz": "dc2b5ae06091823a2602a3f71dede35f4551851ea89833e0562b42bba4b8ef26",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat17_gain0.25_nonfinite_update2.npz": "dc2b5ae06091823a2602a3f71dede35f4551851ea89833e0562b42bba4b8ef26",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat17_gain0.25_normal_update1.npz": "f3f1830811a61ef821f5db358306dae7bb20afefcac41e4d1c7775ebdcd1f99e",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat17_gain0.25_normal_update2.npz": "bf49ec4e43b4ede7e1596885b68bd0d271c8c2b9096e921b2db799c62ef785c1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat17_gain1.5_masked_update1.npz": "08c0b65a6a5870906df6a55ec56ec2d0b298a29e47ef28591472f8e4e0394b00",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat17_gain1.5_masked_update2.npz": "ccf2887516d9be5ad13a9f5df07e110211882dbb266e264ec793c93ed1a4619a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat17_gain1.5_nonfinite_update1.npz": "50b6d40d0fbcd764e0ea705e19d61a33f637d91511d685943fd0b3b9004898f0",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat17_gain1.5_nonfinite_update2.npz": "50b6d40d0fbcd764e0ea705e19d61a33f637d91511d685943fd0b3b9004898f0",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat17_gain1.5_normal_update1.npz": "b3dc7adb99c57c78bd00823dcb8d2478c492e1e27c88e42ed7fec719c9fca257",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat17_gain1.5_normal_update2.npz": "b9fd26abf9cd9338a7c3e21c04aee028c535be909c89f531eb066845dccff124",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat24_gain0.0_masked_update1.npz": "db33acbbf4b6beecd4d50241b1bf0aae285e59f5932660553ea7dc7ef78eb03a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat24_gain0.0_masked_update2.npz": "16077cbd17829c6ae253a4fb0b3db33ed49822eb975e19fb6bb90bc53d1652b3",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat24_gain0.0_nonfinite_update1.npz": "a7f9d01a82bf1782ededdd2210bc81d76f8298d2451640084ffe8d2cd6c55703",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat24_gain0.0_nonfinite_update2.npz": "a7f9d01a82bf1782ededdd2210bc81d76f8298d2451640084ffe8d2cd6c55703",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat24_gain0.0_normal_update1.npz": "63a7b7d10565579cd398db4f2d265df4a8249ddc82f6a91651f36c2900af5e16",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat24_gain0.0_normal_update2.npz": "df7417e87cdaebdf8233e1cbcf1e63b729710df9b4aa1d97b172f2a54481446d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat24_gain0.25_masked_update1.npz": "1670a8e8fd65e6db7e3f965401c1215f4197f6d78cd3c9e9addc27322e07d073",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat24_gain0.25_masked_update2.npz": "da08e1f77c66fe4a2561312ac7be14cb6a540b69f5ad290bcb6e947cbcb08970",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat24_gain0.25_nonfinite_update1.npz": "ab59ae849a8ff102310fd5d4255f0b63190a6d3e45e2b1120c5bb78e8191feb9",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat24_gain0.25_nonfinite_update2.npz": "ab59ae849a8ff102310fd5d4255f0b63190a6d3e45e2b1120c5bb78e8191feb9",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat24_gain0.25_normal_update1.npz": "b28dd978c9edce5d09129c075a5bbf779fe7006298859955e0d9da53b6071bdc",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat24_gain0.25_normal_update2.npz": "7a8f58858dcf2dda96640bdea39979a251763ff54e5a90df896259a3d0229189",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat24_gain1.5_masked_update1.npz": "52c21022ebbbab977a096920d80661298668924a8a9b7d486986b9a9d68bbd3c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat24_gain1.5_masked_update2.npz": "1936361631091a9556a8c65e9f96854053b3f107d8b8a7b04bc68a4765de37b1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat24_gain1.5_nonfinite_update1.npz": "85f5a88ecc1f4282f2e55a4fa4098a76bd7b0176e1492a57a74719d7707fcdb0",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat24_gain1.5_nonfinite_update2.npz": "85f5a88ecc1f4282f2e55a4fa4098a76bd7b0176e1492a57a74719d7707fcdb0",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat24_gain1.5_normal_update1.npz": "0605a3fcc89adff853bedaf6c5c9d73b7a1aa1868f4373a91d8d50a5fa03548b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat24_gain1.5_normal_update2.npz": "9770b17f3113bdb24948cb86eab32ce11735cca5826e7b1d011310a7e420e4db",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat25_gain0.0_masked_update1.npz": "07157ad9bbf17cec8e67d62000a2ffeec97f68d6b7537a8ba157a89e0a27ec44",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat25_gain0.0_masked_update2.npz": "c06ada7167643366af676cb89ef2c7272f6064107f07543d9ba791d8e51d679e",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat25_gain0.0_nonfinite_update1.npz": "8a73a953ee6eaba1e0ee7aebfa8fe91795874ce260ffd81393a43cea8f6b68c3",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat25_gain0.0_nonfinite_update2.npz": "8a73a953ee6eaba1e0ee7aebfa8fe91795874ce260ffd81393a43cea8f6b68c3",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat25_gain0.0_normal_update1.npz": "cb6763d42be9e06f3b43307a693fdd3b4b7cdcace7ff69ed755a396c251360ca",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat25_gain0.0_normal_update2.npz": "6ed726d620fa8e00b3dd24fbc370baa5a99b99aa41059343937012547c3eaf8f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat25_gain0.25_masked_update1.npz": "fa974be1d5af7e8969af631ccf6852e20c5a96f6d799783fde2c4898101eeb55",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat25_gain0.25_masked_update2.npz": "a5042748fcf2f7855190c4de4cbc58caad4cdd8d7600013309c70cbd3dcc0fbc",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat25_gain0.25_nonfinite_update1.npz": "3c926f446007d9a5f45c96bad68cc144fcf0c57516430f883c819c9c736e31a8",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat25_gain0.25_nonfinite_update2.npz": "3c926f446007d9a5f45c96bad68cc144fcf0c57516430f883c819c9c736e31a8",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat25_gain0.25_normal_update1.npz": "81e602e6d8775ac763ec8242e9388b2ec8962b24130be92bdc2277e0a10cb280",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat25_gain0.25_normal_update2.npz": "d33d0e1ca4b197411242d0e73fd5d4103bc4abf6687260de51c0382312d30bc7",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat25_gain1.5_masked_update1.npz": "b8d06dc2033321506ba80a66ddbf13d80f81394f0b4759587d4290c91ebf1e13",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat25_gain1.5_masked_update2.npz": "8f3a6d5a96cb73f891f01081456651b808ec21503de8c4dc2dae77a0b5adbb17",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat25_gain1.5_nonfinite_update1.npz": "08d39cc59abdbcabdac71dd02d78d0155e2b15e9753d590b4703ad0f7acbce63",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat25_gain1.5_nonfinite_update2.npz": "08d39cc59abdbcabdac71dd02d78d0155e2b15e9753d590b4703ad0f7acbce63",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat25_gain1.5_normal_update1.npz": "b3c251d38e1a1245d29dbd49cbcfe92c2cb2bacd594a58b5d6d3b0a9adf117e7",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat25_gain1.5_normal_update2.npz": "4ad1f352553663d5d58832c2f1c7cdb298114461447ad6001d6dfab4acf5197d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat31_gain0.0_masked_update1.npz": "6a73283da39356ef90238e3824ce79e3cdb7b3766d870a9def918333a7dde890",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat31_gain0.0_masked_update2.npz": "446dde1667e3134a336287e2b800a14094c68e75e533dd82c3f3c778918a4cb9",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat31_gain0.0_nonfinite_update1.npz": "5127a9ef9203f5acd07c45155422dacec88c1214dad169b09115ac75ee567621",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat31_gain0.0_nonfinite_update2.npz": "5127a9ef9203f5acd07c45155422dacec88c1214dad169b09115ac75ee567621",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat31_gain0.0_normal_update1.npz": "b9e1efa0c09b1f3c90b5a2b7315dc60ae61bb07f94505a1872322eaa6c193c5a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat31_gain0.0_normal_update2.npz": "83537a942a546fd9b51db59b3e4d306b611dfaabde37d96cc051dcbfe5a165a4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat31_gain0.25_masked_update1.npz": "072f4ce9051bd17350f3e141b64d39750db89397ec954ac9c2eb971087ed444f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat31_gain0.25_masked_update2.npz": "b95e47f26e8d288a544216d988f50d0da876bac7897093d3925a68557a7ec104",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat31_gain0.25_nonfinite_update1.npz": "6bec5c3db1d7bb30ae9e20552a78a70d83adce854f4ea5dadcc5d0792394553d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat31_gain0.25_nonfinite_update2.npz": "6bec5c3db1d7bb30ae9e20552a78a70d83adce854f4ea5dadcc5d0792394553d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat31_gain0.25_normal_update1.npz": "0015352794a5d812cd5c392bae80a63eccf01a8ccacd3c280d13ca17077e4dcc",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat31_gain0.25_normal_update2.npz": "2b5282b4f6cd75aeb07a9c93f308e49b471208292e8f50fcf3aa662543fc3994",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat31_gain1.5_masked_update1.npz": "0e8b57beb031decbee36c0b284ef4eb59ac0faa7dacf92999e17e07f90cf257b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat31_gain1.5_masked_update2.npz": "02cfd086e08389bcc98469e38369e144d3508123ddd9e6b49e151b0c97364ded",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat31_gain1.5_nonfinite_update1.npz": "9e072e32733d4d02d88678e89d5a858f6d95a504dc1f57c152f4c9da17fb8953",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat31_gain1.5_nonfinite_update2.npz": "9e072e32733d4d02d88678e89d5a858f6d95a504dc1f57c152f4c9da17fb8953",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat31_gain1.5_normal_update1.npz": "743c418e7b02c65c022aa118c7dd538eaa2dfe32c482049d91d981485a2bd36d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat31_gain1.5_normal_update2.npz": "640c3c0bb2911aaf114b7d748d7ee10e671ccb9d22511646e4d968e18290e694",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat32_gain0.0_masked_update1.npz": "5c02d18bd7a7a2bdc2953ef7f9cf1eb0ae5e994ae4506fe1734b69dc2dd68599",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat32_gain0.0_masked_update2.npz": "a667b86e9ffbf77c0e57d885da6f7b28986acd5a109b145b9daf4be0f5134229",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat32_gain0.0_nonfinite_update1.npz": "4a81cd9e6bf7584eb290c4470eaf29d61f76aa085577933a480c0893e3cd1724",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat32_gain0.0_nonfinite_update2.npz": "4a81cd9e6bf7584eb290c4470eaf29d61f76aa085577933a480c0893e3cd1724",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat32_gain0.0_normal_update1.npz": "8a432610e9539c9ef34fa34924ce514d40dafbad8ca70b02b0eb5745f5e99106",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat32_gain0.0_normal_update2.npz": "b63e122d3498f6ab1818a086b95f5af035c9bf663f136bf073fb5735d8791cbe",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat32_gain0.25_masked_update1.npz": "2275a066a60cf55478477e37a51adf2398bc365e0661ecdda8b909a4f35a74ce",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat32_gain0.25_masked_update2.npz": "7b700a37960d1982d98109f91b1c8750fd015d2b23252e5e9a24ffdd3d3d3d5f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat32_gain0.25_nonfinite_update1.npz": "1657c92cfa156e06c1685ee124273f6507cb66fc462098165e1d2ffd2e2a0503",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat32_gain0.25_nonfinite_update2.npz": "1657c92cfa156e06c1685ee124273f6507cb66fc462098165e1d2ffd2e2a0503",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat32_gain0.25_normal_update1.npz": "0d981941ea01d9edd3b4cf5a4c141e7debba9a2c70dad083590654553683a102",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat32_gain0.25_normal_update2.npz": "d5b7a308a6b01a39119e59a14efc3212ee7d4b441a74d8b69cd7325a5429e87f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat32_gain1.5_masked_update1.npz": "2731f3ecc3ab3c86e0b6b6b6b04446ed3b76511d7a95a687797d90b601b9a02b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat32_gain1.5_masked_update2.npz": "da97d4d555ffda1ca7fcd91355a965eb918f4cf6a1734af98dbc61b982fcc22c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat32_gain1.5_nonfinite_update1.npz": "61467fea0387ae861b08b7090723e7920ec62651ffd25efd7e9855ffcadf7257",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat32_gain1.5_nonfinite_update2.npz": "61467fea0387ae861b08b7090723e7920ec62651ffd25efd7e9855ffcadf7257",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat32_gain1.5_normal_update1.npz": "b9761536674eaec40f8dd3ce2772ae477f568cf98cae22ad979e8687539a27c2",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat32_gain1.5_normal_update2.npz": "dcb752e76fb96bb5e77f955285fbda21637296d8b21117e6beece3a6ab88ede4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat33_gain0.0_masked_update1.npz": "dd4b801731f616082d19caeef779873ce3b307a7e26439a4cb57f16f198ce997",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat33_gain0.0_masked_update2.npz": "aa9b50b875544c7c5281b90809bc806a13460dcb3de78f99634fc8e9583f8617",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat33_gain0.0_nonfinite_update1.npz": "0ae3a16a12506405ca5cbf4938bc299a8e1d09353f5fb38ab3743f5cd2ae2879",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat33_gain0.0_nonfinite_update2.npz": "0ae3a16a12506405ca5cbf4938bc299a8e1d09353f5fb38ab3743f5cd2ae2879",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat33_gain0.0_normal_update1.npz": "395dce614924d1c673224ef727263151826f698cc2831e581694c0dde27b66cc",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat33_gain0.0_normal_update2.npz": "da1ac024a8fe7d9657a7f2f846b761db89ace642d1054d80351dfa26e875b3fe",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat33_gain0.25_masked_update1.npz": "dc660b1eef546bc0a9930ba627b4c621d7ab07ba7685e993a1c8444e0b6d1b50",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat33_gain0.25_masked_update2.npz": "82cb9c0f1bda42b528ffc4050e9550b2a6ec8b041f31b3a04270df5b577644f4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat33_gain0.25_nonfinite_update1.npz": "66621f76c13e73df86b120e40ade5f976cc2f6e46716c7b9f4b73f06f0d2289c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat33_gain0.25_nonfinite_update2.npz": "66621f76c13e73df86b120e40ade5f976cc2f6e46716c7b9f4b73f06f0d2289c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat33_gain0.25_normal_update1.npz": "65884e166a5e0e58c23a09ede10dc6abe4aa0900b7bdbc0f10e20edff8a6bb12",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat33_gain0.25_normal_update2.npz": "98084391be8574be9b9d823737780e7edcc9fd3d65c647cd2ec51028cc47356b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat33_gain1.5_masked_update1.npz": "43d7d6255420913eb47963db5603ec0184bd1174e802891d45f6c45b2157908c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat33_gain1.5_masked_update2.npz": "1f15db416e32aca250baaf753ea3dadf19eeb97b281a253cb4794d5f2282490f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat33_gain1.5_nonfinite_update1.npz": "0434de9ddb240df6cdbd8d084a8a0df6a7ecbee2522a60010982b632c88aec3c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat33_gain1.5_nonfinite_update2.npz": "0434de9ddb240df6cdbd8d084a8a0df6a7ecbee2522a60010982b632c88aec3c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat33_gain1.5_normal_update1.npz": "a34f36487317ce48a204885fa33eda9533db6d50ae00e798a892eb432959a943",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N257_sat33_gain1.5_normal_update2.npz": "03336a58afd88afd569e92da6593b6757a52389c94e0a03b2de8e56cf7b808c3",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat17_gain0.0_masked_update1.npz": "d2f802cc1fb7cb9d17e296e60424be140f0e6f05979442eb4cc82ce6d8aed891",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat17_gain0.0_masked_update2.npz": "b582e2909d561cb3fdcea32f4b6413e6524f20d0132af6d04e276cbe755da207",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat17_gain0.0_nonfinite_update1.npz": "0e121fc4215037bcaab1fced84463dab3dbeb3eb80ee4451afd8d6723f4bc62a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat17_gain0.0_nonfinite_update2.npz": "0e121fc4215037bcaab1fced84463dab3dbeb3eb80ee4451afd8d6723f4bc62a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat17_gain0.0_normal_update1.npz": "7178db12f3c65c7f825f43b3771f6b9f6e887fd2231ec8d4cf1d757399be787f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat17_gain0.0_normal_update2.npz": "5c3c7f651e96f418943aceb215c17d4adb50686b184ce497090f03e7879ae904",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat17_gain0.25_masked_update1.npz": "bda1c4e736536e08dc3cd1e8af71d60f61d4dc44cc002c4eb8a43acae9fffc53",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat17_gain0.25_masked_update2.npz": "933c5d19ede428bbc7da3f82f41a563c7ff2760dd8380ca9b29b7ca41d726b52",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat17_gain0.25_nonfinite_update1.npz": "fcf150a4ae0ef093b1e9572b5d2904db9a7175e0c8a58a13067868d3232e82f9",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat17_gain0.25_nonfinite_update2.npz": "fcf150a4ae0ef093b1e9572b5d2904db9a7175e0c8a58a13067868d3232e82f9",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat17_gain0.25_normal_update1.npz": "66ab864f6409145ab3e86d5bcbf6ee80dc502562c4a8c8c7b3695eefe22189fa",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat17_gain0.25_normal_update2.npz": "7426cd6647bd4f18c5aedf9a00a49656db276833fd17e66827bb4471f8e5a6ab",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat17_gain1.5_masked_update1.npz": "8f41f320ac77199dd51a576dea508c8ccee8e40ac873c3408132d4b2ecdb0cf8",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat17_gain1.5_masked_update2.npz": "a6ba5338bc4de43ec2a27fa66bf7d69faa45af14f9990998e4943743d6453bea",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat17_gain1.5_nonfinite_update1.npz": "662f18d9c030d5bc411feee72b3d7fe049c81c71295adbc11b37f82e3531fe58",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat17_gain1.5_nonfinite_update2.npz": "662f18d9c030d5bc411feee72b3d7fe049c81c71295adbc11b37f82e3531fe58",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat17_gain1.5_normal_update1.npz": "146a15890df5625997ade1d1a08634dddf56696c772304afee48af68d53840a9",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat17_gain1.5_normal_update2.npz": "adff4799252a9dad8f38a5fa1b22d968304010e5c81c4318011a44c247974022",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat24_gain0.0_masked_update1.npz": "72e6d40f16f6affd6936b3df882fea1bc3d85f5bb972536b341f9cd7da7fd3e1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat24_gain0.0_masked_update2.npz": "8c5485d1c48711503af289a49950cfb049356fc94ae6b5cc1817e68c9e27ea4c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat24_gain0.0_nonfinite_update1.npz": "51b9b3d56e57532287172e6f28f10e63b6914d798b1e2e5b870c821e9d56582e",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat24_gain0.0_nonfinite_update2.npz": "51b9b3d56e57532287172e6f28f10e63b6914d798b1e2e5b870c821e9d56582e",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat24_gain0.0_normal_update1.npz": "330a6c7e194c8637375c851f325e2831186bb81ed4768a8fb2b99c7bcdc0721f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat24_gain0.0_normal_update2.npz": "5112d81737e4b2666ed6f277b81572e584f611569f675bd1cf70cd88f3f8525f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat24_gain0.25_masked_update1.npz": "3c5d7f255ef09d9fa233cc94da945c7acb1b3e31413ee281abe814b2cf4bb8e2",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat24_gain0.25_masked_update2.npz": "c3536b566a02bd091265382bdc71bb3bdfb92dcc56fffbc674dc7f36fb9123e2",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat24_gain0.25_nonfinite_update1.npz": "9d07ed1594a9dcdf59290994e5cbc32cb45b4958164d21bfca3924ba82b3b17f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat24_gain0.25_nonfinite_update2.npz": "9d07ed1594a9dcdf59290994e5cbc32cb45b4958164d21bfca3924ba82b3b17f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat24_gain0.25_normal_update1.npz": "2f3f0925381b09ebda24e9e020da8e1f6d42571dabd857f4a9b9ee7d943c828d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat24_gain0.25_normal_update2.npz": "ffe7ea3b9b05c914cbfcec74f18b2f64c431d6cacc9254deb8ecd60eb831cb66",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat24_gain1.5_masked_update1.npz": "03e13ebc365ae5b1d029b517862bc62cffd3569c4ee7217e9ab3f99847c6c3af",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat24_gain1.5_masked_update2.npz": "27c873e311d7da11cd48dc05a9feedd24070b3b625e4e52d745c92268d574f92",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat24_gain1.5_nonfinite_update1.npz": "57da3aa6247cf56683a4d99cc9f39994fc878641174573e4d8a3ea718090bef8",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat24_gain1.5_nonfinite_update2.npz": "57da3aa6247cf56683a4d99cc9f39994fc878641174573e4d8a3ea718090bef8",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat24_gain1.5_normal_update1.npz": "51d1f8f36cd410a7916c3c35e22458f3fa9467c2846d6b1a3814c6fbc1c9c497",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat24_gain1.5_normal_update2.npz": "1159f702b92a91fd92f91f6b8d628981709cc054d0bd2275b6f1604fb1e54742",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat25_gain0.0_masked_update1.npz": "3b2ee9a22fd1edc311f0bd1e7da4b10e2a63814c0965d3ea7156443de93e4ea9",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat25_gain0.0_masked_update2.npz": "d1937b904874b1ac3beb280adb3de959a19e96d8e73b841a9fe03d30ccfa1d83",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat25_gain0.0_nonfinite_update1.npz": "15086b5d5443ce4c7df9d863ab2d96fab159609c0b86c0d9e118aadcd79a5686",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat25_gain0.0_nonfinite_update2.npz": "15086b5d5443ce4c7df9d863ab2d96fab159609c0b86c0d9e118aadcd79a5686",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat25_gain0.0_normal_update1.npz": "b8ec9fe3d55093f000b4c628d09852e873e66691690cdbb73053a90e41987de4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat25_gain0.0_normal_update2.npz": "b71ba06759638a878fd3b957ff82a07363e625f9b2b3bf8a63b6fca187199ecd",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat25_gain0.25_masked_update1.npz": "7d5d12755cb1f70dc6e2eb2050cf54c47eaa0330ea230b809eca315810bae411",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat25_gain0.25_masked_update2.npz": "2d40c092da91d73987c1dde4ede910d12b9d6dba829bda39b3f062ffad365b63",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat25_gain0.25_nonfinite_update1.npz": "956343313d39d899cf2b0c09cbc09e54ceb6d2236ffb4d14c29aea17d221142f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat25_gain0.25_nonfinite_update2.npz": "956343313d39d899cf2b0c09cbc09e54ceb6d2236ffb4d14c29aea17d221142f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat25_gain0.25_normal_update1.npz": "29d5b718688499bfbdc9e417bcf3943cd20e03d465aafc46267e8065efe701b8",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat25_gain0.25_normal_update2.npz": "185481dc40b027e6b77b6aff3a96b745968eeea6c01f84607ea1e8c0a9a3d47e",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat25_gain1.5_masked_update1.npz": "418a4945761ce5398a8ee6067fdcf54b0faaad04350bc134e1086362bcc64be8",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat25_gain1.5_masked_update2.npz": "cc9fef6dc69ad1262180e4ed4345cc94698bef7f7ce7d8549ed33aaf4650898e",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat25_gain1.5_nonfinite_update1.npz": "779b034bd2a853d5c1c869e50d0cee9ca6a19dd573617c5051b2353edc9be679",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat25_gain1.5_nonfinite_update2.npz": "779b034bd2a853d5c1c869e50d0cee9ca6a19dd573617c5051b2353edc9be679",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat25_gain1.5_normal_update1.npz": "59ba37fb9781f553f209ed79eb68f8636e1d654a89aeef2d6cd39639432c168e",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat25_gain1.5_normal_update2.npz": "510da02b901cb37753227acb7a86376a4949a10bcff44743372eb9e83744f60d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat31_gain0.0_masked_update1.npz": "4b6a26feb9f37084e1cb280188199a38dfda1680281e1fb497aa7a3fd9142764",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat31_gain0.0_masked_update2.npz": "b52f7b7a40016387e1375cdc472c25b51a54db6a2b6dd0c8e0438c688fae572f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat31_gain0.0_nonfinite_update1.npz": "b7ddd0bcc2c04e8c369284d8a3ee775776a1ccdcc0a77c73b3a804593efa6539",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat31_gain0.0_nonfinite_update2.npz": "b7ddd0bcc2c04e8c369284d8a3ee775776a1ccdcc0a77c73b3a804593efa6539",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat31_gain0.0_normal_update1.npz": "beb446b47ff57826ffd12a24205fb9237fc993326c186ec6970363c89bf589e4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat31_gain0.0_normal_update2.npz": "417ae53450a88858d746a02b89666915dd5bece942ff248b5091a50536591378",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat31_gain0.25_masked_update1.npz": "021771dd85c68272b38d9d8b39b940b5e1738ed27fb230eaa4876d90211a5058",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat31_gain0.25_masked_update2.npz": "bdafd9b516542bdf80de4f0f16ec0d29c0f5f3e8e2bcce4bb0f48ef837cfd7be",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat31_gain0.25_nonfinite_update1.npz": "9e53468a00011d612c1c4f033b7771f751e0d3ad9812446dcde3b737b369dffb",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat31_gain0.25_nonfinite_update2.npz": "9e53468a00011d612c1c4f033b7771f751e0d3ad9812446dcde3b737b369dffb",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat31_gain0.25_normal_update1.npz": "8d02e2cca02b73b64faf5279b9de76f1ecd94ef548d21720e02ac3e4004d53e5",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat31_gain0.25_normal_update2.npz": "64768d28792eb5900dffd9e6843f47e11f974a86a5f398096a3e7051eca0d084",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat31_gain1.5_masked_update1.npz": "24a94467793232a4a62c8cacf05ead2a4aa7c2db70903f3bd74aba22a54a1c14",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat31_gain1.5_masked_update2.npz": "6ab4fbd126ec0cb7a67335f826f3294fe9a5c811262bd443c35d92bff9fea8e8",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat31_gain1.5_nonfinite_update1.npz": "febd5ddcea96936828dab07f80f9ff9022987d8ea2b0899769fccedba5391b96",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat31_gain1.5_nonfinite_update2.npz": "febd5ddcea96936828dab07f80f9ff9022987d8ea2b0899769fccedba5391b96",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat31_gain1.5_normal_update1.npz": "a5f0ac83756124302cb35c91fd0f39e0aa5b1477f0a2a3d1b6394aa3c3aa939a",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat31_gain1.5_normal_update2.npz": "41a84b9d9564b218bbb5db9b47bd5966128396c18b8b323a18163ae2564bafe4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat32_gain0.0_masked_update1.npz": "4b67882e17b179d347fbb92530f99227c5e4b15d35ba721a481621e053d136de",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat32_gain0.0_masked_update2.npz": "3757e46e98cab179cd1b45b419553d5b74ee0802f685cfe33cbf11f7d9830bb8",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat32_gain0.0_nonfinite_update1.npz": "20047bdd087c446d683775c0e596dfbf62e1985a358cfd847c5ee514a5cfbcf0",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat32_gain0.0_nonfinite_update2.npz": "20047bdd087c446d683775c0e596dfbf62e1985a358cfd847c5ee514a5cfbcf0",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat32_gain0.0_normal_update1.npz": "9e84c3b165527db1f466ad30c76828778bf7dd09ff2dd76fdf422412caf1e7f7",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat32_gain0.0_normal_update2.npz": "a6d4bcfe700db9a6b4b2ed3d452d0e921f5668d91d0d0647614e26f674a2becd",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat32_gain0.25_masked_update1.npz": "a57b6ce99986e4e5d170f28bf84a03062a5435dd458e6cbc54308703fcf5223b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat32_gain0.25_masked_update2.npz": "7639e48c4636b62aec1e3925b4876fafd04f91d45298574dbcc2db613ebcc6f4",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat32_gain0.25_nonfinite_update1.npz": "33b142715ce8bf07503b2a363da8568e99b8189025844161972fe1647170d33d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat32_gain0.25_nonfinite_update2.npz": "33b142715ce8bf07503b2a363da8568e99b8189025844161972fe1647170d33d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat32_gain0.25_normal_update1.npz": "1ab6d5a06ac5e3f057706b0d0fb0177250d5c0e56737da60062861bed7fd6ab1",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat32_gain0.25_normal_update2.npz": "35bcffcd6b32655c3c284b36c9864aaba50679c2f159c872f4d5e55a900919c7",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat32_gain1.5_masked_update1.npz": "53ebfe4e9d92cfc6b01df2da528d23deedbca02e31e9e040aedefa1f552ca75b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat32_gain1.5_masked_update2.npz": "41e0ae2b0e71c6a7ef098e8a80266bb0afa456c1d745f9e4286e98285ba25303",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat32_gain1.5_nonfinite_update1.npz": "efe111e70e4943f7bb5cbc3b2767f5edef86ae8e9f3cd98f6d262ff40f35fe6d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat32_gain1.5_nonfinite_update2.npz": "efe111e70e4943f7bb5cbc3b2767f5edef86ae8e9f3cd98f6d262ff40f35fe6d",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat32_gain1.5_normal_update1.npz": "d40d7a90362d86717ca1c857fde30112a7db7b60b3e5a49bacdb1c889fddf415",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat32_gain1.5_normal_update2.npz": "21cd0b0e02e384a3b77fca586d1cd480c962822799eb8b9c5f6d3f8e505d0624",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat33_gain0.0_masked_update1.npz": "0b8f105f28c401e3cbc3cd041a398a004f848bd02bcf8312929060495bb31198",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat33_gain0.0_masked_update2.npz": "5238eed265f56e588171ca120c5343580e872523e7d1b4ba796eaa043456aa32",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat33_gain0.0_nonfinite_update1.npz": "ad98ff74217846d32e1d439cf7496e1667e1d424d53570bde7ece92dd862f1f0",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat33_gain0.0_nonfinite_update2.npz": "ad98ff74217846d32e1d439cf7496e1667e1d424d53570bde7ece92dd862f1f0",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat33_gain0.0_normal_update1.npz": "1228093f4baba35f93f8909535e6c67bed6d3c9093972406d7a600c2942f8cc8",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat33_gain0.0_normal_update2.npz": "46a96540a631ac99cf7e0822c70ec9319b78a86f223dfa3b1806d81d4c0b7d81",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat33_gain0.25_masked_update1.npz": "a65b432274e86d4350aefc5f5e45b654647a8b7a2e120bc6971f27212f18ab22",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat33_gain0.25_masked_update2.npz": "f1e36b0876e8746ac11bc0e6ad1734bd1121781b1c4b020d4147ba0a49f964ca",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat33_gain0.25_nonfinite_update1.npz": "0c0e2b9b9a91c819b7e21d1110424a0337afc39b02c379f5fe08904f7b25fd6f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat33_gain0.25_nonfinite_update2.npz": "0c0e2b9b9a91c819b7e21d1110424a0337afc39b02c379f5fe08904f7b25fd6f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat33_gain0.25_normal_update1.npz": "5467207310d76b8dbb9b2fff3bd667ebe7cbfd54a24608ca6a2884d207acc982",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat33_gain0.25_normal_update2.npz": "a1fff521288a126d94c67ca90cfa6f080e8b764ec7da1167d59f153d9a1956e9",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat33_gain1.5_masked_update1.npz": "4be1186e7654d1fac0b8281f20238edb029109214d79c352596fc066f57a791c",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat33_gain1.5_masked_update2.npz": "26638d76ec335f3f9050de5e7f3d3a4c44f26ad040369ed1f3d3b67e48ae29bd",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat33_gain1.5_nonfinite_update1.npz": "2b1205a66566139d260bdbb88c1f26adc66c667915bd43ca30822febcb2a166f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat33_gain1.5_nonfinite_update2.npz": "2b1205a66566139d260bdbb88c1f26adc66c667915bd43ca30822febcb2a166f",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat33_gain1.5_normal_update1.npz": "2afa6bc82006fe285852d26b69131d3888182e9959350508c22628d28acc863b",
+    "dist/pf_doppler_large_cache_adopted/diagnostics_candidate/N33_sat33_gain1.5_normal_update2.npz": "7f467b69e1d8cde909896d424394bb51e68653fca10b79cfd0edad4ad472ff7a"
+  },
+  "retained_components": [
+    "Packed satellite ownership/transfer and preceding PF updates",
+    "Latest BVH parallel mirror chunks source/build/installed",
+    "Latest signal batch source/build/installed"
+  ]
+}

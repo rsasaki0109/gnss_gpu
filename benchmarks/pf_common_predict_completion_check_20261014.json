@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-14T00:57:42.358067+00:00",
+  "verified": true,
+  "adopted": true,
+  "source_build_installed_and_archive_match": true,
+  "measurement_report": {
+    "path": "benchmarks/pf_common_predict_gpu_20261014.json",
+    "sha256": "f71e21caebf4c278439dced71accde380984396ea009a3eed21702552bcea39c"
+  },
+  "device_code_report": {
+    "path": "benchmarks/pf_common_predict_device_code_20261013.json",
+    "sha256": "5715ff6a41376b8511e2c8af7d12485642f913e18ae33ae10e71173535c44b4e"
+  },
+  "bit_identical_cases": 23963,
+  "output_cases": 23531,
+  "matched_input_rejections": 432,
+  "stage_batch_conditions": 27,
+  "rounds": 5,
+  "repeats": 20,
+  "per_sample_conditions": 12,
+  "per_sample_pairs": 1200,
+  "paired_full_state_snapshots": 60,
+  "independent_new_tests": 512,
+  "targeted_tests": 512,
+  "baseline_and_candidate_targeted_passed": true,
+  "regression_passed": 3772,
+  "memcheck_errors": 0,
+  "leaked_bytes": 0,
+  "racecheck_hazards": 0,
+  "synccheck_errors": 0,
+  "retained_old_gpu_bodies_and_resources": 76,
+  "new_shared_factor_kernels": 1,
+  "no_new_allocation": true,
+  "retained": {
+    "benchmarks/bvh_parallel_mirror_chunks_gpu_20261013.json": {
+      "reference_sha256": "bcda1df440f75615bc2d869e031b039f3499d2318444243ef62b4e88d0215cd8",
+      "source_sha256": {
+        "src/raytrace/bvh.cu": "7154bcaa5422872b3ed1422cd632eb36f40998660ce3ad108a07fb38cddedcc1",
+        "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+        "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+        "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+        "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+      },
+      "extension_sha256": "e99a8ddb576d98e00a2efe90fc40e67a2ca17452c7e0eec23293d46f3032ae1c"
+    },
+    "benchmarks/signal_static_single_gpu_20261014.json": {
+      "reference_sha256": "fbc8cda18b8317527d8e653ad0fc1adf72beb56fdf4078adafeb92fa1ece0f44",
+      "source_sha256": {
+        "src/signal_sim/signal_sim.cu": "b3fceeb7f59b45d2dc9265bc7e931847533f0231a29c674cc6122fff52671a2e",
+        "include/gnss_gpu/signal_sim.h": "2788f41ff6175da2d6c0db5212470ab3759f4e350d91f977a532e48fc70fa945",
+        "python/gnss_gpu/_signal_sim_bindings.cpp": "524f9460570f0b39f4165f8fb6526af927e6c2c8f39ff661c2731d34ee82bcff",
+        "python/gnss_gpu/signal_sim.py": "f316c47c4a9a9359498e6905f8d6afa8046f7b631f876e258074d44d527780d4",
+        "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+      },
+      "extension_sha256": "235ccd7ed3111143f631bf3543ba736c599bf2343457f235614f3906ce57de9d"
+    }
+  },
+  "public_text_files_checked": 2648,
+  "public_device_label_clean": true,
+  "precision_limit": "No new long real-data positioning-error distribution evaluated."
+}

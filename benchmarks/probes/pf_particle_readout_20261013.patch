@@ -1,0 +1,27 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -3869,12 +3869,11 @@
+ void pf_device_get_particles(const PFDeviceState* state, double* output) {
+     int N = state->n_particles;
+ 
+-    // Use d_partial_a as temp output buffer if it's big enough, otherwise alloc
+-    // For N particles we need N*4 doubles. d_partial_a has grid*4 doubles.
+-    // grid = N/256 so grid*4 << N*4. We need a temporary.
+-    double* d_out;
++    // The inactive covariance has 9N doubles; the packed output needs 4N.
++    // Resampling overwrites this scratch before reading its destination.
++    // Keep the copy and completion semantics of the original getter.
++    double* d_out = state->d_vcov_tmp;
+     size_t sz_out = (size_t)N * 4 * sizeof(double);
+-    CUDA_CHECK(cudaMalloc(&d_out, sz_out));
+ 
+     int grid = state->grid_size;
+     pfd_get_particles_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
+@@ -3884,7 +3883,6 @@
+ 
+     CUDA_CHECK(cudaStreamSynchronize(state->stream));
+     CUDA_CHECK(cudaMemcpy(output, d_out, sz_out, cudaMemcpyDeviceToHost));
+-    CUDA_CHECK(cudaFree(d_out));
+ }
+ 
+ void pf_device_get_particle_states(const PFDeviceState* state, double* output) {

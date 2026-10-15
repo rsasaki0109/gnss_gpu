@@ -1,0 +1,25 @@
+--- a/tests/test_bvh_mirror_sharing.py
++++ b/tests/test_bvh_mirror_sharing.py
+@@ -62,7 +62,7 @@
+         base = (len(nodes) * 64 + mesh.nbytes + len(mesh) * (4 + 32)
+                 + rx.nbytes + sat.nbytes + epochs * 16 * (4 * 8 + 40))
+         extra = scene.allocated_bytes - base
+-        assert extra == (epochs * len(mesh) * 24 if epochs == 170 else 0)
++        assert extra == min(epochs, (32 * 1024 * 1024) // 24 // len(mesh)) * len(mesh) * 24
+         assert 0 <= extra <= 32 * 1024 * 1024
+         allocated = scene.allocated_bytes
+         _assert_bits(scene.multipath_batch(rx, sat), expected)
+--- a/tests/test_bvh_large_parallel.py
++++ b/tests/test_bvh_large_parallel.py
+@@ -133,7 +133,10 @@
+         scene.multipath_batch(rx, sat)
+         winner_bytes = rays*40
+         assert winner_bytes == 640*1024
+-        assert scene.allocated_bytes == base + rays*32 + 12000*36 + winner_bytes
++        mirror_epochs = (32*1024*1024)//24//12000
++        mirror_bytes = mirror_epochs*12000*24
++        assert mirror_bytes <= 32*1024*1024
++        assert scene.allocated_bytes == base + rays*32 + 12000*36 + winner_bytes + mirror_bytes
+     finally:
+         scene.close()
+     assert scene.allocated_bytes == 0

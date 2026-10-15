@@ -1,0 +1,235 @@
+{
+  "schema_version": 1,
+  "source_sha256": {
+    "baseline": {
+      "src/raytrace/bvh.cu": "7154bcaa5422872b3ed1422cd632eb36f40998660ce3ad108a07fb38cddedcc1",
+      "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+      "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+      "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+      "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+    },
+    "candidate": {
+      "src/raytrace/bvh.cu": "dfa2677ac89924e67f4acc5612363e99c52d75c89d688ed388cbef0fea3ad534",
+      "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+      "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+      "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+      "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+    }
+  },
+  "extension_sha256": {
+    "baseline": "e99a8ddb576d98e00a2efe90fc40e67a2ca17452c7e0eec23293d46f3032ae1c",
+    "candidate": "06231ae91530b852fb9b87bea834633d9ae370d00afa77e9da2c2db80276be43"
+  },
+  "measurement_report": {
+    "path": "benchmarks/bvh_build_bin_reciprocal_rejected_20261014.json",
+    "sha256": "81ba34b7714882e00ae75a980a87fbf71bf83d6b2c6f5bcc30498e88ee705535"
+  },
+  "baseline_functions": 10,
+  "candidate_functions": 10,
+  "unchanged_instruction_bodies": 10,
+  "replaced_functions": [],
+  "added_functions": [],
+  "functions": {
+    "_ZN8gnss_gpu27multipath_candidates_kernelILb0ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+      "candidate_name": "_ZN8gnss_gpu27multipath_candidates_kernelILb0ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE",
+      "identical": true,
+      "baseline_normalized_sass_sha256": "408d155aa283c7943a1d1c2dcfd97a24121d8a93f8c261d368ed0e1072888645",
+      "candidate_normalized_sass_sha256": "408d155aa283c7943a1d1c2dcfd97a24121d8a93f8c261d368ed0e1072888645"
+    },
+    "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+      "candidate_name": "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE",
+      "identical": true,
+      "baseline_normalized_sass_sha256": "33ffeda1472ce61605d146684de9af42bbd8ad5af23e50777a8f97b84d13c370",
+      "candidate_normalized_sass_sha256": "33ffeda1472ce61605d146684de9af42bbd8ad5af23e50777a8f97b84d13c370"
+    },
+    "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb1EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+      "candidate_name": "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb1EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE",
+      "identical": true,
+      "baseline_normalized_sass_sha256": "549dd5440483debb80be07f4da9184aec7d4db17007ca082a38923421850eb4d",
+      "candidate_normalized_sass_sha256": "549dd5440483debb80be07f4da9184aec7d4db17007ca082a38923421850eb4d"
+    },
+    "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii": {
+      "candidate_name": "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii",
+      "identical": true,
+      "baseline_normalized_sass_sha256": "ac36c4fea909ca1b067b131ead0e807a54c106ebf0c461356758cc5b6d6ab915",
+      "candidate_normalized_sass_sha256": "ac36c4fea909ca1b067b131ead0e807a54c106ebf0c461356758cc5b6d6ab915"
+    },
+    "_ZN8gnss_gpu25reflection_mirrors_kernelEPKdPKNS_8TriangleEPKiPKNS_16ReflectionNormalEPNS_16ReflectionMirrorEi": {
+      "candidate_name": "_ZN8gnss_gpu25reflection_mirrors_kernelEPKdPKNS_8TriangleEPKiPKNS_16ReflectionNormalEPNS_16ReflectionMirrorEi",
+      "identical": true,
+      "baseline_normalized_sass_sha256": "091fbf16ae7589c15f53ae37e0aa0735fd200bfd5f1cffb484b457103b5e58a7",
+      "candidate_normalized_sass_sha256": "091fbf16ae7589c15f53ae37e0aa0735fd200bfd5f1cffb484b457103b5e58a7"
+    },
+    "_ZN8gnss_gpu30multipath_cached_serial_kernelEPKdS1_PKiPKNS_16ReflectionNormalEPKNS_8TriangleEPdSA_iii": {
+      "candidate_name": "_ZN8gnss_gpu30multipath_cached_serial_kernelEPKdS1_PKiPKNS_16ReflectionNormalEPKNS_8TriangleEPdSA_iii",
+      "identical": true,
+      "baseline_normalized_sass_sha256": "1cf0fe86e5f31ee697995cc91af7eee4d961a96c5bd2d6a4064c3a4509a4ec68",
+      "candidate_normalized_sass_sha256": "1cf0fe86e5f31ee697995cc91af7eee4d961a96c5bd2d6a4064c3a4509a4ec68"
+    },
+    "_ZN8gnss_gpu25reflection_normals_kernelEPKNS_8TriangleEPKiPNS_16ReflectionNormalEi": {
+      "candidate_name": "_ZN8gnss_gpu25reflection_normals_kernelEPKNS_8TriangleEPKiPNS_16ReflectionNormalEi",
+      "identical": true,
+      "baseline_normalized_sass_sha256": "b9822fdcd81636a436a075c4a8fc87689a25aa676632d84065675e5beba93617",
+      "candidate_normalized_sass_sha256": "b9822fdcd81636a436a075c4a8fc87689a25aa676632d84065675e5beba93617"
+    },
+    "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii": {
+      "candidate_name": "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii",
+      "identical": true,
+      "baseline_normalized_sass_sha256": "4e8ae452c1eba3d84027f7eb7600c65dfb6ae0fe2b67d9be0fc4dc54397c5f5a",
+      "candidate_normalized_sass_sha256": "4e8ae452c1eba3d84027f7eb7600c65dfb6ae0fe2b67d9be0fc4dc54397c5f5a"
+    },
+    "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii": {
+      "candidate_name": "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii",
+      "identical": true,
+      "baseline_normalized_sass_sha256": "d12d67b93f6b9e8dad02078a0e2c703fae7520fee4c3d4a56a50d9dd0f6fed42",
+      "candidate_normalized_sass_sha256": "d12d67b93f6b9e8dad02078a0e2c703fae7520fee4c3d4a56a50d9dd0f6fed42"
+    },
+    "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii": {
+      "candidate_name": "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii",
+      "identical": true,
+      "baseline_normalized_sass_sha256": "b0de8f220b77b975c30e402f1db956b9700d7cecd2f034ad234a83bf4e5e9087",
+      "candidate_normalized_sass_sha256": "b0de8f220b77b975c30e402f1db956b9700d7cecd2f034ad234a83bf4e5e9087"
+    }
+  },
+  "normalization": "cuobjdump instruction bodies; collapse whitespace only; retain offsets/encodings/attributes",
+  "resources": {
+    "baseline": {
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb0ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 78,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 78,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb1EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 77,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii": {
+        "registers": 25,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25reflection_mirrors_kernelEPKdPKNS_8TriangleEPKiPKNS_16ReflectionNormalEPNS_16ReflectionMirrorEi": {
+        "registers": 30,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu30multipath_cached_serial_kernelEPKdS1_PKiPKNS_16ReflectionNormalEPKNS_8TriangleEPdSA_iii": {
+        "registers": 85,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25reflection_normals_kernelEPKNS_8TriangleEPKiPNS_16ReflectionNormalEi": {
+        "registers": 36,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii": {
+        "registers": 90,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      }
+    },
+    "candidate": {
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb0ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 78,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 78,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb1EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 77,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii": {
+        "registers": 25,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25reflection_mirrors_kernelEPKdPKNS_8TriangleEPKiPKNS_16ReflectionNormalEPNS_16ReflectionMirrorEi": {
+        "registers": 30,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu30multipath_cached_serial_kernelEPKdS1_PKiPKNS_16ReflectionNormalEPKNS_8TriangleEPdSA_iii": {
+        "registers": 85,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25reflection_normals_kernelEPKNS_8TriangleEPKiPNS_16ReflectionNormalEi": {
+        "registers": 36,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii": {
+        "registers": 90,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      }
+    }
+  },
+  "patch": {
+    "path": "benchmarks/probes/bvh_build_bin_reciprocal_rejected_20261013.patch",
+    "sha256": "5eb927810030bd6038d1be47533ba09bb0e819260c9829df8fc766028d281945",
+    "files": {
+      "src/raytrace/bvh.cu": {
+        "baseline_sha256": "7154bcaa5422872b3ed1422cd632eb36f40998660ce3ad108a07fb38cddedcc1",
+        "candidate_sha256": "dfa2677ac89924e67f4acc5612363e99c52d75c89d688ed388cbef0fea3ad534",
+        "reconstructs_crlf_bytes": true
+      }
+    }
+  },
+  "dispatch": "Exploratory CPU builder only; rejected and frozen.",
+  "semantics": "Use reciprocal product only when certified to produce the same clamped integer bucket; original division for boundaries/nonfinite/out-of-range.",
+  "build_configuration": "CUDA 12.8 / MSVC Release / compute 7.5 / C++20 / no fast math"
+}

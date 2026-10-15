@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-13T11:15:50.288383+00:00",
+  "verified": true,
+  "adopted": false,
+  "restored_exact_source_build_and_installed": true,
+  "retained": {
+    "benchmarks/pf_kf_wide_cache_gpu_20261013.json": {
+      "reference_sha256": "2eaa36e8e1e7ca9db8b30e74947b97bc6227a98709e2a60c59bce6254e2da9ae",
+      "source_sha256": {
+        "src/particle_filter/pf_device.cu": "eaa960b24b11858e042e9d90ea8cb6ad55d2612052af6950b6d9ee2e6c5c0c5f",
+        "include/gnss_gpu/pf_device.h": "a2739ef2861995b4d769415651dc6c8f0acf5da6e5caf94d29f977fd8e9b8bc5",
+        "python/gnss_gpu/_pf_device_bindings.cpp": "56fdb9e2568d263595aae3ab66e42d5df70e8ccd6c2b6d08c61d00d4b30edaf5",
+        "python/gnss_gpu/pf_device_runtime.py": "a24c892f58e39e4cde99737273cfe23b807df9cc971269f571249f03e9d93ad2",
+        "python/gnss_gpu/pf_device_config.py": "c6c17c4f926a2182ebe27dfd23a6e9c8b1f49c59c238a51feb6dd7b2814fce69"
+      },
+      "extension_sha256": "010406b2e08b6e3c83c95273efec81a9bbdea0ebf68a00a71e1a3c74b6cee2b6"
+    },
+    "benchmarks/bvh_parallel_mirror_chunks_gpu_20261013.json": {
+      "reference_sha256": "bcda1df440f75615bc2d869e031b039f3499d2318444243ef62b4e88d0215cd8",
+      "source_sha256": {
+        "src/raytrace/bvh.cu": "7154bcaa5422872b3ed1422cd632eb36f40998660ce3ad108a07fb38cddedcc1",
+        "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+        "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+        "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+        "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+      },
+      "extension_sha256": "e99a8ddb576d98e00a2efe90fc40e67a2ca17452c7e0eec23293d46f3032ae1c"
+    },
+    "benchmarks/signal_batch_gpu_20261012.json": {
+      "reference_sha256": "b79f96628f8302018affd8ec4e6048a2f1aa82892cd35f459d94f5d9f9b30ccb",
+      "source_sha256": {
+        "src/signal_sim/signal_sim.cu": "15eb73c0272dad248ed072327a9f09b4fd11b72b1b8db3675d87a380e6a14acf",
+        "include/gnss_gpu/signal_sim.h": "2788f41ff6175da2d6c0db5212470ab3759f4e350d91f977a532e48fc70fa945",
+        "python/gnss_gpu/_signal_sim_bindings.cpp": "524f9460570f0b39f4165f8fb6526af927e6c2c8f39ff661c2731d34ee82bcff",
+        "python/gnss_gpu/signal_sim.py": "f316c47c4a9a9359498e6905f8d6afa8046f7b631f876e258074d44d527780d4",
+        "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+      },
+      "extension_sha256": "88c7bd9ea0c81beafccda555a7eaeb27d56c762287cc28a2897eb66b185a3ab5"
+    }
+  },
+  "rejected_report": {
+    "path": "benchmarks/signal_input_packing_rejected_20261013.json",
+    "sha256": "53e97e780bc71bb0b4609e3bd723bdba4c7f953fdb769d4d617494fc1aea4273"
+  },
+  "validation": {
+    "comparison_cases": 737,
+    "matching_iq_metadata_and_conversion_cases": 657,
+    "matching_native_exception_cases": 80,
+    "baseline_unit_tests": 42,
+    "candidate_unit_tests": 42,
+    "temporary_ownership_cast_count_and_exact_diagnostics_passed": true
+  },
+  "stage_batch_conditions": 20,
+  "per_sample_conditions": 10,
+  "rounds": 5,
+  "repeats": 20,
+  "first_variant_comparisons": 633,
+  "unchanged_gpu_functions": 8,
+  "unchanged_gpu_resources": true,
+  "archive_and_exact_patch_hashes_verified": true,
+  "trial_test_archived_only": true,
+  "new_full_regression_and_sanitizer_runs": false,
+  "public_text_files_checked": 2576,
+  "public_device_label_clean": true,
+  "preserved_adoption_completion": {
+    "path": "benchmarks/pf_kf_wide_cache_completion_check_20261013.json",
+    "sha256": "b5e7cbe5289b68dfea4de7a9d6204b1a2ac856f7daa26e37558cd4e698f13ca3"
+  }
+}

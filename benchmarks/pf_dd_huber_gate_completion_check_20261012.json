@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "verified": true,
+  "current_source_build_installed_match": true,
+  "before_after_bit_cases": 6102,
+  "timed_conditions": 32,
+  "rounds": 5,
+  "repeats": 20,
+  "regression_tests": 1280,
+  "sanitizer_tests": 62,
+  "sanitizer_errors": 0,
+  "leaked_bytes": 0,
+  "unchanged_device_functions": 49,
+  "gaussian_partial_nan_fix_verified": true,
+  "bvh_native_retained": true,
+  "signal_batch_retained": true,
+  "public_product_label_violations": 0,
+  "public_text_files_scanned": 2387,
+  "artifacts": {
+    "benchmarks/RESULTS.md": "e5ac83f7cc1048b09cc8cca4fc6c58e3956f53ca7d6f1e6b1f8398820ee5bd29",
+    "internal_docs/decisions.md": "14d0d5fbed203ec2cb638e43662c1341dba4c58e077991a8b06e296f107723fc",
+    "benchmarks/pf_dd_huber_gate_gpu_20261012.json": "f51d0e74b155262d003f3435f3d0746f2718639636ced211192c823e415125ae",
+    "benchmarks/pf_dd_huber_gate_device_code_20261012.json": "e861478beb9ed34f01c74abdc32bdd49e5ef97e467eb34834fefc410190dde17",
+    "benchmarks/pf_dd_huber_gate_rounding_rejected_20261012.json": "e5d1c3001f8d521c2abf924d82dfbff0f5bc6f02e1330a21d90ddd70521c5ff1",
+    "benchmarks/pf_dd_gate_partial_nan_baseline_20261012.json": "1de4adedadf508fa729452d7529e8aa5655fa5bee59c5c70a39a5bd7f0d70cf3",
+    "tests/fixtures/pf_dd_gate_partial_nan.json": "25462e9477839aacf6f1463347f0c227e62f3628724446c4ee8d2033ab98227e",
+    "tests/test_pf_dd_huber_gate.py": "576debaf8af5095753f21eaf8fc0d3a48b9abf7ea55e9791941c4db35d6b1a25"
+  }
+}

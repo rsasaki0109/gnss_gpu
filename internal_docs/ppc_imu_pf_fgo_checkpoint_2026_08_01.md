@@ -272,7 +272,7 @@ hypothesis solves successfully with zero fallback.  CPU/GPU parity passes:
 integer acceptance is identical, maximum ECEF difference is 0.014 mm, and
 maximum incremental-log-likelihood difference is 3.20e-5.
 
-Forced GPU is substantially slower on the GTX 1660 Ti and these 96--97 state
+Forced GPU is substantially slower on the NVIDIA CUDA GPU and these 96--97 state
 problems: GNSS p95 is 61.67 ms versus 12.82 ms CPU (4.81x).  This is PCIe and
 cuSOLVER launch overhead, not a failed kernel.  The existing `auto` dispatch
 threshold of 2,048 states is therefore correct: an auto-mode smoke selected

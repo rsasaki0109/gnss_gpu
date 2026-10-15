@@ -1,0 +1,197 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -368,6 +368,7 @@
+ // Double-differenced pseudorange eliminates receiver clock bias from both rover
+ // and base. The expected DD range is:
+ //   dd_expected = range_to_k - range_to_ref - base_range_k + base_range_ref
++template<bool CommonReference>
+ __global__ void pfd_weight_dd_pseudorange_kernel(
+     const double* px, const double* py,
+     const double* pz,
+@@ -399,6 +400,17 @@
+     double x = px[tid];
+     double y = py[tid];
+     double z = pz[tid];
++
++    // One exact FP64 reference range per particle when every pair uses the
++    // same coordinates. Rebuilt on each call; mixed references keep the
++    // original per-pair geometry and ordered residual/likelihood arithmetic.
++    double common_ref_range = 0.0;
++    if constexpr (CommonReference) {
++        double dx_ref = x - s_ref[0];
++        double dy_ref = y - s_ref[1];
++        double dz_ref = z - s_ref[2];
++        common_ref_range = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
++    }
+ 
+     double inv_sigma2 = 1.0 / (sigma_pr * sigma_pr);
+     double log_w = 0.0;
+@@ -412,10 +424,13 @@
+             double dz_k = z - s_sat_k[d * 3 + 2];
+             double r_k = sqrt(dx_k * dx_k + dy_k * dy_k + dz_k * dz_k);
+ 
+-            double dx_ref = x - s_ref[d * 3 + 0];
+-            double dy_ref = y - s_ref[d * 3 + 1];
+-            double dz_ref = z - s_ref[d * 3 + 2];
+-            double r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
++            double r_ref = common_ref_range;
++            if constexpr (!CommonReference) {
++                double dx_ref = x - s_ref[d * 3 + 0];
++                double dy_ref = y - s_ref[d * 3 + 1];
++                double dz_ref = z - s_ref[d * 3 + 2];
++                r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
++            }
+ 
+             double dd_expected = r_k - r_ref - s_br_k[d] + s_br_ref[d];
+             double residual = s_dd_pr[d] - dd_expected;
+@@ -435,10 +450,13 @@
+         double dz_k = z - s_sat_k[d * 3 + 2];
+         double r_k = sqrt(dx_k * dx_k + dy_k * dy_k + dz_k * dz_k);
+ 
+-        double dx_ref = x - s_ref[d * 3 + 0];
+-        double dy_ref = y - s_ref[d * 3 + 1];
+-        double dz_ref = z - s_ref[d * 3 + 2];
+-        double r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
++        double r_ref = common_ref_range;
++        if constexpr (!CommonReference) {
++            double dx_ref = x - s_ref[d * 3 + 0];
++            double dy_ref = y - s_ref[d * 3 + 1];
++            double dz_ref = z - s_ref[d * 3 + 2];
++            r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
++        }
+ 
+         double dd_expected = r_k - r_ref - s_br_k[d] + s_br_ref[d];
+         double residual = s_dd_pr[d] - dd_expected;
+@@ -588,6 +606,7 @@
+ //   dd_expected = (range_to_k - range_to_ref - base_range_k + base_range_ref) / wavelength
+ //   dd_residual = dd_carrier[k] - dd_expected
+ //   afv = dd_residual - round(dd_residual)
++template<bool CommonReference>
+ __global__ void pfd_weight_dd_carrier_afv_kernel(
+     const double* px, const double* py,
+     const double* pz,
+@@ -627,6 +646,17 @@
+     double y = py[tid];
+     double z = pz[tid];
+ 
++    // One exact FP64 reference range per particle when every pair uses the
++    // same coordinates. Rebuilt on each call; mixed references keep the
++    // original per-pair geometry and ordered residual/likelihood arithmetic.
++    double common_ref_range = 0.0;
++    if constexpr (CommonReference) {
++        double dx_ref = x - s_ref[0];
++        double dy_ref = y - s_ref[1];
++        double dz_ref = z - s_ref[2];
++        common_ref_range = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
++    }
++
+     double inv_sigma2 = 1.0 / (sigma_cycles * sigma_cycles);
+     double log_w = 0.0;
+     bool use_huber = huber_enabled && huber_k > 0.0;
+@@ -639,10 +669,13 @@
+             double dz_k = z - s_sat_k[d * 3 + 2];
+             double r_k = sqrt(dx_k * dx_k + dy_k * dy_k + dz_k * dz_k);
+ 
+-            double dx_ref = x - s_ref[d * 3 + 0];
+-            double dy_ref = y - s_ref[d * 3 + 1];
+-            double dz_ref = z - s_ref[d * 3 + 2];
+-            double r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
++            double r_ref = common_ref_range;
++            if constexpr (!CommonReference) {
++                double dx_ref = x - s_ref[d * 3 + 0];
++                double dy_ref = y - s_ref[d * 3 + 1];
++                double dz_ref = z - s_ref[d * 3 + 2];
++                r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
++            }
+ 
+             double inv_wl = s_inv_wl[d];
+             double dd_expected = (r_k - r_ref - s_br_k[d] + s_br_ref[d]) * inv_wl;
+@@ -665,10 +698,13 @@
+         double dz_k = z - s_sat_k[d * 3 + 2];
+         double r_k = sqrt(dx_k * dx_k + dy_k * dy_k + dz_k * dz_k);
+ 
+-        double dx_ref = x - s_ref[d * 3 + 0];
+-        double dy_ref = y - s_ref[d * 3 + 1];
+-        double dz_ref = z - s_ref[d * 3 + 2];
+-        double r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
++        double r_ref = common_ref_range;
++        if constexpr (!CommonReference) {
++            double dx_ref = x - s_ref[d * 3 + 0];
++            double dy_ref = y - s_ref[d * 3 + 1];
++            double dz_ref = z - s_ref[d * 3 + 2];
++            r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
++        }
+ 
+         double inv_wl = s_inv_wl[d];
+ 
+@@ -2098,6 +2134,20 @@
+     CUDA_CHECK_LAST();
+ }
+ 
++// Detect the common-reference case from this call's host input. Bitwise
++// comparison preserves signed-zero distinctions; nonfinite coordinates and
++// single pairs use the unchanged mixed-reference specialization.
++static bool pfd_has_common_dd_reference(const double* ref_ecef, int n_dd) {
++    if (n_dd < 2) return false;
++    for (int axis = 0; axis < 3; ++axis) {
++        if (!std::isfinite(ref_ecef[axis])) return false;
++    }
++    for (int d = 1; d < n_dd; ++d) {
++        if (memcmp(ref_ecef, ref_ecef + d * 3, 3 * sizeof(double)) != 0) return false;
++    }
++    return true;
++}
++
+ void pf_device_weight_dd_pseudorange(PFDeviceState* state,
+     const double* sat_ecef_k, const double* ref_ecef,
+     const double* dd_pseudorange, const double* base_range_k,
+@@ -2131,11 +2181,19 @@
+         cudaMemcpyHostToDevice, state->stream));
+ 
+     size_t smem = (size_t)total_doubles * sizeof(double);
+-    pfd_weight_dd_pseudorange_kernel<<<grid, BLOCK_SIZE, smem, state->stream>>>(
+-        state->d_px, state->d_py, state->d_pz,
+-        state->d_obs_scratch, state->d_log_weights,
+-        N, n_dd, sigma_pr, per_particle_nlos_threshold_m,
+-        per_particle_huber, per_particle_huber_k);
++    if (pfd_has_common_dd_reference(ref_ecef, n_dd)) {
++        pfd_weight_dd_pseudorange_kernel<true><<<grid, BLOCK_SIZE, smem, state->stream>>>(
++            state->d_px, state->d_py, state->d_pz,
++            state->d_obs_scratch, state->d_log_weights,
++            N, n_dd, sigma_pr, per_particle_nlos_threshold_m,
++            per_particle_huber, per_particle_huber_k);
++    } else {
++        pfd_weight_dd_pseudorange_kernel<false><<<grid, BLOCK_SIZE, smem, state->stream>>>(
++            state->d_px, state->d_py, state->d_pz,
++            state->d_obs_scratch, state->d_log_weights,
++            N, n_dd, sigma_pr, per_particle_nlos_threshold_m,
++            per_particle_huber, per_particle_huber_k);
++    }
+     CUDA_CHECK_LAST();
+ 
+ }
+@@ -2665,11 +2723,19 @@
+ 
+     // Launch DD-AFV kernel
+     size_t smem = (size_t)total_doubles * sizeof(double);
+-    pfd_weight_dd_carrier_afv_kernel<<<grid, BLOCK_SIZE, smem, state->stream>>>(
+-        state->d_px, state->d_py, state->d_pz,
+-        state->d_obs_scratch, state->d_log_weights,
+-        N, n_dd, sigma_cycles, per_particle_nlos_threshold_cycles,
+-        per_particle_huber, per_particle_huber_k);
++    if (pfd_has_common_dd_reference(ref_ecef, n_dd)) {
++        pfd_weight_dd_carrier_afv_kernel<true><<<grid, BLOCK_SIZE, smem, state->stream>>>(
++            state->d_px, state->d_py, state->d_pz,
++            state->d_obs_scratch, state->d_log_weights,
++            N, n_dd, sigma_cycles, per_particle_nlos_threshold_cycles,
++            per_particle_huber, per_particle_huber_k);
++    } else {
++        pfd_weight_dd_carrier_afv_kernel<false><<<grid, BLOCK_SIZE, smem, state->stream>>>(
++            state->d_px, state->d_py, state->d_pz,
++            state->d_obs_scratch, state->d_log_weights,
++            N, n_dd, sigma_cycles, per_particle_nlos_threshold_cycles,
++            per_particle_huber, per_particle_huber_k);
++    }
+     CUDA_CHECK_LAST();
+ 
+ }

@@ -1,0 +1,320 @@
+{
+  "schema_version": 1,
+  "source_sha256": {
+    "baseline": {
+      "src/raytrace/bvh.cu": "7c615c521d7cac7fb79459a4b7fda68db6368f491446ac0f643768873e6a7e0b",
+      "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+      "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+      "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+      "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+    },
+    "candidate": {
+      "src/raytrace/bvh.cu": "57c2db73622e412fc38c06af1324b078452c1e4c274c6eac94b050026ada7c1e",
+      "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+      "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+      "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+      "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+    }
+  },
+  "extension_sha256": {
+    "baseline": "e18b6623eb1308c284ec59303c3fff2aaf506c1c3ec5921f259d5a6bdedf9774",
+    "candidate": "cbae13d9ad8c1fb88cff378227ded4abd7061490c82276a47ca2c22acf8233d8"
+  },
+  "measurement_report": {
+    "path": "benchmarks/bvh_small_order_gpu_20261013.json",
+    "sha256": "b5e37105613b2f589fb16a7c27687aa82793acd3eeda381e43bcd573e8a49da8"
+  },
+  "build_configuration": "CUDA12.8 / MSVC Release / compute7.5 / C++20 / no fast math",
+  "baseline_functions": 10,
+  "candidate_functions": 10,
+  "unchanged_instruction_bodies": 10,
+  "unchanged_preceding_resource_counts": 10,
+  "functions": {
+    "_ZN8gnss_gpu27multipath_candidates_kernelILb0ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "408d155aa283c7943a1d1c2dcfd97a24121d8a93f8c261d368ed0e1072888645",
+      "candidate_normalized_sass_sha256": "408d155aa283c7943a1d1c2dcfd97a24121d8a93f8c261d368ed0e1072888645"
+    },
+    "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "33ffeda1472ce61605d146684de9af42bbd8ad5af23e50777a8f97b84d13c370",
+      "candidate_normalized_sass_sha256": "33ffeda1472ce61605d146684de9af42bbd8ad5af23e50777a8f97b84d13c370"
+    },
+    "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb1EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "549dd5440483debb80be07f4da9184aec7d4db17007ca082a38923421850eb4d",
+      "candidate_normalized_sass_sha256": "549dd5440483debb80be07f4da9184aec7d4db17007ca082a38923421850eb4d"
+    },
+    "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "ac36c4fea909ca1b067b131ead0e807a54c106ebf0c461356758cc5b6d6ab915",
+      "candidate_normalized_sass_sha256": "ac36c4fea909ca1b067b131ead0e807a54c106ebf0c461356758cc5b6d6ab915"
+    },
+    "_ZN8gnss_gpu25reflection_mirrors_kernelEPKdPKNS_8TriangleEPKiPKNS_16ReflectionNormalEPNS_16ReflectionMirrorEi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "091fbf16ae7589c15f53ae37e0aa0735fd200bfd5f1cffb484b457103b5e58a7",
+      "candidate_normalized_sass_sha256": "091fbf16ae7589c15f53ae37e0aa0735fd200bfd5f1cffb484b457103b5e58a7"
+    },
+    "_ZN8gnss_gpu30multipath_cached_serial_kernelEPKdS1_PKiPKNS_16ReflectionNormalEPKNS_8TriangleEPdSA_iii": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "1cf0fe86e5f31ee697995cc91af7eee4d961a96c5bd2d6a4064c3a4509a4ec68",
+      "candidate_normalized_sass_sha256": "1cf0fe86e5f31ee697995cc91af7eee4d961a96c5bd2d6a4064c3a4509a4ec68"
+    },
+    "_ZN8gnss_gpu25reflection_normals_kernelEPKNS_8TriangleEPKiPNS_16ReflectionNormalEi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "b9822fdcd81636a436a075c4a8fc87689a25aa676632d84065675e5beba93617",
+      "candidate_normalized_sass_sha256": "b9822fdcd81636a436a075c4a8fc87689a25aa676632d84065675e5beba93617"
+    },
+    "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "4e8ae452c1eba3d84027f7eb7600c65dfb6ae0fe2b67d9be0fc4dc54397c5f5a",
+      "candidate_normalized_sass_sha256": "4e8ae452c1eba3d84027f7eb7600c65dfb6ae0fe2b67d9be0fc4dc54397c5f5a"
+    },
+    "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "d12d67b93f6b9e8dad02078a0e2c703fae7520fee4c3d4a56a50d9dd0f6fed42",
+      "candidate_normalized_sass_sha256": "d12d67b93f6b9e8dad02078a0e2c703fae7520fee4c3d4a56a50d9dd0f6fed42"
+    },
+    "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "b0de8f220b77b975c30e402f1db956b9700d7cecd2f034ad234a83bf4e5e9087",
+      "candidate_normalized_sass_sha256": "b0de8f220b77b975c30e402f1db956b9700d7cecd2f034ad234a83bf4e5e9087"
+    }
+  },
+  "resources": {
+    "baseline": {
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb0ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 78,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 78,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb1EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 77,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii": {
+        "registers": 25,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25reflection_mirrors_kernelEPKdPKNS_8TriangleEPKiPKNS_16ReflectionNormalEPNS_16ReflectionMirrorEi": {
+        "registers": 30,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu30multipath_cached_serial_kernelEPKdS1_PKiPKNS_16ReflectionNormalEPKNS_8TriangleEPdSA_iii": {
+        "registers": 85,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25reflection_normals_kernelEPKNS_8TriangleEPKiPNS_16ReflectionNormalEi": {
+        "registers": 36,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii": {
+        "registers": 90,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      }
+    },
+    "candidate": {
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb0ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 78,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 78,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb1EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 77,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii": {
+        "registers": 25,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25reflection_mirrors_kernelEPKdPKNS_8TriangleEPKiPKNS_16ReflectionNormalEPNS_16ReflectionMirrorEi": {
+        "registers": 30,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu30multipath_cached_serial_kernelEPKdS1_PKiPKNS_16ReflectionNormalEPKNS_8TriangleEPdSA_iii": {
+        "registers": 85,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25reflection_normals_kernelEPKNS_8TriangleEPKiPNS_16ReflectionNormalEi": {
+        "registers": 36,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii": {
+        "registers": 90,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      }
+    }
+  },
+  "added_functions": [],
+  "patch": {
+    "path": "benchmarks/probes/bvh_small_order_20261013.patch",
+    "sha256": "63ec7e65d40871a7230d851c617396061f7da0e4ebf8c232dbeb13dce2c09462",
+    "files": {
+      "src/raytrace/bvh.cu": {
+        "baseline_sha256": "7c615c521d7cac7fb79459a4b7fda68db6368f491446ac0f643768873e6a7e0b",
+        "candidate_sha256": "57c2db73622e412fc38c06af1324b078452c1e4c274c6eac94b050026ada7c1e",
+        "reconstructs_crlf_bytes": true
+      }
+    }
+  },
+  "test_accounting_patch": {
+    "path": "benchmarks/probes/bvh_small_order_tests_20261013.patch",
+    "sha256": "3b57708d1f3de77cf25bb95dffb362b46c2fd4faa0f0f1809aff96d3ec968156",
+    "files": {
+      "tests/test_bvh_normal_cache.py": {
+        "baseline_sha256": "1d878d2bb64a1ee778c4b2e0433cfa318fb627414678aaecefe05ecc203ac715",
+        "candidate_sha256": "8ecad704ecb21bbcbd9a9043b970b1385882769c62d63a0744fff9095232a723",
+        "reconstructs_exact_bytes": true
+      },
+      "tests/test_bvh_serial_cache.py": {
+        "baseline_sha256": "c43a2020d09c661e8be78f8938157a7c17a798bbee35518a524b49f33bd5b6bc",
+        "candidate_sha256": "3b748764e350841c6c2127f252d0805fb983b2dafd264a6bb318000f30c33e2a",
+        "reconstructs_exact_bytes": true
+      }
+    }
+  },
+  "normalization": "cuobjdump instruction bodies; collapse whitespace only; retain offsets/encodings/attributes",
+  "dispatch": "Resident referenced triangle floor512->128 for validated captured right-first order; candidate upper16384 rays retained, large_parallel order floor512->128; original stateless threshold512 retained; malformed/shared/overlapping order capture fallback retained",
+  "semantics": "Original FP64 normal/mirror/intersection/positive-delay arithmetic, right-first visit ordinal/tie, sp<62 and nonfinite zeros; all10 preceding device bodies/resources identical; no candidate/ray/model/rounding reduction",
+  "memory": "Lazy order4 + normal32 bytes per visited triangle; bounded 40-byte winner per ray for newly eligible large batches (<=640KiB); prior multi-tile policy on small batches and optional mirror>=8192/<=32MiB retained; LOS-only lazy, owner capacity reuse, close/release",
+  "validation": {
+    "bit_identical_cases": 256,
+    "regression_tests": 2163,
+    "sanitizer_tests": 40,
+    "memcheck_errors": 0,
+    "leaked_bytes": 0,
+    "racecheck_hazards": 0,
+    "synccheck_errors": 0
+  },
+  "test_sha256": {
+    "tests/test_bvh_small_order.py": "0b922e96f59526fa9e0aa590e115f49620041bfbd5947b9fc9e1f011cb65e730",
+    "tests/test_bvh_normal_cache.py": "8ecad704ecb21bbcbd9a9043b970b1385882769c62d63a0744fff9095232a723",
+    "tests/test_bvh_serial_cache.py": "3b748764e350841c6c2127f252d0805fb983b2dafd264a6bb318000f30c33e2a"
+  },
+  "affected_timed_conditions_all_five_pairs_improve": [
+    "triangles128/epochs1/satellites1/warm_multipath",
+    "triangles128/epochs1/satellites1/public_warm_trace",
+    "triangles128/epochs1/satellites1/native_cold_trace_close",
+    "triangles128/epochs1/satellites16/warm_multipath",
+    "triangles128/epochs1/satellites16/public_warm_trace",
+    "triangles128/epochs1/satellites16/native_cold_trace_close",
+    "triangles128/epochs129/satellites32/warm_multipath",
+    "triangles128/epochs129/satellites32/public_warm_trace",
+    "triangles128/epochs129/satellites32/native_cold_trace_close",
+    "triangles128/epochs512/satellites32/warm_multipath",
+    "triangles128/epochs512/satellites32/public_warm_trace",
+    "triangles128/epochs512/satellites32/native_cold_trace_close",
+    "triangles256/epochs1/satellites1/warm_multipath",
+    "triangles256/epochs1/satellites1/public_warm_trace",
+    "triangles256/epochs1/satellites1/native_cold_trace_close",
+    "triangles256/epochs1/satellites16/warm_multipath",
+    "triangles256/epochs1/satellites16/public_warm_trace",
+    "triangles256/epochs1/satellites16/native_cold_trace_close",
+    "triangles256/epochs129/satellites32/warm_multipath",
+    "triangles256/epochs129/satellites32/public_warm_trace",
+    "triangles256/epochs129/satellites32/native_cold_trace_close",
+    "triangles256/epochs512/satellites32/warm_multipath",
+    "triangles256/epochs512/satellites32/public_warm_trace",
+    "triangles256/epochs512/satellites32/native_cold_trace_close",
+    "triangles511/epochs1/satellites1/warm_multipath",
+    "triangles511/epochs1/satellites1/public_warm_trace",
+    "triangles511/epochs1/satellites1/native_cold_trace_close",
+    "triangles511/epochs1/satellites16/warm_multipath",
+    "triangles511/epochs1/satellites16/public_warm_trace",
+    "triangles511/epochs1/satellites16/native_cold_trace_close",
+    "triangles511/epochs129/satellites32/warm_multipath",
+    "triangles511/epochs129/satellites32/public_warm_trace",
+    "triangles511/epochs129/satellites32/native_cold_trace_close",
+    "triangles511/epochs512/satellites32/warm_multipath",
+    "triangles511/epochs512/satellites32/public_warm_trace",
+    "triangles511/epochs512/satellites32/native_cold_trace_close"
+  ],
+  "exploratory_probe": {
+    "path": "dist/bvh_small_order_probe_20261013.json",
+    "sha256": "6f84a2230d8e49ae5163013a034e208e098c3de42ffed29ac3fd6cb699187f70"
+  },
+  "adopted_archive_sha256": {
+    "dist/bvh_small_order_adopted/bench_bvh_small_order_compare.py": "f01e4313d0313cafb14635b18b7f3a271eda20f3fa5c0eed4ca992b402ba94c0",
+    "dist/bvh_small_order_adopted/bvh.cu": "57c2db73622e412fc38c06af1324b078452c1e4c274c6eac94b050026ada7c1e",
+    "dist/bvh_small_order_adopted/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+    "dist/bvh_small_order_adopted/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+    "dist/bvh_small_order_adopted/bvh_small_order_final_20261013.json": "b5e37105613b2f589fb16a7c27687aa82793acd3eeda381e43bcd573e8a49da8",
+    "dist/bvh_small_order_adopted/bvh_small_order_probe_20261013.json": "6f84a2230d8e49ae5163013a034e208e098c3de42ffed29ac3fd6cb699187f70",
+    "dist/bvh_small_order_adopted/bvh_small_order_resources_20261013.log": "3b47a88b35a0dd4cb051a85a24b7f6660306beb915356156bb9a5cc06ea875df",
+    "dist/bvh_small_order_adopted/bvh_small_order_sass_20261013.log": "cdcfd0e79b90baa4784e0888e7f0c5edc6ee738e00e7c4fd3ed4f32428e2b567",
+    "dist/bvh_small_order_adopted/test_bvh_small_order.py": "0b922e96f59526fa9e0aa590e115f49620041bfbd5947b9fc9e1f011cb65e730",
+    "dist/bvh_small_order_adopted/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7",
+    "dist/bvh_small_order_adopted/_bvh.cp312-win_amd64.pyd": "cbae13d9ad8c1fb88cff378227ded4abd7061490c82276a47ca2c22acf8233d8",
+    "dist/bvh_small_order_adopted/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845"
+  },
+  "rejected_pf_scan_cache": {
+    "path": "benchmarks/pf_scan_cache_rejected_20261013.json",
+    "sha256": "4a0e7a12453005be274a780e1d8605576d75e4fe8b2a04d4034de971974de8ba"
+  },
+  "retained_components": [
+    "Latest packed-satellite PF source/build/installed restored exactly",
+    "Latest signal batch source/build/installed"
+  ]
+}

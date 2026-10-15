@@ -1,0 +1,145 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -3901,6 +3901,39 @@
+     CUDA_CHECK(cudaStreamSynchronize(state->stream));
+     CUDA_CHECK(cudaMemcpy(output, d_out, sz_out, cudaMemcpyDeviceToHost));
+     CUDA_CHECK(cudaFree(d_out));
++}
++
++bool pf_device_gather_from(PFDeviceState* target, const PFDeviceState* source,
++                           const int* ancestors) {
++    // In-place or cross-device copies retain the host migration fallback.
++    if (target == source) return false;
++    cudaPointerAttributes src_attributes, dst_attributes;
++    CUDA_CHECK(cudaPointerGetAttributes(&src_attributes, source->d_px));
++    CUDA_CHECK(cudaPointerGetAttributes(&dst_attributes, target->d_px));
++    int current_device;
++    CUDA_CHECK(cudaGetDevice(&current_device));
++    if (src_attributes.device != dst_attributes.device ||
++        dst_attributes.device != current_device) return false;
++
++    // The source is read on the target's stream. Finish source producers first.
++    CUDA_CHECK(cudaStreamSynchronize(source->stream));
++    target->ess_cached = false;
++    target->covariance_uniform = false;
++    int N = target->n_particles;
++    CUDA_CHECK(cudaMemcpyAsync(target->d_megopolis_idx_a, ancestors,
++        (size_t)N * sizeof(int), cudaMemcpyHostToDevice, target->stream));
++    pfd_megopolis_gather_kernel<<<target->grid_size, BLOCK_SIZE, 0, target->stream>>>(
++        source->d_px, source->d_py, source->d_pz,
++        source->d_vx, source->d_vy, source->d_vz, source->d_vcov, source->d_pcb,
++        target->d_px, target->d_py, target->d_pz,
++        target->d_vx, target->d_vy, target->d_vz, target->d_vcov, target->d_pcb,
++        target->d_megopolis_idx_a, N, true);
++    CUDA_CHECK_LAST();
++    pfd_reset_weights_kernel<<<target->grid_size, BLOCK_SIZE, 0, target->stream>>>(target->d_log_weights, N);
++    CUDA_CHECK_LAST();
++    // Input indices and both states can be reused as soon as this call returns.
++    CUDA_CHECK(cudaStreamSynchronize(target->stream));
++    return true;
+ }
+ 
+ void pf_device_set_particle_states(PFDeviceState* state, const double* input) {
+--- a/include/gnss_gpu/pf_device.h
++++ b/include/gnss_gpu/pf_device.h
+@@ -264,6 +264,12 @@
+ // Synchronizes the stream.
+ void pf_device_get_particle_states(const PFDeviceState* state, double* output);
+ 
++// Copy all 16 fields from source ancestors to a distinct same-device target.
++// Source producers and target completion are synchronized; reset weights once.
++// Returns false without changing states for in-place/cross-device copies.
++bool pf_device_gather_from(PFDeviceState* target, const PFDeviceState* source,
++                           const int* ancestors);
++
+ // Upload full particle states from host:
+ // [x, y, z, cb, mu_vx, mu_vy, mu_vz, Sigma_v(3x3 row-major)].
+ // Resets log-weights to uniform after upload.
+--- a/python/gnss_gpu/_pf_device_bindings.cpp
++++ b/python/gnss_gpu/_pf_device_bindings.cpp
+@@ -1,6 +1,8 @@
+ #include <pybind11/pybind11.h>
+ #include <pybind11/numpy.h>
+ #include <cmath>
++#include <cstdint>
++#include <vector>
+ #include <stdexcept>
+ #include <string>
+ #include "gnss_gpu/pf_device.h"
+@@ -563,6 +565,27 @@
+     }, "Copy full particle states [x,y,z,cb,mu_vx,mu_vy,mu_vz,Sigma_v(3x3)] to host",
+        py::arg("state"));
+ 
++    m.def("pf_device_gather_from", [](gnss_gpu::PFDeviceState* target,
++            const gnss_gpu::PFDeviceState* source,
++            py::array_t<std::int64_t, py::array::c_style | py::array::forcecast> ancestors) {
++        validate_device_state(target, "pf_device_gather_from target");
++        validate_device_state(source, "pf_device_gather_from source");
++        auto r = ancestors.request();
++        if (r.ndim != 1 || r.size != target->n_particles) {
++            throw std::runtime_error("pf_device_gather_from: ancestors length must match target");
++        }
++        const auto* input = static_cast<const std::int64_t*>(r.ptr);
++        std::vector<int> indices((size_t)r.size);
++        for (py::ssize_t i = 0; i < r.size; ++i) {
++            if (input[i] < 0 || input[i] >= source->n_particles) {
++                throw std::runtime_error("pf_device_gather_from: ancestor outside source");
++            }
++            indices[(size_t)i] = static_cast<int>(input[i]);
++        }
++        return gnss_gpu::pf_device_gather_from(target, source, indices.data());
++    }, "Gather full source states into a distinct resident target; reset weights; sync",
++       py::arg("target"), py::arg("source"), py::arg("ancestors"));
++
+     m.def("pf_device_set_particle_states", [](gnss_gpu::PFDeviceState* state,
+                                               py::array_t<double, py::array::c_style | py::array::forcecast> input) {
+         int N = state->n_particles;
+--- a/python/gnss_gpu/pf_device_config.py
++++ b/python/gnss_gpu/pf_device_config.py
+@@ -84,6 +84,8 @@
+         pf_device_get_particles=pf_device_get_particles,
+         pf_device_get_particle_states=pf_device_get_particle_states,
+         pf_device_set_particle_states=pf_device_set_particle_states,
++        pf_device_gather_from=getattr(
++            import_module("gnss_gpu._gnss_gpu_pf_device"), "pf_device_gather_from", None),
+         pf_device_set_velocity_covariance=getattr(
+             import_module("gnss_gpu._gnss_gpu_pf_device"),
+             "pf_device_set_velocity_covariance", None),
+@@ -133,6 +135,7 @@
+ def attach_pf_device_bindings(pf, bindings: SimpleNamespace) -> None:
+     for name in _BINDING_ATTRS:
+         setattr(pf, f"_{name}", getattr(bindings, name))
++    pf._pf_device_gather_from = getattr(bindings, "pf_device_gather_from", None)
+     pf._pf_device_position_mixture_components = getattr(
+         bindings, "pf_device_position_mixture_components", None)
+     # Older native modules and injected backends retain the existing fallback.
+--- a/python/gnss_gpu/realtime_runtime.py
++++ b/python/gnss_gpu/realtime_runtime.py
+@@ -395,7 +395,14 @@
+     def _migrate(source: _ParticleRuntime, target: _ParticleRuntime) -> None:
+         if not source._initialized:
+             raise RuntimeError("cannot migrate an uninitialized particle runtime")
+-        states = np.asarray(source.get_particle_states(), dtype=np.float64)
++        gather = getattr(target, "_pf_device_gather_from", None)
++        source_state = getattr(source, "_state", None)
++        target_state = getattr(target, "_state", None)
++        source_count = getattr(source_state, "n_particles", 0)
++        resident = (target._initialized and callable(gather) and
++                    gather is getattr(source, "_pf_device_gather_from", None) and
++                    source_state is not None and target_state is not None and source_count > 0)
++        states = None if resident else np.asarray(source.get_particle_states(), dtype=np.float64)
+         log_weights = np.asarray(source.get_log_weights(), dtype=np.float64)
+         finite = np.isfinite(log_weights)
+         if not np.any(finite):
+@@ -412,6 +419,11 @@
+             (np.arange(count, dtype=np.float64) + 0.5) / count,
+             side="left",
+         )
++        if resident:
++            if gather(target_state, source_state, np.minimum(indices, source_count - 1)):
++                target.set_log_weights(np.full(count, -math.log(count), dtype=np.float64))
++                return
++            states = np.asarray(source.get_particle_states(), dtype=np.float64)
+         selected = states[np.minimum(indices, states.shape[0] - 1)]
+         if not target._initialized:
+             target.initialize(

@@ -1,0 +1,210 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -2566,6 +2566,43 @@
+ 
+ // Inline kernel parameters own the nine coefficients for this launch.
+ // Every block copies them before its tail threads may leave the barrier.
++struct PFDPositionMixtureInput {
++    double values[16];  // Up to four [ref_x, ref_y, ref_z, log_mix] records.
++};
++
++template<int COMPONENTS>
++__global__ void pfd_position_mixture_components_kernel(
++    const double* px, const double* py, const double* pz,
++    double* output, int* nonfinite, PFDPositionMixtureInput input,
++    double sigma_squared, int N) {
++    __shared__ double coefficients[16];
++    if (threadIdx.x == 0) {
++        #pragma unroll
++        for (int i = 0; i < 16; ++i) coefficients[i] = input.values[i];
++    }
++    __syncthreads();
++    size_t index = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
++    if (index >= (size_t)N * COMPONENTS) return;
++    int particle = (int)(index / COMPONENTS);
++    int component = (int)(index % COMPONENTS);
++    double x = px[particle], y = py[particle], z = pz[particle];
++    if (!isfinite(x) || !isfinite(y) || !isfinite(z)) {
++        atomicExch(nonfinite, 1);
++        return;
++    }
++    int offset = component * 4;
++    // Match NumPy's individual FP64 nodes, including the initial +0 sum.
++    // Explicit rounding intrinsics prevent multiplication/addition contraction.
++    double dx = __dsub_rn(x, coefficients[offset]);
++    double dy = __dsub_rn(y, coefficients[offset + 1]);
++    double dz = __dsub_rn(z, coefficients[offset + 2]);
++    double distance = __dadd_rn(0.0, __dmul_rn(dx, dx));
++    distance = __dadd_rn(distance, __dmul_rn(dy, dy));
++    distance = __dadd_rn(distance, __dmul_rn(dz, dz));
++    double penalty = __ddiv_rn(__dmul_rn(0.5, distance), sigma_squared);
++    output[index] = __dsub_rn(coefficients[offset + 3], penalty);
++}
++
+ struct PFDUniformVelocityCovariance {
+     double values[9];
+ };
+@@ -3790,6 +3827,44 @@
+ // ============================================================
+ // Get particles (D2H only when explicitly requested)
+ // ============================================================
++
++bool pf_device_position_mixture_components(const PFDeviceState* state,
++    const double* refs, const double* log_mix, int n_components,
++    double sigma_squared, double* output) {
++    PFDPositionMixtureInput input = {};
++    for (int i = 0; i < n_components; ++i) {
++        std::memcpy(input.values + 4 * i, refs + 3 * i, 3 * sizeof(double));
++        input.values[4 * i + 3] = log_mix[i];
++    }
++    // Resampling fully overwrites the inactive covariance before reading it.
++    // Up to 4N components fit in the existing unused 9N destination array.
++    int* nonfinite = reinterpret_cast<int*>(state->d_reduction_result);
++    CUDA_CHECK(cudaMemsetAsync(nonfinite, 0, sizeof(int), state->stream));
++    size_t count = (size_t)state->n_particles * n_components;
++    unsigned int grid = (unsigned int)((count + BLOCK_SIZE - 1) / BLOCK_SIZE);
++    if (n_components == 2) {
++        pfd_position_mixture_components_kernel<2><<<grid, BLOCK_SIZE, 0, state->stream>>>(
++            state->d_px, state->d_py, state->d_pz, state->d_vcov_tmp,
++            nonfinite, input, sigma_squared, state->n_particles);
++    } else if (n_components == 3) {
++        pfd_position_mixture_components_kernel<3><<<grid, BLOCK_SIZE, 0, state->stream>>>(
++            state->d_px, state->d_py, state->d_pz, state->d_vcov_tmp,
++            nonfinite, input, sigma_squared, state->n_particles);
++    } else {
++        pfd_position_mixture_components_kernel<4><<<grid, BLOCK_SIZE, 0, state->stream>>>(
++            state->d_px, state->d_py, state->d_pz, state->d_vcov_tmp,
++            nonfinite, input, sigma_squared, state->n_particles);
++    }
++    CUDA_CHECK_LAST();
++    int* flag = reinterpret_cast<int*>(state->h_result_pinned);
++    CUDA_CHECK(cudaMemcpyAsync(flag, nonfinite, sizeof(int), cudaMemcpyDeviceToHost, state->stream));
++    CUDA_CHECK(cudaStreamSynchronize(state->stream));
++    if (*flag != 0) return false;
++    CUDA_CHECK(cudaMemcpyAsync(output, state->d_vcov_tmp, count * sizeof(double),
++                               cudaMemcpyDeviceToHost, state->stream));
++    CUDA_CHECK(cudaStreamSynchronize(state->stream));
++    return true;
++}
+ 
+ void pf_device_get_particles(const PFDeviceState* state, double* output) {
+     int N = state->n_particles;
+--- a/include/gnss_gpu/pf_device.h
++++ b/include/gnss_gpu/pf_device.h
+@@ -248,6 +248,14 @@
+ // Estimate - compute weighted mean on device, return [4] to host
+ void pf_device_estimate(const PFDeviceState* state, double* result);
+ 
++// Exact FP64 Gaussian components for 2-4 finite reference positions.
++// Returns false for nonfinite particle coordinates so the CPU path can retain
++// its original NaN payload/error behavior. Uses inactive covariance scratch;
++// synchronizes, and preserves every logical particle field, weight and ESS.
++bool pf_device_position_mixture_components(const PFDeviceState* state,
++    const double* refs, const double* log_mix, int n_components,
++    double sigma_squared, double* output);
++
+ // Copy particles to host for visualization (only when needed)
+ void pf_device_get_particles(const PFDeviceState* state, double* output);
+ 
+--- a/python/gnss_gpu/_pf_device_bindings.cpp
++++ b/python/gnss_gpu/_pf_device_bindings.cpp
+@@ -516,6 +516,35 @@
+     }, "Compute weighted mean on device, return [4] to host",
+        py::arg("state"));
+ 
++    m.def("pf_device_position_mixture_components", [](const gnss_gpu::PFDeviceState* state,
++        py::array_t<double, py::array::c_style | py::array::forcecast> refs,
++        py::array_t<double, py::array::c_style | py::array::forcecast> log_mix,
++        double sigma_squared) -> py::object {
++        validate_device_state(state, "pf_device_position_mixture_components");
++        auto r = refs.request(), w = log_mix.request();
++        if (r.ndim != 2 || r.shape[1] != 3 || r.shape[0] < 2 || r.shape[0] > 4) {
++            throw std::runtime_error("refs shape must be (2..4, 3)");
++        }
++        if (w.ndim != 1 || w.size != r.shape[0]) {
++            throw std::runtime_error("log_mix length must match refs");
++        }
++        ensure_finite_doubles(r, "refs must be finite");
++        const double* weights = static_cast<const double*>(w.ptr);
++        for (py::ssize_t i = 0; i < w.size; ++i) {
++            if (std::isnan(weights[i]) || weights[i] == INFINITY) {
++                throw std::runtime_error("log_mix must be finite or negative infinity");
++            }
++        }
++        validate_positive_finite(sigma_squared, "sigma_squared");
++        py::array_t<double> output({state->n_particles, static_cast<int>(r.shape[0])});
++        bool finite = gnss_gpu::pf_device_position_mixture_components(state,
++            static_cast<const double*>(r.ptr), weights, static_cast<int>(r.shape[0]),
++            sigma_squared, output.mutable_data());
++        if (!finite) return py::none();
++        return output;
++    }, "Exact FP64 mixture components, or None for a nonfinite-coordinate CPU fallback",
++       py::arg("state"), py::arg("refs"), py::arg("log_mix"), py::arg("sigma_squared"));
++
+     m.def("pf_device_get_particles", [](const gnss_gpu::PFDeviceState* state) {
+         int N = state->n_particles;
+         auto output = py::array_t<double>({N, 4});
+--- a/python/gnss_gpu/pf_device_runtime.py
++++ b/python/gnss_gpu/pf_device_runtime.py
+@@ -941,6 +941,40 @@
+             else:
+                 mix = mix / total
+ 
++        components_on_device = getattr(self, "_pf_device_position_mixture_components", None)
++        use_device = (components_on_device is not None and 2 <= refs.shape[0] <= 4
++                      and self.n_particles * refs.shape[0] > 65536
++                      and np.isfinite(sigma * sigma))
++        if use_device:
++            error_modes = np.geterr().values()
++            use_device = all(mode in ("warn", "ignore") for mode in error_modes)
++            if use_device and "warn" in error_modes:
++                import warnings
++                use_device = not any(
++                    action == "error" and issubclass(RuntimeWarning, category)
++                    for action, _, category, _, _ in warnings.filters
++                )
++        if use_device:
++            log_mix = np.log(mix[np.newaxis, :])
++            components = components_on_device(self._state, refs, log_mix.ravel(), sigma * sigma)
++            if components is not None:
++                log_weights = np.asarray(self.get_log_weights(), dtype=np.float64)
++                increment = np.full(log_weights.shape, -np.inf, dtype=np.float64)
++                rows_per_chunk = max(1, 65536 // refs.shape[0])
++                for start in range(0, log_weights.size, rows_per_chunk):
++                    stop = min(start + rows_per_chunk, log_weights.size)
++                    log_components = components[start:stop]
++                    max_log = np.max(log_components, axis=1)
++                    finite = np.isfinite(max_log)
++                    selected = log_components[finite]
++                    np.subtract(selected, max_log[finite, np.newaxis], out=selected)
++                    np.exp(selected, out=selected)
++                    sum_exp = np.sum(selected, axis=1)
++                    np.log(sum_exp, out=sum_exp)
++                    increment[start:stop][finite] = max_log[finite] + sum_exp
++                self.set_log_weights(log_weights + increment)
++                return
++
+         particles = np.asarray(self.get_particles(), dtype=np.float64)
+         log_weights = np.asarray(self.get_log_weights(), dtype=np.float64)
+         use_chunks = particles.shape[0] * refs.shape[0] > 65536
+--- a/python/gnss_gpu/pf_device_config.py
++++ b/python/gnss_gpu/pf_device_config.py
+@@ -87,6 +87,9 @@
+         pf_device_set_velocity_covariance=getattr(
+             import_module("gnss_gpu._gnss_gpu_pf_device"),
+             "pf_device_set_velocity_covariance", None),
++        pf_device_position_mixture_components=getattr(
++            import_module("gnss_gpu._gnss_gpu_pf_device"),
++            "pf_device_position_mixture_components", None),
+         pf_device_get_log_weights=pf_device_get_log_weights,
+         pf_device_set_log_weights=pf_device_set_log_weights,
+         pf_device_get_resample_ancestors=pf_device_get_resample_ancestors,
+@@ -130,6 +133,8 @@
+ def attach_pf_device_bindings(pf, bindings: SimpleNamespace) -> None:
+     for name in _BINDING_ATTRS:
+         setattr(pf, f"_{name}", getattr(bindings, name))
++    pf._pf_device_position_mixture_components = getattr(
++        bindings, "pf_device_position_mixture_components", None)
+     # Older native modules and injected backends retain the existing fallback.
+     pf._pf_device_set_velocity_covariance = getattr(
+         bindings, "pf_device_set_velocity_covariance", None)

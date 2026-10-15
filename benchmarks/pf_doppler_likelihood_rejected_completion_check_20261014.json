@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-14T01:57:27.390491+00:00",
+  "verified": true,
+  "adopted": false,
+  "rejected_candidate_archived": true,
+  "original_source_build_installed_match": true,
+  "measurement_report": {
+    "path": "benchmarks/pf_doppler_likelihood_rejected_20261014.json",
+    "sha256": "776f9a21d5bf0f1e0e7b758d6bd51e22f4dce1a917fb9937b2ec41e6a88322ae"
+  },
+  "device_code_report": {
+    "path": "benchmarks/pf_doppler_likelihood_device_code_20261013.json",
+    "sha256": "90853c4dff9f4c4cdc21841281ac5ef4c3159df1cb3e0d709b30690a25141ddd"
+  },
+  "exact_records": 1925,
+  "preliminary_conditions": 14,
+  "rounds": 3,
+  "repeats": 5,
+  "candidate_old_gpu_bodies_and_resources_retained": 77,
+  "candidate_added_unused_kernels": 6,
+  "restored_original_existing_tests_passed": 781,
+  "additional_candidate_regression_and_sanitizers_run": false,
+  "retained": {
+    "benchmarks/pf_common_predict_gpu_20261014.json": {
+      "reference_sha256": "f71e21caebf4c278439dced71accde380984396ea009a3eed21702552bcea39c",
+      "source_sha256": {
+        "src/particle_filter/pf_device.cu": "19966c2f93f26de154c9ac3ceef809281197534311f0ab3e886a7c8e67f9a7d0",
+        "include/gnss_gpu/pf_device.h": "a2739ef2861995b4d769415651dc6c8f0acf5da6e5caf94d29f977fd8e9b8bc5",
+        "python/gnss_gpu/_pf_device_bindings.cpp": "56fdb9e2568d263595aae3ab66e42d5df70e8ccd6c2b6d08c61d00d4b30edaf5",
+        "python/gnss_gpu/pf_device_runtime.py": "a24c892f58e39e4cde99737273cfe23b807df9cc971269f571249f03e9d93ad2",
+        "python/gnss_gpu/pf_device_config.py": "c6c17c4f926a2182ebe27dfd23a6e9c8b1f49c59c238a51feb6dd7b2814fce69"
+      },
+      "extension_sha256": "f90293783fec2128ca395869d08020b7e78c6c1846749b7b9925e3cf4e3cca49"
+    },
+    "benchmarks/bvh_parallel_mirror_chunks_gpu_20261013.json": {
+      "reference_sha256": "bcda1df440f75615bc2d869e031b039f3499d2318444243ef62b4e88d0215cd8",
+      "source_sha256": {
+        "src/raytrace/bvh.cu": "7154bcaa5422872b3ed1422cd632eb36f40998660ce3ad108a07fb38cddedcc1",
+        "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+        "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+        "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+        "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+      },
+      "extension_sha256": "e99a8ddb576d98e00a2efe90fc40e67a2ca17452c7e0eec23293d46f3032ae1c"
+    },
+    "benchmarks/signal_wide_static_gpu_20261014.json": {
+      "reference_sha256": "086e17293f916911ae63de639b76adf6371b15c514b535e9668fcb43b360d222",
+      "source_sha256": {
+        "src/signal_sim/signal_sim.cu": "31dc2c2a6e06d9f020c1b054371f0652c777dc3a6724f8a46b99297cda18be41",
+        "include/gnss_gpu/signal_sim.h": "2788f41ff6175da2d6c0db5212470ab3759f4e350d91f977a532e48fc70fa945",
+        "python/gnss_gpu/_signal_sim_bindings.cpp": "524f9460570f0b39f4165f8fb6526af927e6c2c8f39ff661c2731d34ee82bcff",
+        "python/gnss_gpu/signal_sim.py": "f316c47c4a9a9359498e6905f8d6afa8046f7b631f876e258074d44d527780d4",
+        "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+      },
+      "extension_sha256": "3ae8d0dc0c6136167fe4e1adde91972ce75fe0f00f3714021bd5bed851bfd5c6"
+    }
+  },
+  "public_text_files_checked": 2661,
+  "public_device_label_clean": true,
+  "precision_limit": "No tolerance relaxation;no new long real-data positioning-error distribution evaluated."
+}

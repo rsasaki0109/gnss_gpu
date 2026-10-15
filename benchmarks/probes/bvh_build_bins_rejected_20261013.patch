@@ -1,0 +1,61 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -93,30 +93,38 @@
+   double parent_sa = aabb_surface_area(bounds);
+   if (parent_sa < 1e-30) parent_sa = 1e-30;
+ 
++  // Accumulate each axis in the original triangle order, reading geometry
++  // once instead of rescanning the same indexed records for every axis.
++  bool active_axis[3];
++  double bin_width[3];
++  int bin_counts[3][SAH_BINS] = {};
++  AABB all_bin_bounds[3][SAH_BINS];
+   for (int axis = 0; axis < 3; axis++) {
+-    double axis_min = bounds.min[axis];
+-    double axis_max = bounds.max[axis];
+-    if (axis_max - axis_min < 1e-15) continue;
+-
+-    double bin_width = (axis_max - axis_min) / SAH_BINS;
+-
+-    // Count triangles per bin and compute bin bounds
+-    int bin_count[SAH_BINS] = {};
+-    AABB bin_bounds[SAH_BINS];
++    active_axis[axis] = !(bounds.max[axis] - bounds.min[axis] < 1e-15);
++    if (!active_axis[axis]) continue;
++    bin_width[axis] = (bounds.max[axis] - bounds.min[axis]) / SAH_BINS;
+     for (int b = 0; b < SAH_BINS; b++) {
+-      bin_bounds[b].min[0] = bin_bounds[b].min[1] = bin_bounds[b].min[2] = DBL_MAX;
+-      bin_bounds[b].max[0] = bin_bounds[b].max[1] = bin_bounds[b].max[2] = -DBL_MAX;
+-    }
+-
+-    for (int i = start; i < end; i++) {
+-      double c = geometry[indices[i]].centroid[axis];
+-      int b = (int)((c - axis_min) / bin_width);
++      all_bin_bounds[axis][b].min[0] = all_bin_bounds[axis][b].min[1] = all_bin_bounds[axis][b].min[2] = DBL_MAX;
++      all_bin_bounds[axis][b].max[0] = all_bin_bounds[axis][b].max[1] = all_bin_bounds[axis][b].max[2] = -DBL_MAX;
++    }
++  }
++  for (int i = start; i < end; i++) {
++    const BuildTriangle& triangle = geometry[indices[i]];
++    for (int axis = 0; axis < 3; axis++) {
++      if (!active_axis[axis]) continue;
++      double c = triangle.centroid[axis];
++      int b = (int)((c - bounds.min[axis]) / bin_width[axis]);
+       if (b < 0) b = 0;
+       if (b >= SAH_BINS) b = SAH_BINS - 1;
+-      bin_count[b]++;
+-      AABB tb = geometry[indices[i]].bounds;
+-      bin_bounds[b] = union_aabb(bin_bounds[b], tb);
+-    }
++      bin_counts[axis][b]++;
++      all_bin_bounds[axis][b] = union_aabb(all_bin_bounds[axis][b], triangle.bounds);
++    }
++  }
++
++  for (int axis = 0; axis < 3; axis++) {
++    if (!active_axis[axis]) continue;
++    const int* bin_count = bin_counts[axis];
++    const AABB* bin_bounds = all_bin_bounds[axis];
+ 
+     // Sweep from left: prefix counts and bounds
+     AABB left_bounds[SAH_BINS - 1];

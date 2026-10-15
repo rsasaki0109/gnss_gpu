@@ -1,0 +1,509 @@
+{
+  "scope": "CPU robust_spp calls on synthetic observations; no whole estimator or GPU claim",
+  "python_version": "3.12.10",
+  "numpy_version": "2.3.4",
+  "baseline_commit": "c09dc38b00e29022f1e8f1dc504482329a5fe25b",
+  "reference_source_sha256": "7d61ca64502477f3286ee7a7cb8736fbc1809698d0eb5cdf12206f89a5f15c63",
+  "current_source_sha256": "9780ba470740d156f34aaff29e79155ff184f62449df9bfd17f5b25e66df5a2d",
+  "rounds": 7,
+  "calls_per_round": 100,
+  "host_isolation_established": false,
+  "position_tolerance_m": 1e-08,
+  "cases": [
+    {
+      "satellites": 8,
+      "case": "clean",
+      "per_call_us": {
+        "reference": [
+          390.926,
+          376.37,
+          368.659,
+          469.267,
+          342.264,
+          424.423,
+          382.747
+        ],
+        "current": [
+          422.498,
+          335.343,
+          320.743,
+          294.863,
+          291.575,
+          293.096,
+          255.796
+        ]
+      },
+      "median_us": {
+        "reference": 382.747,
+        "current": 294.863
+      },
+      "speedup": 1.2980502809779457,
+      "max_position_difference_m": 0.0,
+      "position_bit_identical": true,
+      "inputs_unchanged": true,
+      "removed_dense_weight_matrix_bytes": 512
+    },
+    {
+      "satellites": 8,
+      "case": "cauchy_outlier",
+      "per_call_us": {
+        "reference": [
+          864.105,
+          1229.684,
+          774.0,
+          842.144,
+          842.443,
+          836.989,
+          1118.756
+        ],
+        "current": [
+          680.736,
+          922.921,
+          694.439,
+          601.529,
+          654.994,
+          560.393,
+          650.278
+        ]
+      },
+      "median_us": {
+        "reference": 842.443,
+        "current": 654.994
+      },
+      "speedup": 1.2861843009248939,
+      "max_position_difference_m": 0.0,
+      "position_bit_identical": true,
+      "inputs_unchanged": true,
+      "removed_dense_weight_matrix_bytes": 512
+    },
+    {
+      "satellites": 8,
+      "case": "huber_outlier",
+      "per_call_us": {
+        "reference": [
+          994.215,
+          872.495,
+          769.585,
+          811.598,
+          947.725,
+          783.665,
+          845.748
+        ],
+        "current": [
+          720.336,
+          739.75,
+          607.312,
+          640.347,
+          1051.541,
+          646.112,
+          701.908
+        ]
+      },
+      "median_us": {
+        "reference": 845.748,
+        "current": 701.908
+      },
+      "speedup": 1.2049271414487368,
+      "max_position_difference_m": 0.0,
+      "position_bit_identical": true,
+      "inputs_unchanged": true,
+      "removed_dense_weight_matrix_bytes": 512
+    },
+    {
+      "satellites": 16,
+      "case": "clean",
+      "per_call_us": {
+        "reference": [
+          267.13,
+          299.188,
+          308.403,
+          364.27,
+          313.468,
+          314.348,
+          320.895
+        ],
+        "current": [
+          288.13,
+          226.506,
+          293.176,
+          281.42,
+          272.815,
+          274.558,
+          280.866
+        ]
+      },
+      "median_us": {
+        "reference": 313.468,
+        "current": 280.866
+      },
+      "speedup": 1.1160767056176255,
+      "max_position_difference_m": 0.0,
+      "position_bit_identical": true,
+      "inputs_unchanged": true,
+      "removed_dense_weight_matrix_bytes": 2048
+    },
+    {
+      "satellites": 16,
+      "case": "cauchy_outlier",
+      "per_call_us": {
+        "reference": [
+          549.388,
+          457.983,
+          474.493,
+          519.816,
+          575.191,
+          533.187,
+          516.015
+        ],
+        "current": [
+          469.364,
+          393.759,
+          386.596,
+          516.084,
+          471.402,
+          483.177,
+          459.472
+        ]
+      },
+      "median_us": {
+        "reference": 519.816,
+        "current": 469.364
+      },
+      "speedup": 1.1074901355877316,
+      "max_position_difference_m": 0.0,
+      "position_bit_identical": true,
+      "inputs_unchanged": true,
+      "removed_dense_weight_matrix_bytes": 2048
+    },
+    {
+      "satellites": 16,
+      "case": "huber_outlier",
+      "per_call_us": {
+        "reference": [
+          762.664,
+          719.854,
+          825.693,
+          1018.991,
+          617.547,
+          756.669,
+          1338.053
+        ],
+        "current": [
+          603.921,
+          629.638,
+          609.354,
+          1003.267,
+          610.47,
+          578.219,
+          1240.872
+        ]
+      },
+      "median_us": {
+        "reference": 762.664,
+        "current": 610.47
+      },
+      "speedup": 1.249306272216489,
+      "max_position_difference_m": 0.0,
+      "position_bit_identical": true,
+      "inputs_unchanged": true,
+      "removed_dense_weight_matrix_bytes": 2048
+    },
+    {
+      "satellites": 32,
+      "case": "clean",
+      "per_call_us": {
+        "reference": [
+          703.827,
+          785.997,
+          1035.359,
+          1046.254,
+          1014.906,
+          944.903,
+          861.792
+        ],
+        "current": [
+          568.756,
+          500.62,
+          992.958,
+          944.141,
+          699.583,
+          592.248,
+          791.57
+        ]
+      },
+      "median_us": {
+        "reference": 944.903,
+        "current": 699.583
+      },
+      "speedup": 1.3506660396264634,
+      "max_position_difference_m": 0.0,
+      "position_bit_identical": true,
+      "inputs_unchanged": true,
+      "removed_dense_weight_matrix_bytes": 8192
+    },
+    {
+      "satellites": 32,
+      "case": "cauchy_outlier",
+      "per_call_us": {
+        "reference": [
+          1119.909,
+          988.067,
+          1132.369,
+          1528.094,
+          1429.173,
+          1491.545,
+          1494.161
+        ],
+        "current": [
+          765.363,
+          814.347,
+          1210.67,
+          1146.521,
+          1264.96,
+          1279.59,
+          1451.957
+        ]
+      },
+      "median_us": {
+        "reference": 1429.173,
+        "current": 1210.67
+      },
+      "speedup": 1.1804810559442291,
+      "max_position_difference_m": 0.0,
+      "position_bit_identical": true,
+      "inputs_unchanged": true,
+      "removed_dense_weight_matrix_bytes": 8192
+    },
+    {
+      "satellites": 32,
+      "case": "huber_outlier",
+      "per_call_us": {
+        "reference": [
+          1383.388,
+          955.696,
+          876.348,
+          768.851,
+          814.61,
+          946.932,
+          1216.866
+        ],
+        "current": [
+          1013.035,
+          1073.665,
+          754.111,
+          693.321,
+          1013.375,
+          707.691,
+          875.428
+        ]
+      },
+      "median_us": {
+        "reference": 946.932,
+        "current": 875.428
+      },
+      "speedup": 1.0816789044901465,
+      "max_position_difference_m": 0.0,
+      "position_bit_identical": true,
+      "inputs_unchanged": true,
+      "removed_dense_weight_matrix_bytes": 8192
+    },
+    {
+      "satellites": 64,
+      "case": "clean",
+      "per_call_us": {
+        "reference": [
+          878.449,
+          1176.657,
+          867.241,
+          757.109,
+          796.192,
+          1268.634,
+          1062.11
+        ],
+        "current": [
+          890.091,
+          659.311,
+          597.957,
+          587.594,
+          1078.212,
+          944.773,
+          606.101
+        ]
+      },
+      "median_us": {
+        "reference": 878.449,
+        "current": 659.311
+      },
+      "speedup": 1.3323742513017376,
+      "max_position_difference_m": 0.0,
+      "position_bit_identical": true,
+      "inputs_unchanged": true,
+      "removed_dense_weight_matrix_bytes": 32768
+    },
+    {
+      "satellites": 64,
+      "case": "cauchy_outlier",
+      "per_call_us": {
+        "reference": [
+          1058.416,
+          1073.466,
+          1155.944,
+          1689.521,
+          1520.413,
+          1174.988,
+          1571.641
+        ],
+        "current": [
+          824.278,
+          837.975,
+          1199.112,
+          807.132,
+          1181.002,
+          892.013,
+          926.182
+        ]
+      },
+      "median_us": {
+        "reference": 1174.988,
+        "current": 892.013
+      },
+      "speedup": 1.31723192374999,
+      "max_position_difference_m": 0.0,
+      "position_bit_identical": true,
+      "inputs_unchanged": true,
+      "removed_dense_weight_matrix_bytes": 32768
+    },
+    {
+      "satellites": 64,
+      "case": "huber_outlier",
+      "per_call_us": {
+        "reference": [
+          1013.977,
+          1139.277,
+          1171.688,
+          1755.488,
+          1069.863,
+          922.06,
+          643.598
+        ],
+        "current": [
+          946.614,
+          829.425,
+          1251.221,
+          1496.599,
+          801.428,
+          919.837,
+          457.811
+        ]
+      },
+      "median_us": {
+        "reference": 1069.863,
+        "current": 919.837
+      },
+      "speedup": 1.1631006363083896,
+      "max_position_difference_m": 0.0,
+      "position_bit_identical": true,
+      "inputs_unchanged": true,
+      "removed_dense_weight_matrix_bytes": 32768
+    },
+    {
+      "satellites": 96,
+      "case": "clean",
+      "per_call_us": {
+        "reference": [
+          968.684,
+          748.912,
+          756.587,
+          759.173,
+          960.052,
+          896.581,
+          1091.855
+        ],
+        "current": [
+          595.816,
+          580.143,
+          581.023,
+          578.167,
+          585.769,
+          616.954,
+          679.865
+        ]
+      },
+      "median_us": {
+        "reference": 896.581,
+        "current": 585.769
+      },
+      "speedup": 1.5306050678680503,
+      "max_position_difference_m": 0.0,
+      "position_bit_identical": true,
+      "inputs_unchanged": true,
+      "removed_dense_weight_matrix_bytes": 73728
+    },
+    {
+      "satellites": 96,
+      "case": "cauchy_outlier",
+      "per_call_us": {
+        "reference": [
+          1508.337,
+          1082.4,
+          1132.091,
+          1032.998,
+          1167.945,
+          1154.061,
+          1261.736
+        ],
+        "current": [
+          1023.672,
+          1134.047,
+          815.363,
+          931.993,
+          882.645,
+          869.766,
+          987.621
+        ]
+      },
+      "median_us": {
+        "reference": 1154.061,
+        "current": 931.993
+      },
+      "speedup": 1.2382721758639816,
+      "max_position_difference_m": 0.0,
+      "position_bit_identical": true,
+      "inputs_unchanged": true,
+      "removed_dense_weight_matrix_bytes": 73728
+    },
+    {
+      "satellites": 96,
+      "case": "huber_outlier",
+      "per_call_us": {
+        "reference": [
+          1200.554,
+          1033.613,
+          1079.792,
+          1042.703,
+          1103.525,
+          1233.741,
+          1080.178
+        ],
+        "current": [
+          1278.596,
+          782.984,
+          959.908,
+          829.199,
+          1062.366,
+          841.643,
+          750.045
+        ]
+      },
+      "median_us": {
+        "reference": 1080.178,
+        "current": 841.643
+      },
+      "speedup": 1.2834158901101775,
+      "max_position_difference_m": 0.0,
+      "position_bit_identical": true,
+      "inputs_unchanged": true,
+      "removed_dense_weight_matrix_bytes": 73728
+    }
+  ]
+}

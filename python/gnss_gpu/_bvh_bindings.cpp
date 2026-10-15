@@ -1,6 +1,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include "gnss_gpu/bvh.h"
@@ -121,6 +122,100 @@ void validate_batch_rx_sat(const py::buffer_info& brx,
 
 PYBIND11_MODULE(_bvh, m) {
   m.doc() = "BVH-accelerated ray tracing for GNSS NLOS detection";
+
+  py::class_<gnss_gpu::DeviceBVH>(m, "DeviceBVH", py::module_local())
+      .def(py::init([](DoubleArray nodes_flat, DoubleArray sorted_tris) {
+        auto bnodes = nodes_flat.request();
+        auto btri = sorted_tris.request();
+        int n_nodes = 0, n_tri = 0;
+        validate_nodes_flat(bnodes, n_nodes, "DeviceBVH");
+        validate_triangles_mesh(btri, n_tri, "DeviceBVH");
+        const auto* values = static_cast<const double*>(bnodes.ptr);
+        for (int i = 0; i < n_nodes; ++i) {
+          for (int field = 6; field < 10; ++field) {
+            double value = values[(size_t)i * 10 + field];
+            if (value != std::floor(value) || value < std::numeric_limits<int>::min() ||
+                value > std::numeric_limits<int>::max())
+              throw std::runtime_error("DeviceBVH: node indices/counts must be int32 integers");
+          }
+        }
+        auto nodes = unpack_bvh_nodes(bnodes, n_nodes);
+        return std::make_unique<gnss_gpu::DeviceBVH>(
+            nodes.data(), n_nodes, reinterpret_cast<const gnss_gpu::Triangle*>(btri.ptr), n_tri);
+      }), py::arg("nodes_flat"), py::arg("sorted_tris"))
+      .def("close", &gnss_gpu::DeviceBVH::close)
+      .def_property_readonly("allocated_bytes", &gnss_gpu::DeviceBVH::allocated_bytes,
+                            "Total live cudaMalloc request bytes owned by this scene")
+      .def("check_los", [](gnss_gpu::DeviceBVH& scene, DoubleArray rx, DoubleArray sat) {
+        auto brx = rx.request();
+        auto bsat = sat.request();
+        int n_sat = 0;
+        validate_rx_ecef(brx, "DeviceBVH.check_los");
+        validate_sat_ecef(bsat, n_sat, "DeviceBVH.check_los");
+        std::vector<int> flags(n_sat);
+        scene.check_los(static_cast<const double*>(brx.ptr),
+                        static_cast<const double*>(bsat.ptr), flags.data(), n_sat);
+        auto result = py::array_t<bool>(std::vector<py::ssize_t>{n_sat});
+        for (int i = 0; i < n_sat; ++i) result.mutable_data()[i] = flags[i] != 0;
+        return result;
+      }, py::arg("rx_ecef"), py::arg("sat_ecef"))
+      .def("check_los_batch", [](gnss_gpu::DeviceBVH& scene, DoubleArray rx, DoubleArray sat) {
+        auto brx = rx.request();
+        auto bsat = sat.request();
+        int n_epoch = 0, n_sat = 0;
+        validate_batch_rx_sat(brx, bsat, n_epoch, n_sat, "DeviceBVH.check_los_batch");
+        auto flags = py::array_t<int>({n_epoch, n_sat});
+        scene.check_los_batch(static_cast<const double*>(brx.ptr),
+                              static_cast<const double*>(bsat.ptr), flags.mutable_data(),
+                              n_epoch, n_sat);
+        auto result = py::array_t<bool>({n_epoch, n_sat});
+        size_t count = (size_t)n_epoch * n_sat;
+        for (size_t i = 0; i < count; ++i) result.mutable_data()[i] = flags.data()[i] != 0;
+        return result;
+      }, py::arg("rx_ecef"), py::arg("sat_ecef"))
+      .def("multipath_batch", [](gnss_gpu::DeviceBVH& scene, DoubleArray rx, DoubleArray sat) {
+        auto brx = rx.request();
+        auto bsat = sat.request();
+        int n_epoch = 0, n_sat = 0;
+        validate_batch_rx_sat(brx, bsat, n_epoch, n_sat, "DeviceBVH.multipath_batch");
+        auto points = py::array_t<double>({n_epoch, n_sat, 3});
+        auto delays = py::array_t<double>({n_epoch, n_sat});
+        scene.multipath_batch(static_cast<const double*>(brx.ptr),
+                              static_cast<const double*>(bsat.ptr), points.mutable_data(),
+                              delays.mutable_data(), n_epoch, n_sat);
+        return py::make_tuple(points, delays);
+      }, py::arg("rx_ecef"), py::arg("sat_ecef"))
+      .def("trace", [](gnss_gpu::DeviceBVH& scene, DoubleArray rx, DoubleArray sat) {
+        auto brx = rx.request();
+        auto bsat = sat.request();
+        int n_sat = 0;
+        validate_rx_ecef(brx, "DeviceBVH.trace");
+        validate_sat_ecef(bsat, n_sat, "DeviceBVH.trace");
+        std::vector<int> flags(n_sat);
+        auto points = py::array_t<double>({n_sat, 3});
+        auto delays = py::array_t<double>(std::vector<py::ssize_t>{n_sat});
+        scene.trace(static_cast<const double*>(brx.ptr), static_cast<const double*>(bsat.ptr),
+                     flags.data(), points.mutable_data(), delays.mutable_data(), n_sat);
+        auto is_los = py::array_t<bool>(std::vector<py::ssize_t>{n_sat});
+        for (int i = 0; i < n_sat; ++i) is_los.mutable_data()[i] = flags[i] != 0;
+        return py::make_tuple(is_los, points, delays);
+      }, py::arg("rx_ecef"), py::arg("sat_ecef"))
+      .def("trace_batch", [](gnss_gpu::DeviceBVH& scene, DoubleArray rx, DoubleArray sat) {
+        auto brx = rx.request();
+        auto bsat = sat.request();
+        int n_epoch = 0, n_sat = 0;
+        validate_batch_rx_sat(brx, bsat, n_epoch, n_sat, "DeviceBVH.trace_batch");
+        auto flags = py::array_t<int>({n_epoch, n_sat});
+        auto points = py::array_t<double>({n_epoch, n_sat, 3});
+        auto delays = py::array_t<double>({n_epoch, n_sat});
+        scene.trace_batch(static_cast<const double*>(brx.ptr), static_cast<const double*>(bsat.ptr),
+                           flags.mutable_data(), points.mutable_data(), delays.mutable_data(),
+                           n_epoch, n_sat);
+        auto is_los = py::array_t<bool>({n_epoch, n_sat});
+        size_t count = (size_t)n_epoch * n_sat;
+        for (size_t i = 0; i < count; ++i) is_los.mutable_data()[i] = flags.data()[i] != 0;
+        return py::make_tuple(is_los, points, delays);
+      }, py::arg("rx_ecef"), py::arg("sat_ecef"));
 
   m.def("bvh_build", [](DoubleArray triangles) {
     auto btri = triangles.request();

@@ -1,0 +1,165 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -579,6 +579,94 @@
+   normals[ordinal] = result;
+ }
+ 
++// Large ordered batches reuse immutable GPU normals with one thread per ray.
++__global__ void multipath_cached_serial_kernel(const double* rx_ecef,
++                                            const double* sat_ecef,
++                                            const int* triangle_order,
++                                            const ReflectionNormal* normals,
++                                            const Triangle* tris,
++                                            double* reflection_points,
++                                            double* excess_delays,
++                                            int n_epoch, int n_sat, int n_tri) {
++  int tid = blockIdx.x * blockDim.x + threadIdx.x;
++  int total = n_epoch * n_sat;
++  if (tid >= total) return;
++
++  int eid = tid / n_sat;
++  int sid = tid % n_sat;
++
++  double rx[3] = {rx_ecef[eid * 3 + 0],
++                   rx_ecef[eid * 3 + 1],
++                   rx_ecef[eid * 3 + 2]};
++  int sat_offset = (eid * n_sat + sid) * 3;
++  double sat[3] = {sat_ecef[sat_offset + 0],
++                    sat_ecef[sat_offset + 1],
++                    sat_ecef[sat_offset + 2]};
++
++  if (!isfinite(rx[0]) || !isfinite(rx[1]) || !isfinite(rx[2]) ||
++      !isfinite(sat[0]) || !isfinite(sat[1]) || !isfinite(sat[2])) {
++    excess_delays[tid] = 0.0;
++    reflection_points[tid * 3 + 0] = 0.0;
++    reflection_points[tid * 3 + 1] = 0.0;
++    reflection_points[tid * 3 + 2] = 0.0;
++    return;
++  }
++
++  double d_rx_sat = sqrt((rx[0] - sat[0]) * (rx[0] - sat[0]) +
++                          (rx[1] - sat[1]) * (rx[1] - sat[1]) +
++                          (rx[2] - sat[2]) * (rx[2] - sat[2]));
++
++  double best_delay = 0.0;
++  double best_refl[3] = {0.0, 0.0, 0.0};
++  bool found = false;
++
++  // The owner captured the exact right-first traversal, including the
++  // legacy stack limit. Equal delays still retain the first visited triangle.
++  for (int ordinal = 0; ordinal < n_tri; ++ordinal) {
++    const Triangle& tri = tris[triangle_order[ordinal]];
++    const ReflectionNormal& normal = normals[ordinal];
++    if (!normal.valid) continue;
++    double n[3] = {normal.value[0], normal.value[1], normal.value[2]};
++
++    double dv[3] = {rx[0] - tri.v0[0], rx[1] - tri.v0[1], rx[2] - tri.v0[2]};
++    double d = dv[0] * n[0] + dv[1] * n[1] + dv[2] * n[2];
++    double mirror[3] = {rx[0] - 2.0 * d * n[0],
++                         rx[1] - 2.0 * d * n[1],
++                         rx[2] - 2.0 * d * n[2]};
++
++    double dir[3] = {sat[0] - mirror[0], sat[1] - mirror[1], sat[2] - mirror[2]};
++    double dir_len = sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
++    if (dir_len < 1e-15) continue;
++    dir[0] /= dir_len; dir[1] /= dir_len; dir[2] /= dir_len;
++
++    double t;
++    if (!mt_intersect(mirror, dir, tri.v0, tri.v1, tri.v2, t)) continue;
++
++    double refl[3] = {mirror[0] + t * dir[0],
++                       mirror[1] + t * dir[1],
++                       mirror[2] + t * dir[2]};
++
++    double d_rx_refl = sqrt((rx[0] - refl[0]) * (rx[0] - refl[0]) +
++                             (rx[1] - refl[1]) * (rx[1] - refl[1]) +
++                             (rx[2] - refl[2]) * (rx[2] - refl[2]));
++    double d_refl_sat = sqrt((refl[0] - sat[0]) * (refl[0] - sat[0]) +
++                              (refl[1] - sat[1]) * (refl[1] - sat[1]) +
++                              (refl[2] - sat[2]) * (refl[2] - sat[2]));
++    double excess = (d_rx_refl + d_refl_sat) - d_rx_sat;
++
++    if (excess > 0.0 && (!found || excess < best_delay)) {
++      best_delay = excess;
++      best_refl[0] = refl[0]; best_refl[1] = refl[1]; best_refl[2] = refl[2];
++      found = true;
++    }
++  }
++
++  excess_delays[tid] = best_delay;
++  reflection_points[tid * 3 + 0] = best_refl[0];
++  reflection_points[tid * 3 + 1] = best_refl[1];
++  reflection_points[tid * 3 + 2] = best_refl[2];
++}
++
+ struct ReflectionMirror {
+   double point[3];
+ };
+@@ -874,6 +962,7 @@
+   bool normals_ready = false;
+   DeviceBuffer<ReflectionMirror> mirrors;
+   bool mirrors_active = false;
++  bool cached_serial = false;
+ 
+   ~Impl() {
+     int previous = 0;
+@@ -910,14 +999,26 @@
+ 
+   int prepare_multipath(int total, int n_epoch, int n_sat) {
+     mirrors_active = false;
++    cached_serial = false;
+     points.reserve((size_t)total * 3);
+     delays.reserve((size_t)total);
+-    if (!ordered || total > 4096) return 0;
++    if (!ordered) return 0;
+     // LOS-only users do not need this device allocation/upload. Keep the host
+     // order until the first successful parallel reflection call, then release it.
+     if (!host_order.empty()) {
+       order.upload(host_order.data(), host_order.size());
+       std::vector<int>().swap(host_order);
++    }
++    if (total > 4096) {
++      if (!normals_ready) {
++        normals.reserve((size_t)n_order);
++        reflection_normals_kernel<<<(n_order + 255) / 256, 256>>>(
++            triangles.data, order.data, normals.data, n_order);
++        CUDA_CHECK_LAST();
++        normals_ready = true;
++      }
++      cached_serial = true;
++      return 0;
+     }
+     int tiles = std::min(32, std::min(
+         (n_order + MULTIPATH_BLOCK_SIZE - 1) / MULTIPATH_BLOCK_SIZE,
+@@ -961,6 +1062,10 @@
+       multipath_finalize_kernel<<<(total + MULTIPATH_BLOCK_SIZE - 1) / MULTIPATH_BLOCK_SIZE,
+                                   MULTIPATH_BLOCK_SIZE>>>(
+           partial.data, points.data, delays.data, total, tiles);
++    } else if (cached_serial) {
++      multipath_cached_serial_kernel<<<(total + 255) / 256, 256>>>(
++          rx.data, sat.data, order.data, normals.data, triangles.data,
++          points.data, delays.data, n_epoch, n_sat, n_order);
+     } else {
+       multipath_bvh_batch_kernel<<<(total + 255) / 256, 256>>>(
+           rx.data, sat.data, nodes.data, triangles.data, points.data, delays.data,
+--- a/tests/test_bvh_normal_cache.py
++++ b/tests/test_bvh_normal_cache.py
+@@ -155,7 +155,7 @@
+ 
+ 
+ @pytest.mark.parametrize('count', [511, 513])
+-def test_los_only_and_serial_fallback_have_no_eager_reflection_cache(count):
++def test_los_only_has_no_eager_reflection_cache_and_serial_is_lazy(count):
+     nodes, mesh = _mesh(count)
+     scene = native.DeviceBVH(nodes, mesh)
+     try:
+@@ -166,7 +166,8 @@
+         assert scene.allocated_bytes == geometry_bytes + rx.nbytes + sat.nbytes + 4097 * 4
+         scene.multipath_batch(rx, sat)
+         assert scene.allocated_bytes == (
+-            geometry_bytes + rx.nbytes + sat.nbytes + 4097 * (4 + 3 * 8 + 8))
++            geometry_bytes + rx.nbytes + sat.nbytes + 4097 * (4 + 3 * 8 + 8)
++            + (36 * count if count >= 512 else 0))
+     finally:
+         scene.close()
+ 

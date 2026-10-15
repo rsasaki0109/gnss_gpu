@@ -1,0 +1,112 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -53,15 +53,23 @@
+ static const int MAX_LEAF_TRIS = 4;
+ static const int SAH_BINS = 12;
+ 
++// These values depend only on the input mesh. Keep the original FP64
++// calculations, then reuse them throughout partitioning and centroid sorting.
++struct BuildTriangle {
++  AABB bounds;
++  double centroid[3];
++};
++
+ // Recursive top-down build. indices[start..end) are the triangle indices to partition.
+-static int build_recursive(const Triangle* triangles,
++static int build_recursive(const BuildTriangle* geometry,
+                            std::vector<int>& indices, int start, int end,
+-                           std::vector<BVHNode>& nodes) {
++                           std::vector<BVHNode>& nodes,
++                           AABB* prefix_box, AABB* suffix_box) {
+   int count = end - start;
+   // Compute bounds of all triangles in range
+-  AABB bounds = triangle_aabb(triangles[indices[start]]);
++  AABB bounds = geometry[indices[start]].bounds;
+   for (int i = start + 1; i < end; i++) {
+-    bounds = union_aabb(bounds, triangle_aabb(triangles[indices[i]]));
++    bounds = union_aabb(bounds, geometry[indices[i]].bounds);
+   }
+ 
+   // Leaf node
+@@ -101,12 +109,12 @@
+     }
+ 
+     for (int i = start; i < end; i++) {
+-      double c = triangle_centroid(triangles[indices[i]], axis);
++      double c = geometry[indices[i]].centroid[axis];
+       int b = (int)((c - axis_min) / bin_width);
+       if (b < 0) b = 0;
+       if (b >= SAH_BINS) b = SAH_BINS - 1;
+       bin_count[b]++;
+-      AABB tb = triangle_aabb(triangles[indices[i]]);
++      AABB tb = geometry[indices[i]].bounds;
+       bin_bounds[b] = union_aabb(bin_bounds[b], tb);
+     }
+ 
+@@ -170,24 +178,24 @@
+   int axis = best_axis;
+   std::sort(indices.begin() + start, indices.begin() + end,
+             [&](int a, int b) {
+-              return triangle_centroid(triangles[a], axis) <
+-                     triangle_centroid(triangles[b], axis);
++              return geometry[a].centroid[axis] <
++                     geometry[b].centroid[axis];
+             });
+ 
+   // Find best SAH split on sorted array
++  // These buffers are consumed before descending into either child, so
++  // recursive calls can overwrite them without keeping per-node allocations.
+   // Build prefix AABBs
+-  std::vector<AABB> prefix_box(count);
+-  prefix_box[0] = triangle_aabb(triangles[indices[start]]);
++  prefix_box[0] = geometry[indices[start]].bounds;
+   for (int i = 1; i < count; i++) {
+     prefix_box[i] = union_aabb(prefix_box[i - 1],
+-                                triangle_aabb(triangles[indices[start + i]]));
+-  }
+-
+-  std::vector<AABB> suffix_box(count);
+-  suffix_box[count - 1] = triangle_aabb(triangles[indices[start + count - 1]]);
++                                geometry[indices[start + i]].bounds);
++  }
++
++  suffix_box[count - 1] = geometry[indices[start + count - 1]].bounds;
+   for (int i = count - 2; i >= 0; i--) {
+     suffix_box[i] = union_aabb(suffix_box[i + 1],
+-                                triangle_aabb(triangles[indices[start + i]]));
++                                geometry[indices[start + i]].bounds);
+   }
+ 
+   best_cost = DBL_MAX;
+@@ -209,8 +217,10 @@
+   int node_idx = (int)nodes.size();
+   nodes.push_back(BVHNode());  // placeholder
+ 
+-  int left_child = build_recursive(triangles, indices, start, best_split, nodes);
+-  int right_child = build_recursive(triangles, indices, best_split, end, nodes);
++  int left_child = build_recursive(geometry, indices, start, best_split, nodes,
++                                   prefix_box, suffix_box);
++  int right_child = build_recursive(geometry, indices, best_split, end, nodes,
++                                    prefix_box, suffix_box);
+ 
+   nodes[node_idx].bbox = bounds;
+   nodes[node_idx].left = left_child;
+@@ -234,7 +244,17 @@
+   std::vector<BVHNode> node_vec;
+   node_vec.reserve(2 * n_tri);
+ 
+-  build_recursive(triangles, indices, 0, n_tri, node_vec);
++  std::vector<BuildTriangle> geometry(n_tri);
++  for (int i = 0; i < n_tri; i++) {
++    geometry[i].bounds = triangle_aabb(triangles[i]);
++    for (int axis = 0; axis < 3; axis++)
++      geometry[i].centroid[axis] = triangle_centroid(triangles[i], axis);
++  }
++
++  std::vector<AABB> prefix_box(n_tri > MAX_LEAF_TRIS ? n_tri : 0);
++  std::vector<AABB> suffix_box(prefix_box.size());
++  build_recursive(geometry.data(), indices, 0, n_tri, node_vec,
++                  prefix_box.data(), suffix_box.data());
+ 
+   *n_nodes = (int)node_vec.size();
+   for (int i = 0; i < *n_nodes; i++) {

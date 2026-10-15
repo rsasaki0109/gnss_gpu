@@ -14,7 +14,7 @@ budgets, cross-domain validation, and a ROS 2 lifecycle safety boundary.
 | Historical negative controls | 4/4 rejected |
 | DDPR structure | 2/3 WP163 ranks recovered; 0 WP164 false passes |
 | Outage recovery | 3 evidence epochs; greedy 10.0 m vs retained 0.0 m |
-| GTX 1660 Ti runtime | normal max 13.761 ms; search max 75.907 ms |
+| NVIDIA CUDA GPU runtime | normal max 13.761 ms; search max 75.907 ms |
 | WP172 candidate supply | 42.653 ms/epoch conservative sequential; 21.826 ms/epoch parallel |
 | Runtime capacity | 152.588 MiB conservative estimate; 0 deadline misses |
 | Cross-domain positioning | epoch-weighted RMS 17.107 m to 16.916 m |

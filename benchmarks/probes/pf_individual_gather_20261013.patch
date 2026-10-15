@@ -1,0 +1,55 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -2770,6 +2770,20 @@
+     }
+ }
+ 
++// Copy covariance before reusing its former source for packed state rows.
++// The component mapping and lane ordering match the original full gather.
++__global__ void pfd_gather_resample_covariance_kernel(
++    const double* src, double* dst, const int* indices, int N) {
++    int first = blockIdx.x * blockDim.x;
++    int count = min((int)blockDim.x, N - first);
++    for (int local = threadIdx.x; local < count * 9; local += blockDim.x) {
++        int particle = first + local / 9;
++        int component = local % 9;
++        dst[(size_t)first * 9 + local] =
++            src[(size_t)indices[particle] * 9 + component];
++    }
++}
++
+ // The unused destination covariance has9*N doubles when covariance is
+ // invariant. Use8*N of them as temporary aligned rows of the seven changing
+ // state components; no allocation or persistent representation is added.
+@@ -3534,18 +3548,28 @@
+                                            unsigned long long seed) {
+     int N = state->n_particles;
+     int grid = state->grid_size;
+-    const bool packed_gather = state->covariance_uniform && n_iterations > 0;
++    // Extra covariance copy is amortized only for large, well-mixed gathers.
++    const bool packed_gather = n_iterations > 0 &&
++        (state->covariance_uniform || (N >= 100000 && n_iterations >= 60));
+ 
+     pfd_megopolis_coalesced_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
+         state->d_log_weights, state->d_megopolis_idx_a, N, seed, n_iterations);
+     if (packed_gather) {
++        if (!state->covariance_uniform) {
++            pfd_gather_resample_covariance_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
++                state->d_vcov, state->d_vcov_tmp, state->d_megopolis_idx_a, N);
++            CUDA_CHECK_LAST();
++        }
++        // All active covariance values now belong to the destination. The
++        // former source may be overwritten after that copy on this stream.
++        double* gather_scratch = state->covariance_uniform ? state->d_vcov_tmp : state->d_vcov;
+         pfd_pack_common_resample_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
+             state->d_px, state->d_py, state->d_pz,
+             state->d_vx, state->d_vy, state->d_vz, state->d_pcb,
+-            state->d_vcov_tmp, N);
++            gather_scratch, N);
+         CUDA_CHECK_LAST();
+         pfd_gather_common_packed_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
+-            state->d_vcov_tmp, state->d_megopolis_idx_a,
++            gather_scratch, state->d_megopolis_idx_a,
+             state->d_px_tmp, state->d_py_tmp, state->d_pz_tmp,
+             state->d_vx_tmp, state->d_vy_tmp, state->d_vz_tmp, state->d_pcb_tmp,
+             state->d_log_weights, N);

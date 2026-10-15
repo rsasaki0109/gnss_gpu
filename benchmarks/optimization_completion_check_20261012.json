@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "verified": true,
+  "current_source_build_installed_match": true,
+  "pf_sigma_bit_cases": 6102,
+  "pf_gate_bit_cases": 6102,
+  "pf_extreme_bit_cases": 360,
+  "signal_iq_metadata_bit_cases": 524,
+  "timed_conditions": {
+    "pf_sigma": 32,
+    "pf_gate": 32,
+    "signal_batch": 13
+  },
+  "related_tests": 1218,
+  "sanitizer_tests": 111,
+  "sanitizer_errors": 0,
+  "leaks_bytes": 0,
+  "unchanged_instruction_bodies": {
+    "pf_sigma": 46,
+    "pf_gate": 49,
+    "signal_batch": 5
+  },
+  "public_text_files_scanned": 2378,
+  "public_product_label_violations": 0,
+  "bvh_native_components_retained": true,
+  "artifacts": {
+    "benchmarks/RESULTS.md": "8f080f9da305513be43a109718a8bcc6a927b170560e9f51f3ff71f43c8936ba",
+    "internal_docs/decisions.md": "22acfd83b02628ffee0178991730c72d025d8542ef5fa84b8aba7fd19349b8a4",
+    "benchmarks/pf_dd_sigma_gpu_20261012.json": "58a113e4a52d79f2a493e22cabe3f2f5607b482517ad3158a8dcef3e36cabd3c",
+    "benchmarks/pf_dd_sigma_device_code_20261012.json": "07e170d54bdb1c29ee0bf6d30e611d3a6a7e1907f603dbb9a0e0fd12d195c70b",
+    "benchmarks/pf_dd_gate_gpu_20261012.json": "00043d6a46a44f55e54426c122259a88c9aabb5ac9a5fb48e25c9208e872b6d5",
+    "benchmarks/pf_dd_gate_device_code_20261012.json": "5db3250c8e370e61fa7155d301a97b50cf539654cc30fa74ac3d35ff821612f9",
+    "benchmarks/signal_batch_gpu_20261012.json": "b79f96628f8302018affd8ec4e6048a2f1aa82892cd35f459d94f5d9f9b30ccb",
+    "benchmarks/signal_batch_device_code_20261012.json": "bbc821233c85a56cc9800108b036f91e41800905f4972fd9db7b29c850665467",
+    "benchmarks/pf_dd_extreme_check_20261012.json": "7e924f005e0ea6b081ec4f68a3d8c4dc41e789db9fcd1e81e2f4e308fb29a21a"
+  }
+}

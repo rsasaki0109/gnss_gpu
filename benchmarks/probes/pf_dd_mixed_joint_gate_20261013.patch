@@ -1,0 +1,126 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -1145,6 +1145,71 @@
+     log_weights[tid] = __dadd_rn(pr, cp);
+ }
+ 
++// Mixed joint gates retain per-pair ranges, independent filters and PR/CP rounding.
++template<bool Huber>
++__global__ void pfd_weight_dd_joint_mixed_gated_kernel(
++    const double* px, const double* py, const double* pz, const double* dd_data,
++    double* log_weights, int N, int n_dd, double sigma_pr, double sigma_cycles,
++    double threshold_pr, double threshold_cp, double huber_pr_k, double huber_cp_k) {
++    extern __shared__ double data[];
++    const int size = n_dd * 12;
++    for (int i = threadIdx.x; i < size; i += blockDim.x)
++        data[i] = i >= n_dd * 11 ? 1.0 / dd_data[i] : dd_data[i];
++    __syncthreads();
++    int tid = blockIdx.x * blockDim.x + threadIdx.x;
++    if (tid >= N) return;
++    double x = px[tid], y = py[tid], z = pz[tid];
++    double inv_pr = 0.0, inv_cp = 0.0;
++    if constexpr (!Huber) {
++        inv_pr = 1.0 / (sigma_pr * sigma_pr);
++        inv_cp = 1.0 / (sigma_cycles * sigma_cycles);
++    }
++    double pr_all = 0.0, cp_all = 0.0, pr_kept = 0.0, cp_kept = 0.0;
++    int count_pr = 0, count_cp = 0;
++    bool gate_pr = threshold_pr > 0.0, gate_cp = threshold_cp > 0.0;
++    for (int d = 0; d < n_dd; ++d) {
++        double dx = x - data[d * 3];
++        double dy = y - data[d * 3 + 1];
++        double dz = z - data[d * 3 + 2];
++        double dx_ref = x - data[n_dd * 3 + d * 3];
++        double dy_ref = y - data[n_dd * 3 + d * 3 + 1];
++        double dz_ref = z - data[n_dd * 3 + d * 3 + 2];
++        double r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
++        double range = sqrt(dx * dx + dy * dy + dz * dz) - r_ref
++            - data[n_dd * 8 + d] + data[n_dd * 9 + d];
++        double residual = data[n_dd * 6 + d] - range;
++        double cp_residual = data[n_dd * 7 + d] - range * data[n_dd * 11 + d];
++        double afv = cp_residual - rint(cp_residual);
++        if (gate_pr && fabs(residual) <= threshold_pr) ++count_pr;
++        if (gate_cp && fabs(afv) <= threshold_cp) ++count_cp;
++        double weight = data[n_dd * 10 + d];
++        if constexpr (Huber) {
++            double pr_rho = pfd_weighted_huber_cost(residual, sigma_pr, 1.0, huber_pr_k);
++            double cp_rho = pfd_weighted_huber_cost(afv, sigma_cycles, 1.0, huber_cp_k);
++            double cp_term = -__dmul_rn(weight, cp_rho);
++            pr_all = __fma_rn(-weight, pr_rho, pr_all);
++            cp_all = __dadd_rn(cp_all, cp_term);
++            if (gate_pr && fabs(residual) <= threshold_pr)
++                pr_kept = __fma_rn(-weight, pr_rho, pr_kept);
++            if (gate_cp && fabs(afv) <= threshold_cp)
++                cp_kept = __dadd_rn(cp_kept, cp_term);
++        } else {
++            double pr_term = -0.5 * weight * residual * residual;
++            double cp_term = __dmul_rn(-0.5 * weight * afv * afv, inv_cp);
++            pr_all = __fma_rn(pr_term, inv_pr, pr_all);
++            cp_all = __dadd_rn(cp_all, cp_term);
++            if (gate_pr && fabs(residual) <= threshold_pr)
++                pr_kept = __fma_rn(pr_term, inv_pr, pr_kept);
++            if (gate_cp && fabs(afv) <= threshold_cp)
++                cp_kept = __dadd_rn(cp_kept, cp_term);
++        }
++    }
++    int minimum = n_dd < 3 ? n_dd : 3;
++    double pr = gate_pr && count_pr >= minimum ? pr_kept : pr_all;
++    double cp = gate_cp && count_cp >= minimum ? cp_kept : cp_all;
++    log_weights[tid] = __dadd_rn(pr, cp);
++}
++
+ // --- Doppler velocity-domain update kernel ---
+ // Applies a per-particle Doppler likelihood using each particle's velocity
+ // state, then optionally nudges velocity toward a per-particle WLS solution.
+@@ -3226,14 +3291,43 @@
+                 per_particle_huber_dd_carrier_k);
+         }
+     } else {
+-        pfd_weight_dd_joint_kernel<false><<<
+-            grid, BLOCK_SIZE, (size_t)total_doubles * sizeof(double), state->stream>>>(
+-            state->d_px, state->d_py, state->d_pz,
+-            state->d_obs_scratch, state->d_log_weights,
+-            N, n_dd, sigma_pr, sigma_cycles,
+-            per_particle_nlos_threshold_m, per_particle_nlos_threshold_cycles,
+-            per_particle_huber, per_particle_huber_dd_pr_k,
+-            per_particle_huber_dd_carrier_k);
++        bool fused_huber = per_particle_huber &&
++            per_particle_huber_dd_pr_k > 0.0 && per_particle_huber_dd_carrier_k > 0.0 &&
++            std::isfinite(per_particle_huber_dd_pr_k) && std::isfinite(per_particle_huber_dd_carrier_k);
++        bool fused_gate = n_dd >= 2 && (!per_particle_huber || fused_huber) &&
++            (per_particle_nlos_threshold_m > 0.0 || per_particle_nlos_threshold_cycles > 0.0);
++        if (fused_gate) {
++            for (int i = 0; i < total_doubles; ++i) {
++                if (!std::isfinite(h_buf[i]) || (i >= n_dd * 11 && !(h_buf[i] >= DBL_MIN))) {
++                    fused_gate = false;
++                    break;
++                }
++            }
++        }
++        if (fused_gate && fused_huber) {
++            pfd_weight_dd_joint_mixed_gated_kernel<true><<<
++                grid, BLOCK_SIZE, (size_t)total_doubles * sizeof(double), state->stream>>>(
++                state->d_px, state->d_py, state->d_pz, state->d_obs_scratch, state->d_log_weights,
++                N, n_dd, sigma_pr, sigma_cycles,
++                per_particle_nlos_threshold_m, per_particle_nlos_threshold_cycles,
++                per_particle_huber_dd_pr_k, per_particle_huber_dd_carrier_k);
++        } else if (fused_gate) {
++            pfd_weight_dd_joint_mixed_gated_kernel<false><<<
++                grid, BLOCK_SIZE, (size_t)total_doubles * sizeof(double), state->stream>>>(
++                state->d_px, state->d_py, state->d_pz, state->d_obs_scratch, state->d_log_weights,
++                N, n_dd, sigma_pr, sigma_cycles,
++                per_particle_nlos_threshold_m, per_particle_nlos_threshold_cycles,
++                per_particle_huber_dd_pr_k, per_particle_huber_dd_carrier_k);
++        } else {
++            pfd_weight_dd_joint_kernel<false><<<
++                grid, BLOCK_SIZE, (size_t)total_doubles * sizeof(double), state->stream>>>(
++                state->d_px, state->d_py, state->d_pz,
++                state->d_obs_scratch, state->d_log_weights,
++                N, n_dd, sigma_pr, sigma_cycles,
++                per_particle_nlos_threshold_m, per_particle_nlos_threshold_cycles,
++                per_particle_huber, per_particle_huber_dd_pr_k,
++                per_particle_huber_dd_carrier_k);
++        }
+     }
+     CUDA_CHECK_LAST();
+ }

@@ -1,0 +1,211 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -579,6 +579,36 @@
+   normals[ordinal] = result;
+ }
+ 
++struct ReflectionMirror {
++  double point[3];
++};
++
++// All satellites in an epoch use the same receiver mirror on each triangle.
++// Recompute on every call from the current device rays, using the same FP64
++// operations as candidate evaluation. No receiver-dependent data stays valid
++// across calls without this preparation.
++__global__ void reflection_mirrors_kernel(const double* rx_ecef,
++                                           const Triangle* tris, const int* order,
++                                           const ReflectionNormal* normals,
++                                           ReflectionMirror* mirrors, int count) {
++  int ordinal = blockIdx.x * blockDim.x + threadIdx.x;
++  if (ordinal >= count) return;
++  int epoch = blockIdx.y;
++  ReflectionMirror result = {};
++  const ReflectionNormal& normal = normals[ordinal];
++  if (normal.valid) {
++    const Triangle& tri = tris[order[ordinal]];
++    double rx[3] = {rx_ecef[epoch * 3], rx_ecef[epoch * 3 + 1], rx_ecef[epoch * 3 + 2]};
++    double n[3] = {normal.value[0], normal.value[1], normal.value[2]};
++    double dv[3] = {rx[0] - tri.v0[0], rx[1] - tri.v0[1], rx[2] - tri.v0[2]};
++    double d = dv[0] * n[0] + dv[1] * n[1] + dv[2] * n[2];
++    result.point[0] = rx[0] - 2.0 * d * n[0];
++    result.point[1] = rx[1] - 2.0 * d * n[1];
++    result.point[2] = rx[2] - 2.0 * d * n[2];
++  }
++  mirrors[(size_t)epoch * count + ordinal] = result;
++}
++
+ struct MultipathCandidate {
+   double delay;
+   double point[3];
+@@ -594,11 +624,12 @@
+ 
+ // Keep the arithmetic and intersection thresholds identical to the serial
+ // kernel above. Only independent candidate evaluation and selection are split.
+-template <bool CACHED_NORMALS>
++template <bool CACHED_NORMALS, bool SHARED_MIRRORS>
+ __device__ static bool multipath_candidate(const double rx[3], const double sat[3],
+                                            double d_rx_sat, const Triangle& tri,
+                                            MultipathCandidate& result,
+-                                           const ReflectionNormal* normal) {
++                                           const ReflectionNormal* normal,
++                                           const ReflectionMirror* prepared_mirror) {
+   double n[3];
+   if constexpr (CACHED_NORMALS) {
+     if (!normal->valid) return false;
+@@ -614,11 +645,18 @@
+     n[0] /= nn; n[1] /= nn; n[2] /= nn;
+   }
+ 
+-  double dv[3] = {rx[0] - tri.v0[0], rx[1] - tri.v0[1], rx[2] - tri.v0[2]};
+-  double d = dv[0] * n[0] + dv[1] * n[1] + dv[2] * n[2];
+-  double mirror[3] = {rx[0] - 2.0 * d * n[0],
+-                       rx[1] - 2.0 * d * n[1],
+-                       rx[2] - 2.0 * d * n[2]};
++  double mirror[3];
++  if constexpr (SHARED_MIRRORS) {
++    mirror[0] = prepared_mirror->point[0];
++    mirror[1] = prepared_mirror->point[1];
++    mirror[2] = prepared_mirror->point[2];
++  } else {
++    double dv[3] = {rx[0] - tri.v0[0], rx[1] - tri.v0[1], rx[2] - tri.v0[2]};
++    double d = dv[0] * n[0] + dv[1] * n[1] + dv[2] * n[2];
++    mirror[0] = rx[0] - 2.0 * d * n[0];
++    mirror[1] = rx[1] - 2.0 * d * n[1];
++    mirror[2] = rx[2] - 2.0 * d * n[2];
++  }
+ 
+   double dir[3] = {sat[0] - mirror[0], sat[1] - mirror[1], sat[2] - mirror[2]};
+   double dir_len = sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
+@@ -646,14 +684,15 @@
+ 
+ static const int MULTIPATH_BLOCK_SIZE = 128;
+ 
+-template <bool CACHED_NORMALS>
++template <bool CACHED_NORMALS, bool SHARED_MIRRORS>
+ __global__ void multipath_candidates_kernel(const double* rx_ecef,
+                                             const double* sat_ecef,
+                                             const Triangle* tris,
+                                             const int* triangle_order,
+                                             MultipathCandidate* partial,
+                                             int n_sat, int n_tri, int tiles,
+-                                            const ReflectionNormal* normals) {
++                                            const ReflectionNormal* normals,
++                                            const ReflectionMirror* mirrors) {
+   int ray = blockIdx.x / tiles;
+   int tile = blockIdx.x % tiles;
+   int eid = ray / n_sat;
+@@ -675,8 +714,10 @@
+     candidate.order = ordinal;
+     const ReflectionNormal* normal = nullptr;
+     if constexpr (CACHED_NORMALS) normal = normals + ordinal;
+-    if (multipath_candidate<CACHED_NORMALS>(
+-            rx, sat, d_rx_sat, tris[triangle_order[ordinal]], candidate, normal) &&
++    const ReflectionMirror* mirror = nullptr;
++    if constexpr (SHARED_MIRRORS) mirror = mirrors + (size_t)eid * n_tri + ordinal;
++    if (multipath_candidate<CACHED_NORMALS, SHARED_MIRRORS>(
++            rx, sat, d_rx_sat, tris[triangle_order[ordinal]], candidate, normal, mirror) &&
+         better_multipath(candidate, best)) best = candidate;
+   }
+   __shared__ MultipathCandidate winners[MULTIPATH_BLOCK_SIZE];
+@@ -831,6 +872,8 @@
+   DeviceBuffer<MultipathCandidate> partial;
+   DeviceBuffer<ReflectionNormal> normals;
+   bool normals_ready = false;
++  DeviceBuffer<ReflectionMirror> mirrors;
++  bool mirrors_active = false;
+ 
+   ~Impl() {
+     int previous = 0;
+@@ -838,6 +881,7 @@
+     if (!known || previous != device) cudaSetDevice(device);
+     nodes.reset(); triangles.reset(); order.reset(); los.reset();
+     rx.reset(); sat.reset(); points.reset(); delays.reset(); partial.reset(); normals.reset();
++    mirrors.reset();
+     if (known && previous != device) cudaSetDevice(previous);
+   }
+ 
+@@ -864,7 +908,8 @@
+     CUDA_CHECK_LAST();
+   }
+ 
+-  int prepare_multipath(int total) {
++  int prepare_multipath(int total, int n_epoch, int n_sat) {
++    mirrors_active = false;
+     points.reserve((size_t)total * 3);
+     delays.reserve((size_t)total);
+     if (!ordered || total > 4096) return 0;
+@@ -887,15 +932,31 @@
+       CUDA_CHECK_LAST();
+       normals_ready = true;
+     }
++    // Share receiver-dependent work only when a substantial mesh and satellite
++    // group can amortize the extra launch. Bound retained scratch to 32 MiB;
++    // larger epoch batches use the existing normal-cache candidate instead.
++    size_t mirror_count = (size_t)n_epoch * n_order;
++    mirrors_active = n_order >= 8192 && n_sat >= 16 &&
++        mirror_count <= (32u * 1024u * 1024u) / sizeof(ReflectionMirror);
++    if (mirrors_active) mirrors.reserve(mirror_count);
+     return tiles;
+   }
+ 
+   void launch_multipath(int n_epoch, int n_sat, int tiles) {
+     int total = n_epoch * n_sat;
+     if (tiles) {
+-      multipath_candidates_kernel<true><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
+-          rx.data, sat.data, triangles.data, order.data, partial.data, n_sat, n_order, tiles,
+-          normals.data);
++      if (mirrors_active) {
++        reflection_mirrors_kernel<<<dim3((n_order + 255) / 256, n_epoch), 256>>>(
++            rx.data, triangles.data, order.data, normals.data, mirrors.data, n_order);
++        CUDA_CHECK_LAST();
++        multipath_candidates_kernel<true, true><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
++            rx.data, sat.data, triangles.data, order.data, partial.data, n_sat, n_order, tiles,
++            normals.data, mirrors.data);
++      } else {
++        multipath_candidates_kernel<true, false><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
++            rx.data, sat.data, triangles.data, order.data, partial.data, n_sat, n_order, tiles,
++            normals.data, nullptr);
++      }
+       CUDA_CHECK_LAST();
+       multipath_finalize_kernel<<<(total + MULTIPATH_BLOCK_SIZE - 1) / MULTIPATH_BLOCK_SIZE,
+                                   MULTIPATH_BLOCK_SIZE>>>(
+@@ -924,7 +985,7 @@
+     los.reserve((size_t)total);
+     // Prepare all allocations before either launch, including first-use order
+     // upload. Both kernels then use the same rays on the default stream.
+-    int tiles = prepare_multipath(total);
++    int tiles = prepare_multipath(total, n_epoch, n_sat);
+     launch_los(n_epoch, n_sat, batch);
+     launch_multipath(n_epoch, n_sat, tiles);
+     CUDA_CHECK(cudaDeviceSynchronize());
+@@ -965,7 +1026,8 @@
+       (s.order.capacity + s.los.capacity) * sizeof(int) +
+       (s.rx.capacity + s.sat.capacity + s.points.capacity + s.delays.capacity) * sizeof(double) +
+       s.partial.capacity * sizeof(MultipathCandidate) +
+-      s.normals.capacity * sizeof(ReflectionNormal);
++      s.normals.capacity * sizeof(ReflectionNormal) +
++      s.mirrors.capacity * sizeof(ReflectionMirror);
+ }
+ 
+ void DeviceBVH::check_los(const double* h_rx, const double* h_sat, int* h_los, int n_sat) {
+@@ -1000,7 +1062,7 @@
+   auto& state = *impl_;
+   DeviceScope scope(state.device);
+   int total = state.upload_rays(h_rx, h_sat, n_epoch, n_sat);
+-  int tiles = state.prepare_multipath(total);
++  int tiles = state.prepare_multipath(total, n_epoch, n_sat);
+   state.launch_multipath(n_epoch, n_sat, tiles);
+   CUDA_CHECK(cudaDeviceSynchronize());
+   state.copy_multipath(h_points, h_delays, total);
+@@ -1123,9 +1185,9 @@
+   CUDA_CHECK(cudaMemcpy(d_tri, sorted_tris, sz_tri, cudaMemcpyHostToDevice));
+ 
+   if (parallel) {
+-    multipath_candidates_kernel<false><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
++    multipath_candidates_kernel<false, false><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
+         d_rx, d_sat, d_tri, d_order, d_partial,
+-        n_sat, (int)triangle_order.size(), tiles, nullptr);
++        n_sat, (int)triangle_order.size(), tiles, nullptr, nullptr);
+     CUDA_CHECK_LAST();
+     int grid = (total + MULTIPATH_BLOCK_SIZE - 1) / MULTIPATH_BLOCK_SIZE;
+     multipath_finalize_kernel<<<grid, MULTIPATH_BLOCK_SIZE>>>(

@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-15T03:20:46.184795+00:00",
+  "verified": true,
+  "adopted": true,
+  "measurement_report": {
+    "path": "benchmarks/pf_fused_uniform_gpu_20261015.json",
+    "sha256": "55b91b58a862c8031e3f50ba4f2ca2cd8d82fd1eab7a3a60bd3a096ff786137a"
+  },
+  "device_code_report": {
+    "path": "benchmarks/pf_fused_uniform_device_code_20261013.json",
+    "sha256": "b9877de1229c0b43d351de4bae58bc49b84723ed95dc74be6ce3f1749fde2346"
+  },
+  "source_build_installed_and_archive_match": true,
+  "bit_identical_cases": 6904,
+  "output_cases": 6824,
+  "matched_rejections": 80,
+  "candidate_records_fresh": 6904,
+  "baseline_frozen_D202_records_reused": 6817,
+  "baseline_additional_records_fresh": 87,
+  "regression_passed": 11375,
+  "CPU_lifecycle_regression_included": true,
+  "fresh_fused_sanitizer_tests_each": 87,
+  "memcheck_errors": 0,
+  "leaked_bytes": 0,
+  "racecheck_hazards": 0,
+  "synccheck_errors": 0,
+  "stage_batch_conditions": 36,
+  "per_sample_pairs": 360,
+  "paired_full_state_snapshots": 60,
+  "additional_9_repeat_confirmation_pairs": 135,
+  "traced_host_peak_cases": 6,
+  "lifecycle_cleanup_outside_timing_only_AST_proven": true,
+  "original_validation_source_PE_validators_records_unchanged": true,
+  "all_initial_noisy_measurements_preserved": true,
+  "retained_GPU_bodies_and_resources": 87,
+  "new_GPU_kernels": 1,
+  "new_kernel_resources": {
+    "registers": 28,
+    "stack_bytes": 0,
+    "static_shared_bytes": 1024,
+    "local_bytes": 0
+  },
+  "no_new_CUDA_owner_or_allocation_or_state_layout": true,
+  "original_FP64_threshold_left_selection_all16_state_bits_and_zero_reset": true,
+  "coalesced_covariance_lanes_and_all_lane_barrier_preserved": true,
+  "small_source_full_weight_scan_and_fallback_unchanged": true,
+  "retained_bvh_and_signal": {
+    "benchmarks/bvh_parallel_mirror_chunks_gpu_20261013.json": {
+      "sha256": "bcda1df440f75615bc2d869e031b039f3499d2318444243ef62b4e88d0215cd8",
+      "source_build_installed_match": true
+    },
+    "benchmarks/signal_wide_static_gpu_20261014.json": {
+      "sha256": "086e17293f916911ae63de639b76adf6371b15c514b535e9668fcb43b360d222",
+      "source_build_installed_match": true
+    }
+  },
+  "public_text_files_checked": 2784,
+  "public_device_model_names_absent": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  },
+  "long_real_data_position_error_curve_newly_evaluated": false
+}

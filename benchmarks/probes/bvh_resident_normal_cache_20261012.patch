@@ -1,0 +1,182 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -552,32 +552,67 @@
+   reflection_points[tid * 3 + 2] = best_refl[2];
+ }
+ 
+-struct MultipathCandidate {
+-  double delay;
+-  double point[3];
+-  int order;  // -1 means no reflection; otherwise original traversal ordinal.
++// The scene owns these GPU-computed normals in traversal order. Keeping the
++// original FP64 operations on the device preserves reflection arithmetic.
++struct ReflectionNormal {
++  double value[3];
++  int valid;
+ };
+ 
+-__device__ static bool better_multipath(const MultipathCandidate& a,
+-                                        const MultipathCandidate& b) {
+-  return a.order >= 0 &&
+-      (b.order < 0 || a.delay < b.delay ||
+-       (a.delay == b.delay && a.order < b.order));
+-}
+-
+-// Keep the arithmetic and intersection thresholds identical to the serial
+-// kernel above. Only independent candidate evaluation and selection are split.
+-__device__ static bool multipath_candidate(const double rx[3], const double sat[3],
+-                                           double d_rx_sat, const Triangle& tri,
+-                                           MultipathCandidate& result) {
++__global__ void reflection_normals_kernel(const Triangle* tris, const int* order,
++                                          ReflectionNormal* normals, int count) {
++  int ordinal = blockIdx.x * blockDim.x + threadIdx.x;
++  if (ordinal >= count) return;
++  const Triangle& tri = tris[order[ordinal]];
+   double e1[3] = {tri.v1[0] - tri.v0[0], tri.v1[1] - tri.v0[1], tri.v1[2] - tri.v0[2]};
+   double e2[3] = {tri.v2[0] - tri.v0[0], tri.v2[1] - tri.v0[1], tri.v2[2] - tri.v0[2]};
+   double n[3] = {e1[1] * e2[2] - e1[2] * e2[1],
+                   e1[2] * e2[0] - e1[0] * e2[2],
+                   e1[0] * e2[1] - e1[1] * e2[0]};
+   double nn = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+-  if (nn < 1e-15) return false;
+-  n[0] /= nn; n[1] /= nn; n[2] /= nn;
++  ReflectionNormal result = {};
++  if (!(nn < 1e-15)) {
++    n[0] /= nn; n[1] /= nn; n[2] /= nn;
++    result.value[0] = n[0]; result.value[1] = n[1]; result.value[2] = n[2];
++    result.valid = 1;
++  }
++  normals[ordinal] = result;
++}
++
++struct MultipathCandidate {
++  double delay;
++  double point[3];
++  int order;  // -1 means no reflection; otherwise original traversal ordinal.
++};
++
++__device__ static bool better_multipath(const MultipathCandidate& a,
++                                        const MultipathCandidate& b) {
++  return a.order >= 0 &&
++      (b.order < 0 || a.delay < b.delay ||
++       (a.delay == b.delay && a.order < b.order));
++}
++
++// Keep the arithmetic and intersection thresholds identical to the serial
++// kernel above. Only independent candidate evaluation and selection are split.
++template <bool CACHED_NORMALS>
++__device__ static bool multipath_candidate(const double rx[3], const double sat[3],
++                                           double d_rx_sat, const Triangle& tri,
++                                           MultipathCandidate& result,
++                                           const ReflectionNormal* normal) {
++  double n[3];
++  if constexpr (CACHED_NORMALS) {
++    if (!normal->valid) return false;
++    n[0] = normal->value[0]; n[1] = normal->value[1]; n[2] = normal->value[2];
++  } else {
++    double e1[3] = {tri.v1[0] - tri.v0[0], tri.v1[1] - tri.v0[1], tri.v1[2] - tri.v0[2]};
++    double e2[3] = {tri.v2[0] - tri.v0[0], tri.v2[1] - tri.v0[1], tri.v2[2] - tri.v0[2]};
++    n[0] = e1[1] * e2[2] - e1[2] * e2[1];
++    n[1] = e1[2] * e2[0] - e1[0] * e2[2];
++    n[2] = e1[0] * e2[1] - e1[1] * e2[0];
++    double nn = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
++    if (nn < 1e-15) return false;
++    n[0] /= nn; n[1] /= nn; n[2] /= nn;
++  }
+ 
+   double dv[3] = {rx[0] - tri.v0[0], rx[1] - tri.v0[1], rx[2] - tri.v0[2]};
+   double d = dv[0] * n[0] + dv[1] * n[1] + dv[2] * n[2];
+@@ -611,12 +646,14 @@
+ 
+ static const int MULTIPATH_BLOCK_SIZE = 128;
+ 
++template <bool CACHED_NORMALS>
+ __global__ void multipath_candidates_kernel(const double* rx_ecef,
+                                             const double* sat_ecef,
+                                             const Triangle* tris,
+                                             const int* triangle_order,
+                                             MultipathCandidate* partial,
+-                                            int n_sat, int n_tri, int tiles) {
++                                            int n_sat, int n_tri, int tiles,
++                                            const ReflectionNormal* normals) {
+   int ray = blockIdx.x / tiles;
+   int tile = blockIdx.x % tiles;
+   int eid = ray / n_sat;
+@@ -636,7 +673,10 @@
+        ordinal < n_tri; ordinal += tiles * blockDim.x) {
+     MultipathCandidate candidate = {};
+     candidate.order = ordinal;
+-    if (multipath_candidate(rx, sat, d_rx_sat, tris[triangle_order[ordinal]], candidate) &&
++    const ReflectionNormal* normal = nullptr;
++    if constexpr (CACHED_NORMALS) normal = normals + ordinal;
++    if (multipath_candidate<CACHED_NORMALS>(
++            rx, sat, d_rx_sat, tris[triangle_order[ordinal]], candidate, normal) &&
+         better_multipath(candidate, best)) best = candidate;
+   }
+   __shared__ MultipathCandidate winners[MULTIPATH_BLOCK_SIZE];
+@@ -789,13 +829,15 @@
+   DeviceBuffer<int> order, los;
+   DeviceBuffer<double> rx, sat, points, delays;
+   DeviceBuffer<MultipathCandidate> partial;
++  DeviceBuffer<ReflectionNormal> normals;
++  bool normals_ready = false;
+ 
+   ~Impl() {
+     int previous = 0;
+     bool known = cudaGetDevice(&previous) == cudaSuccess;
+     if (!known || previous != device) cudaSetDevice(device);
+     nodes.reset(); triangles.reset(); order.reset(); los.reset();
+-    rx.reset(); sat.reset(); points.reset(); delays.reset(); partial.reset();
++    rx.reset(); sat.reset(); points.reset(); delays.reset(); partial.reset(); normals.reset();
+     if (known && previous != device) cudaSetDevice(previous);
+   }
+ 
+@@ -836,14 +878,24 @@
+         (n_order + MULTIPATH_BLOCK_SIZE - 1) / MULTIPATH_BLOCK_SIZE,
+         std::max(1, 256 / total)));
+     partial.reserve((size_t)total * tiles);
++    // Prepare only for the parallel reflection path. LOS-only, small meshes and
++    // serial fallback batches do not allocate or launch normal preparation.
++    if (!normals_ready) {
++      normals.reserve((size_t)n_order);
++      reflection_normals_kernel<<<(n_order + 255) / 256, 256>>>(
++          triangles.data, order.data, normals.data, n_order);
++      CUDA_CHECK_LAST();
++      normals_ready = true;
++    }
+     return tiles;
+   }
+ 
+   void launch_multipath(int n_epoch, int n_sat, int tiles) {
+     int total = n_epoch * n_sat;
+     if (tiles) {
+-      multipath_candidates_kernel<<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
+-          rx.data, sat.data, triangles.data, order.data, partial.data, n_sat, n_order, tiles);
++      multipath_candidates_kernel<true><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
++          rx.data, sat.data, triangles.data, order.data, partial.data, n_sat, n_order, tiles,
++          normals.data);
+       CUDA_CHECK_LAST();
+       multipath_finalize_kernel<<<(total + MULTIPATH_BLOCK_SIZE - 1) / MULTIPATH_BLOCK_SIZE,
+                                   MULTIPATH_BLOCK_SIZE>>>(
+@@ -912,7 +964,8 @@
+   return s.nodes.capacity * sizeof(BVHNode) + s.triangles.capacity * sizeof(Triangle) +
+       (s.order.capacity + s.los.capacity) * sizeof(int) +
+       (s.rx.capacity + s.sat.capacity + s.points.capacity + s.delays.capacity) * sizeof(double) +
+-      s.partial.capacity * sizeof(MultipathCandidate);
++      s.partial.capacity * sizeof(MultipathCandidate) +
++      s.normals.capacity * sizeof(ReflectionNormal);
+ }
+ 
+ void DeviceBVH::check_los(const double* h_rx, const double* h_sat, int* h_los, int n_sat) {
+@@ -1070,9 +1123,9 @@
+   CUDA_CHECK(cudaMemcpy(d_tri, sorted_tris, sz_tri, cudaMemcpyHostToDevice));
+ 
+   if (parallel) {
+-    multipath_candidates_kernel<<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
++    multipath_candidates_kernel<false><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
+         d_rx, d_sat, d_tri, d_order, d_partial,
+-        n_sat, (int)triangle_order.size(), tiles);
++        n_sat, (int)triangle_order.size(), tiles, nullptr);
+     CUDA_CHECK_LAST();
+     int grid = (total + MULTIPATH_BLOCK_SIZE - 1) / MULTIPATH_BLOCK_SIZE;
+     multipath_finalize_kernel<<<grid, MULTIPATH_BLOCK_SIZE>>>(

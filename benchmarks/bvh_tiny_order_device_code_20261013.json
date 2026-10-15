@@ -1,0 +1,330 @@
+{
+  "schema_version": 1,
+  "source_sha256": {
+    "baseline": {
+      "src/raytrace/bvh.cu": "57c2db73622e412fc38c06af1324b078452c1e4c274c6eac94b050026ada7c1e",
+      "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+      "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+      "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+      "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+    },
+    "candidate": {
+      "src/raytrace/bvh.cu": "476938faea4f22b8ebfb9974a958d508f4ade98eab98c5b0baa08f0004d498f8",
+      "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+      "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+      "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+      "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+    }
+  },
+  "extension_sha256": {
+    "baseline": "cbae13d9ad8c1fb88cff378227ded4abd7061490c82276a47ca2c22acf8233d8",
+    "candidate": "e211606ac5aa0007c0ed57034f38f413b268cacc44ec4eb8220745f2498e6b33"
+  },
+  "measurement_report": {
+    "path": "benchmarks/bvh_tiny_order_gpu_20261013.json",
+    "sha256": "3d4b9a5c6ffd9536c4da225504055cfc4a531761a1e033ecf70639cd6cd23ec1"
+  },
+  "build_configuration": "CUDA12.8 / MSVC Release / compute7.5 / C++20 / no fast math",
+  "baseline_functions": 10,
+  "candidate_functions": 10,
+  "unchanged_instruction_bodies": 10,
+  "unchanged_preceding_resource_counts": 10,
+  "functions": {
+    "_ZN8gnss_gpu27multipath_candidates_kernelILb0ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "408d155aa283c7943a1d1c2dcfd97a24121d8a93f8c261d368ed0e1072888645",
+      "candidate_normalized_sass_sha256": "408d155aa283c7943a1d1c2dcfd97a24121d8a93f8c261d368ed0e1072888645"
+    },
+    "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "33ffeda1472ce61605d146684de9af42bbd8ad5af23e50777a8f97b84d13c370",
+      "candidate_normalized_sass_sha256": "33ffeda1472ce61605d146684de9af42bbd8ad5af23e50777a8f97b84d13c370"
+    },
+    "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb1EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "549dd5440483debb80be07f4da9184aec7d4db17007ca082a38923421850eb4d",
+      "candidate_normalized_sass_sha256": "549dd5440483debb80be07f4da9184aec7d4db17007ca082a38923421850eb4d"
+    },
+    "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "ac36c4fea909ca1b067b131ead0e807a54c106ebf0c461356758cc5b6d6ab915",
+      "candidate_normalized_sass_sha256": "ac36c4fea909ca1b067b131ead0e807a54c106ebf0c461356758cc5b6d6ab915"
+    },
+    "_ZN8gnss_gpu25reflection_mirrors_kernelEPKdPKNS_8TriangleEPKiPKNS_16ReflectionNormalEPNS_16ReflectionMirrorEi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "091fbf16ae7589c15f53ae37e0aa0735fd200bfd5f1cffb484b457103b5e58a7",
+      "candidate_normalized_sass_sha256": "091fbf16ae7589c15f53ae37e0aa0735fd200bfd5f1cffb484b457103b5e58a7"
+    },
+    "_ZN8gnss_gpu30multipath_cached_serial_kernelEPKdS1_PKiPKNS_16ReflectionNormalEPKNS_8TriangleEPdSA_iii": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "1cf0fe86e5f31ee697995cc91af7eee4d961a96c5bd2d6a4064c3a4509a4ec68",
+      "candidate_normalized_sass_sha256": "1cf0fe86e5f31ee697995cc91af7eee4d961a96c5bd2d6a4064c3a4509a4ec68"
+    },
+    "_ZN8gnss_gpu25reflection_normals_kernelEPKNS_8TriangleEPKiPNS_16ReflectionNormalEi": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "b9822fdcd81636a436a075c4a8fc87689a25aa676632d84065675e5beba93617",
+      "candidate_normalized_sass_sha256": "b9822fdcd81636a436a075c4a8fc87689a25aa676632d84065675e5beba93617"
+    },
+    "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "4e8ae452c1eba3d84027f7eb7600c65dfb6ae0fe2b67d9be0fc4dc54397c5f5a",
+      "candidate_normalized_sass_sha256": "4e8ae452c1eba3d84027f7eb7600c65dfb6ae0fe2b67d9be0fc4dc54397c5f5a"
+    },
+    "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "d12d67b93f6b9e8dad02078a0e2c703fae7520fee4c3d4a56a50d9dd0f6fed42",
+      "candidate_normalized_sass_sha256": "d12d67b93f6b9e8dad02078a0e2c703fae7520fee4c3d4a56a50d9dd0f6fed42"
+    },
+    "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "b0de8f220b77b975c30e402f1db956b9700d7cecd2f034ad234a83bf4e5e9087",
+      "candidate_normalized_sass_sha256": "b0de8f220b77b975c30e402f1db956b9700d7cecd2f034ad234a83bf4e5e9087"
+    }
+  },
+  "resources": {
+    "baseline": {
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb0ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 78,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 78,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb1EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 77,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii": {
+        "registers": 25,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25reflection_mirrors_kernelEPKdPKNS_8TriangleEPKiPKNS_16ReflectionNormalEPNS_16ReflectionMirrorEi": {
+        "registers": 30,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu30multipath_cached_serial_kernelEPKdS1_PKiPKNS_16ReflectionNormalEPKNS_8TriangleEPdSA_iii": {
+        "registers": 85,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25reflection_normals_kernelEPKNS_8TriangleEPKiPNS_16ReflectionNormalEi": {
+        "registers": 36,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii": {
+        "registers": 90,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      }
+    },
+    "candidate": {
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb0ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 78,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 78,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb1EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 77,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii": {
+        "registers": 25,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25reflection_mirrors_kernelEPKdPKNS_8TriangleEPKiPKNS_16ReflectionNormalEPNS_16ReflectionMirrorEi": {
+        "registers": 30,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu30multipath_cached_serial_kernelEPKdS1_PKiPKNS_16ReflectionNormalEPKNS_8TriangleEPdSA_iii": {
+        "registers": 85,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25reflection_normals_kernelEPKNS_8TriangleEPKiPNS_16ReflectionNormalEi": {
+        "registers": 36,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii": {
+        "registers": 90,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      }
+    }
+  },
+  "added_functions": [],
+  "patch": {
+    "path": "benchmarks/probes/bvh_tiny_order_20261013.patch",
+    "sha256": "7ae3a3abe4617dc39386dd6cc45a63b14dc552c0bb7ad1e34071db67d9cadbff",
+    "files": {
+      "src/raytrace/bvh.cu": {
+        "baseline_sha256": "57c2db73622e412fc38c06af1324b078452c1e4c274c6eac94b050026ada7c1e",
+        "candidate_sha256": "476938faea4f22b8ebfb9974a958d508f4ade98eab98c5b0baa08f0004d498f8",
+        "reconstructs_crlf_bytes": true
+      }
+    }
+  },
+  "test_accounting_patch": {
+    "path": "benchmarks/probes/bvh_tiny_order_tests_20261013.patch",
+    "sha256": "a53c6831f308c4e782b1f0bf76114aa8979c9aa138e4b4d6d4c35c621831efe1",
+    "files": {
+      "tests/test_bvh_small_order.py": {
+        "baseline_sha256": "0b922e96f59526fa9e0aa590e115f49620041bfbd5947b9fc9e1f011cb65e730",
+        "candidate_sha256": "0e79a600ce29594064c292036920e69bbf176772f63a9fef46b2ab168d83b8f9",
+        "reconstructs_exact_bytes": true
+      },
+      "tests/test_bvh_normal_cache.py": {
+        "baseline_sha256": "8ecad704ecb21bbcbd9a9043b970b1385882769c62d63a0744fff9095232a723",
+        "candidate_sha256": "be1f9667525750844c9e267677fcfba38a005c86610be013a7f124c3e035c791",
+        "reconstructs_exact_bytes": true
+      },
+      "tests/test_bvh_serial_cache.py": {
+        "baseline_sha256": "3b748764e350841c6c2127f252d0805fb983b2dafd264a6bb318000f30c33e2a",
+        "candidate_sha256": "25405c9266384aaf57ed387e57140af04f029d9361f5647fe3fe4b73491cf331",
+        "reconstructs_exact_bytes": true
+      }
+    }
+  },
+  "normalization": "cuobjdump instruction bodies; collapse whitespace only; retain offsets/encodings/attributes",
+  "dispatch": "Resident referenced triangle floor128->64 for validated captured right-first order; candidate upper16384 rays retained, large_parallel order floor128->64; original stateless threshold512 retained; malformed/shared/overlapping order capture fallback retained",
+  "semantics": "Original FP64 normal/mirror/intersection/positive-delay arithmetic, right-first visit ordinal/tie, sp<62 and nonfinite zeros; all10 preceding device bodies/resources identical; no candidate/ray/model/rounding reduction",
+  "memory": "Lazy order4 + normal32 bytes per visited triangle; bounded 40-byte winner per ray for newly eligible large batches (<=640KiB); prior multi-tile policy on small batches and optional mirror>=8192/<=32MiB retained; LOS-only lazy, owner capacity reuse, close/release",
+  "validation": {
+    "bit_identical_cases": 274,
+    "regression_tests": 2204,
+    "sanitizer_tests": 41,
+    "memcheck_errors": 0,
+    "leaked_bytes": 0,
+    "racecheck_hazards": 0,
+    "synccheck_errors": 0
+  },
+  "test_sha256": {
+    "tests/test_bvh_tiny_order.py": "9d0c1432f65dba0cd7b218dabc3e5d090cf1052e95a82278f66bd5cbe6305965",
+    "tests/test_bvh_small_order.py": "0e79a600ce29594064c292036920e69bbf176772f63a9fef46b2ab168d83b8f9",
+    "tests/test_bvh_normal_cache.py": "be1f9667525750844c9e267677fcfba38a005c86610be013a7f124c3e035c791",
+    "tests/test_bvh_serial_cache.py": "25405c9266384aaf57ed387e57140af04f029d9361f5647fe3fe4b73491cf331"
+  },
+  "affected_timed_conditions_all_five_pairs_improve": [
+    "triangles64/epochs1/satellites1/warm_multipath",
+    "triangles64/epochs1/satellites1/public_warm_trace",
+    "triangles64/epochs1/satellites1/native_cold_trace_close",
+    "triangles64/epochs1/satellites16/warm_multipath",
+    "triangles64/epochs1/satellites16/public_warm_trace",
+    "triangles64/epochs1/satellites16/native_cold_trace_close",
+    "triangles64/epochs129/satellites32/warm_multipath",
+    "triangles64/epochs129/satellites32/public_warm_trace",
+    "triangles64/epochs129/satellites32/native_cold_trace_close",
+    "triangles64/epochs512/satellites32/warm_multipath",
+    "triangles64/epochs512/satellites32/public_warm_trace",
+    "triangles64/epochs512/satellites32/native_cold_trace_close",
+    "triangles96/epochs1/satellites1/warm_multipath",
+    "triangles96/epochs1/satellites1/public_warm_trace",
+    "triangles96/epochs1/satellites1/native_cold_trace_close",
+    "triangles96/epochs1/satellites16/warm_multipath",
+    "triangles96/epochs1/satellites16/public_warm_trace",
+    "triangles96/epochs1/satellites16/native_cold_trace_close",
+    "triangles96/epochs129/satellites32/warm_multipath",
+    "triangles96/epochs129/satellites32/public_warm_trace",
+    "triangles96/epochs129/satellites32/native_cold_trace_close",
+    "triangles96/epochs512/satellites32/warm_multipath",
+    "triangles96/epochs512/satellites32/public_warm_trace",
+    "triangles96/epochs512/satellites32/native_cold_trace_close",
+    "triangles127/epochs1/satellites1/warm_multipath",
+    "triangles127/epochs1/satellites1/public_warm_trace",
+    "triangles127/epochs1/satellites1/native_cold_trace_close",
+    "triangles127/epochs1/satellites16/warm_multipath",
+    "triangles127/epochs1/satellites16/public_warm_trace",
+    "triangles127/epochs1/satellites16/native_cold_trace_close",
+    "triangles127/epochs129/satellites32/warm_multipath",
+    "triangles127/epochs129/satellites32/public_warm_trace",
+    "triangles127/epochs129/satellites32/native_cold_trace_close",
+    "triangles127/epochs512/satellites32/warm_multipath",
+    "triangles127/epochs512/satellites32/public_warm_trace",
+    "triangles127/epochs512/satellites32/native_cold_trace_close"
+  ],
+  "exploratory_probe": {
+    "path": "dist/bvh_tiny_order_probe_20261013.json",
+    "sha256": "1b0f647f1e78f1072e4a8680b91dca57014b4136a58b0b227a3823c02711a57a"
+  },
+  "adopted_archive_sha256": {
+    "dist/bvh_tiny_order_adopted/bench_bvh_tiny_order_compare.py": "7fbd2d63bb8b0c8f288ddd763adff269e805d00fa2f5912037cfed9fb1159471",
+    "dist/bvh_tiny_order_adopted/bvh.cu": "476938faea4f22b8ebfb9974a958d508f4ade98eab98c5b0baa08f0004d498f8",
+    "dist/bvh_tiny_order_adopted/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+    "dist/bvh_tiny_order_adopted/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+    "dist/bvh_tiny_order_adopted/bvh_tiny_order_final_20261013.json": "3d4b9a5c6ffd9536c4da225504055cfc4a531761a1e033ecf70639cd6cd23ec1",
+    "dist/bvh_tiny_order_adopted/bvh_tiny_order_probe_20261013.json": "1b0f647f1e78f1072e4a8680b91dca57014b4136a58b0b227a3823c02711a57a",
+    "dist/bvh_tiny_order_adopted/bvh_tiny_order_resources_20261013.log": "3b47a88b35a0dd4cb051a85a24b7f6660306beb915356156bb9a5cc06ea875df",
+    "dist/bvh_tiny_order_adopted/bvh_tiny_order_sass_20261013.log": "cdcfd0e79b90baa4784e0888e7f0c5edc6ee738e00e7c4fd3ed4f32428e2b567",
+    "dist/bvh_tiny_order_adopted/test_bvh_tiny_order.py": "9d0c1432f65dba0cd7b218dabc3e5d090cf1052e95a82278f66bd5cbe6305965",
+    "dist/bvh_tiny_order_adopted/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7",
+    "dist/bvh_tiny_order_adopted/_bvh.cp312-win_amd64.pyd": "e211606ac5aa0007c0ed57034f38f413b268cacc44ec4eb8220745f2498e6b33",
+    "dist/bvh_tiny_order_adopted/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845"
+  },
+  "rejected_below64_trials": {
+    "path": "benchmarks/bvh_compact_order_rejected_20261013.json",
+    "sha256": "bb9911aa1f60b81d1987cce24fbfb5e185f463a7a22b3f3a09d7d03e7398ef6d"
+  },
+  "rejected_pf_scan_cache": {
+    "path": "benchmarks/pf_scan_cache_rejected_20261013.json",
+    "sha256": "4a0e7a12453005be274a780e1d8605576d75e4fe8b2a04d4034de971974de8ba"
+  },
+  "retained_components": [
+    "Latest packed-satellite PF source/build/installed restored exactly",
+    "Latest signal batch source/build/installed"
+  ]
+}

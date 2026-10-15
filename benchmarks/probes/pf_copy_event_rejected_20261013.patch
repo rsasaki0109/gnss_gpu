@@ -1,0 +1,151 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -2375,6 +2375,8 @@
+ 
+     // CUDA stream for pipelined execution
+     CUDA_CHECK(cudaStreamCreate(&state->stream));
++    CUDA_CHECK(cudaEventCreateWithFlags(&state->satellite_copy_done, cudaEventDisableTiming));
++    CUDA_CHECK(cudaEventCreateWithFlags(&state->obs_copy_done, cudaEventDisableTiming));
+ 
+     // Persistent device buffers for satellite data (pre-allocate for MAX_SATS)
+     state->pinned_capacity = MAX_SATS;
+@@ -2403,6 +2405,12 @@
+ 
+     // Synchronize stream before freeing resources
+     cudaStreamSynchronize(state->stream);
++    cudaEventDestroy(state->satellite_copy_done);
++    cudaEventDestroy(state->obs_copy_done);
++    state->satellite_copy_done = nullptr;
++    state->obs_copy_done = nullptr;
++    state->satellite_copy_recorded = false;
++    state->obs_copy_recorded = false;
+     cudaStreamDestroy(state->stream);
+ 
+     cudaFree(state->d_px);
+@@ -2563,10 +2571,13 @@
+ // ============================================================
+ 
+ static void ensure_obs_scratch(PFDeviceState* state, int required_doubles) {
+-    // The host buffer is pinned and may still be the source of an async copy.
+-    // Synchronizing here makes it safe to overwrite while allowing unrelated
+-    // kernels to remain asynchronous until another packed-observation update.
+-    CUDA_CHECK(cudaStreamSynchronize(state->stream));
++    // Reallocation must wait for device readers too. Otherwise only the
++    // previous H2D still owns this pinned source; later kernels stay queued.
++    if (required_doubles > state->obs_scratch_capacity) {
++        CUDA_CHECK(cudaStreamSynchronize(state->stream));
++    } else if (state->obs_copy_recorded) {
++        CUDA_CHECK(cudaEventSynchronize(state->obs_copy_done));
++    }
+     if (required_doubles <= state->obs_scratch_capacity) return;
+ 
+     cudaFree(state->d_obs_scratch);
+@@ -2578,14 +2589,26 @@
+     state->obs_scratch_capacity = required_doubles;
+ }
+ 
++static void pfd_upload_observation_scratch(PFDeviceState* state,
++    const double* source, size_t bytes) {
++    CUDA_CHECK(cudaMemcpyAsync(state->d_obs_scratch, source, bytes,
++        cudaMemcpyHostToDevice, state->stream));
++    CUDA_CHECK(cudaEventRecord(state->obs_copy_done, state->stream));
++    state->obs_copy_recorded = true;
++}
++
+ // PR, GMM and undifferenced carrier updates share the same five-column
+ // layout. Keep one owning allocation and refresh the current-length aliases.
+ static void pfd_stage_satellite_observations(PFDeviceState* state,
+     const double* sat_ecef, const double* observations, const double* weights,
+     int n_sat) {
+-    // Both the preceding kernel and pinned-source H2D must finish before the
+-    // shared buffers are overwritten or grown, exactly as for the old staging.
+-    CUDA_CHECK(cudaStreamSynchronize(state->stream));
++    // The next H2D follows all prior device readers on the same stream.
++    // Reuse the host source once its copy ends; growth must finish readers too.
++    if (n_sat > state->pinned_capacity) {
++        CUDA_CHECK(cudaStreamSynchronize(state->stream));
++    } else if (state->satellite_copy_recorded) {
++        CUDA_CHECK(cudaEventSynchronize(state->satellite_copy_done));
++    }
+     if (n_sat > state->pinned_capacity) {
+         CUDA_CHECK(cudaFreeHost(state->h_sat_pinned));
+         state->h_sat_pinned = nullptr;
+@@ -2606,6 +2629,8 @@
+     state->d_weights_sat = state->d_pseudoranges + values;
+     CUDA_CHECK(cudaMemcpyAsync(state->d_sat_ecef, state->h_sat_pinned,
+         (coordinates + 2 * values) * sizeof(double), cudaMemcpyHostToDevice, state->stream));
++    CUDA_CHECK(cudaEventRecord(state->satellite_copy_done, state->stream));
++    state->satellite_copy_recorded = true;
+ }
+ 
+ void pf_device_weight(PFDeviceState* state,
+@@ -2720,9 +2745,7 @@
+     memcpy(h_buf + off, base_range_ref, n_dd * sizeof(double)); off += n_dd;
+     memcpy(h_buf + off, weights_dd, n_dd * sizeof(double)); off += n_dd;
+ 
+-    CUDA_CHECK(cudaMemcpyAsync(
+-        state->d_obs_scratch, h_buf, total_bytes,
+-        cudaMemcpyHostToDevice, state->stream));
++    pfd_upload_observation_scratch(state, h_buf, total_bytes);
+ 
+     size_t smem = (size_t)total_doubles * sizeof(double);
+     if (pfd_has_common_dd_reference(ref_ecef, n_dd)) {
+@@ -3231,8 +3254,7 @@
+     memcpy(h_buf + off, weights_dd, n_dd * sizeof(double)); off += n_dd;
+     memcpy(h_buf + off, wavelengths_m, n_dd * sizeof(double)); off += n_dd;
+ 
+-    CUDA_CHECK(cudaMemcpyAsync(state->d_obs_scratch, h_buf, total_bytes,
+-                                cudaMemcpyHostToDevice, state->stream));
++    pfd_upload_observation_scratch(state, h_buf, total_bytes);
+ 
+     // Launch DD-AFV kernel
+     size_t smem = (size_t)total_doubles * sizeof(double);
+@@ -3327,9 +3349,7 @@
+     memcpy(h_buf + off, weights_dd, n_dd * sizeof(double)); off += n_dd;
+     memcpy(h_buf + off, wavelengths_m, n_dd * sizeof(double));
+ 
+-    CUDA_CHECK(cudaMemcpyAsync(
+-        state->d_obs_scratch, h_buf, total_bytes,
+-        cudaMemcpyHostToDevice, state->stream));
++    pfd_upload_observation_scratch(state, h_buf, total_bytes);
+     // Carrier-only Huber can change Gaussian PR tail contraction in the
+     // common-reference specialization. Keep its original instruction body.
+     bool carrier_only_huber = per_particle_huber &&
+@@ -3455,9 +3475,7 @@
+     memcpy(h_buf + off, doppler_hz, n_sat * sizeof(double)); off += n_sat;
+     memcpy(h_buf + off, weights_sat, n_sat * sizeof(double)); off += n_sat;
+ 
+-    CUDA_CHECK(cudaMemcpyAsync(
+-        state->d_obs_scratch, h_buf, total_bytes,
+-        cudaMemcpyHostToDevice, state->stream));
++    pfd_upload_observation_scratch(state, h_buf, total_bytes);
+ 
+     size_t smem = (size_t)total_doubles * sizeof(double);
+     pfd_weight_doppler_kernel<<<grid, BLOCK_SIZE, smem, state->stream>>>(
+@@ -3497,9 +3515,7 @@
+     memcpy(h_buf + off, doppler_hz, n_sat * sizeof(double)); off += n_sat;
+     memcpy(h_buf + off, weights_sat, n_sat * sizeof(double)); off += n_sat;
+ 
+-    CUDA_CHECK(cudaMemcpyAsync(
+-        state->d_obs_scratch, h_buf, total_bytes,
+-        cudaMemcpyHostToDevice, state->stream));
++    pfd_upload_observation_scratch(state, h_buf, total_bytes);
+ 
+     size_t smem = (size_t)n_sat * (n_sat <= MAX_SATS ? 9 : 8) * sizeof(double);
+     // The measurement geometry can now produce distinct particle covariances.
+--- a/include/gnss_gpu/pf_device.h
++++ b/include/gnss_gpu/pf_device.h
+@@ -73,6 +73,13 @@
+     // guarantees every particle has the same nine covariance components.
+     // Importing particle states or a Doppler KF update invalidates this fact.
+     bool covariance_uniform;
++
++    // Only pinned-source reuse waits for the preceding H2D. Device-buffer
++    // reuse remains ordered by the stream; growth still waits for all readers.
++    cudaEvent_t satellite_copy_done = nullptr;
++    cudaEvent_t obs_copy_done = nullptr;
++    bool satellite_copy_recorded = false;
++    bool obs_copy_recorded = false;
+ };
+ 
+ // Lifecycle management

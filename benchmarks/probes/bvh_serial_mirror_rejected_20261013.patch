@@ -1,0 +1,154 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -697,6 +697,90 @@
+   mirrors[(size_t)epoch * count + ordinal] = result;
+ }
+ 
++// Large batches reuse each epoch mirror with the preceding serial ray arithmetic.
++__global__ void multipath_mirror_serial_kernel(const double* rx_ecef,
++                                            const double* sat_ecef,
++                                            const int* triangle_order,
++                                            const ReflectionNormal* normals,
++                                            const ReflectionMirror* mirrors,
++                                            const Triangle* tris,
++                                            double* reflection_points,
++                                            double* excess_delays,
++                                            int n_epoch, int n_sat, int n_tri) {
++  int tid = blockIdx.x * blockDim.x + threadIdx.x;
++  int total = n_epoch * n_sat;
++  if (tid >= total) return;
++
++  int eid = tid / n_sat;
++  int sid = tid % n_sat;
++
++  double rx[3] = {rx_ecef[eid * 3 + 0],
++                   rx_ecef[eid * 3 + 1],
++                   rx_ecef[eid * 3 + 2]};
++  int sat_offset = (eid * n_sat + sid) * 3;
++  double sat[3] = {sat_ecef[sat_offset + 0],
++                    sat_ecef[sat_offset + 1],
++                    sat_ecef[sat_offset + 2]};
++
++  if (!isfinite(rx[0]) || !isfinite(rx[1]) || !isfinite(rx[2]) ||
++      !isfinite(sat[0]) || !isfinite(sat[1]) || !isfinite(sat[2])) {
++    excess_delays[tid] = 0.0;
++    reflection_points[tid * 3 + 0] = 0.0;
++    reflection_points[tid * 3 + 1] = 0.0;
++    reflection_points[tid * 3 + 2] = 0.0;
++    return;
++  }
++
++  double d_rx_sat = sqrt((rx[0] - sat[0]) * (rx[0] - sat[0]) +
++                          (rx[1] - sat[1]) * (rx[1] - sat[1]) +
++                          (rx[2] - sat[2]) * (rx[2] - sat[2]));
++
++  double best_delay = 0.0;
++  double best_refl[3] = {0.0, 0.0, 0.0};
++  bool found = false;
++
++  // The owner captured the exact right-first traversal, including the
++  // legacy stack limit. Equal delays still retain the first visited triangle.
++  for (int ordinal = 0; ordinal < n_tri; ++ordinal) {
++    const Triangle& tri = tris[triangle_order[ordinal]];
++    const ReflectionNormal& normal = normals[ordinal];
++    if (!normal.valid) continue;
++    const ReflectionMirror& prepared = mirrors[(size_t)eid * n_tri + ordinal];
++    double mirror[3] = {prepared.point[0], prepared.point[1], prepared.point[2]};
++
++    double dir[3] = {sat[0] - mirror[0], sat[1] - mirror[1], sat[2] - mirror[2]};
++    double dir_len = sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
++    if (dir_len < 1e-15) continue;
++    dir[0] /= dir_len; dir[1] /= dir_len; dir[2] /= dir_len;
++
++    double t;
++    if (!mt_intersect(mirror, dir, tri.v0, tri.v1, tri.v2, t)) continue;
++
++    double refl[3] = {mirror[0] + t * dir[0],
++                       mirror[1] + t * dir[1],
++                       mirror[2] + t * dir[2]};
++
++    double d_rx_refl = sqrt((rx[0] - refl[0]) * (rx[0] - refl[0]) +
++                             (rx[1] - refl[1]) * (rx[1] - refl[1]) +
++                             (rx[2] - refl[2]) * (rx[2] - refl[2]));
++    double d_refl_sat = sqrt((refl[0] - sat[0]) * (refl[0] - sat[0]) +
++                              (refl[1] - sat[1]) * (refl[1] - sat[1]) +
++                              (refl[2] - sat[2]) * (refl[2] - sat[2]));
++    double excess = (d_rx_refl + d_refl_sat) - d_rx_sat;
++
++    if (excess > 0.0 && (!found || excess < best_delay)) {
++      best_delay = excess;
++      best_refl[0] = refl[0]; best_refl[1] = refl[1]; best_refl[2] = refl[2];
++      found = true;
++    }
++  }
++
++  excess_delays[tid] = best_delay;
++  reflection_points[tid * 3 + 0] = best_refl[0];
++  reflection_points[tid * 3 + 1] = best_refl[1];
++  reflection_points[tid * 3 + 2] = best_refl[2];
++}
++
+ struct MultipathCandidate {
+   double delay;
+   double point[3];
+@@ -963,6 +1047,7 @@
+   DeviceBuffer<ReflectionMirror> mirrors;
+   bool mirrors_active = false;
+   bool cached_serial = false;
++  int serial_mirror_epochs = 0;
+ 
+   ~Impl() {
+     int previous = 0;
+@@ -1000,6 +1085,7 @@
+   int prepare_multipath(int total, int n_epoch, int n_sat) {
+     mirrors_active = false;
+     cached_serial = false;
++    serial_mirror_epochs = 0;
+     points.reserve((size_t)total * 3);
+     delays.reserve((size_t)total);
+     if (!ordered) return 0;
+@@ -1018,6 +1104,15 @@
+         normals_ready = true;
+       }
+       cached_serial = true;
++      // Reuse the existing bounded mirror workspace in epoch chunks. Each
++      // chunk is rebuilt from this call's rays before its serial evaluation.
++      size_t max_epochs = (32u * 1024u * 1024u) /
++          ((size_t)n_order * sizeof(ReflectionMirror));
++      if (n_order >= 8192 && n_sat >= 16 && max_epochs) {
++        serial_mirror_epochs = std::min(n_epoch,
++            (int)std::min((size_t)65535, max_epochs));
++        mirrors.reserve((size_t)serial_mirror_epochs * n_order);
++      }
+       return 0;
+     }
+     int tiles = std::min(32, std::min(
+@@ -1063,9 +1158,25 @@
+                                   MULTIPATH_BLOCK_SIZE>>>(
+           partial.data, points.data, delays.data, total, tiles);
+     } else if (cached_serial) {
+-      multipath_cached_serial_kernel<<<(total + 255) / 256, 256>>>(
+-          rx.data, sat.data, order.data, normals.data, triangles.data,
+-          points.data, delays.data, n_epoch, n_sat, n_order);
++      if (serial_mirror_epochs) {
++        for (int first_epoch = 0; first_epoch < n_epoch; first_epoch += serial_mirror_epochs) {
++          int epochs = std::min(serial_mirror_epochs, n_epoch - first_epoch);
++          size_t ray_offset = (size_t)first_epoch * n_sat;
++          reflection_mirrors_kernel<<<dim3((n_order + 255) / 256, epochs), 256>>>(
++              rx.data + (size_t)first_epoch * 3, triangles.data, order.data,
++              normals.data, mirrors.data, n_order);
++          CUDA_CHECK_LAST();
++          multipath_mirror_serial_kernel<<<(epochs * n_sat + 255) / 256, 256>>>(
++              rx.data + (size_t)first_epoch * 3, sat.data + ray_offset * 3,
++              order.data, normals.data, mirrors.data, triangles.data,
++              points.data + ray_offset * 3, delays.data + ray_offset, epochs, n_sat, n_order);
++          CUDA_CHECK_LAST();
++        }
++      } else {
++        multipath_cached_serial_kernel<<<(total + 255) / 256, 256>>>(
++            rx.data, sat.data, order.data, normals.data, triangles.data,
++            points.data, delays.data, n_epoch, n_sat, n_order);
++      }
+     } else {
+       multipath_bvh_batch_kernel<<<(total + 255) / 256, 256>>>(
+           rx.data, sat.data, nodes.data, triangles.data, points.data, delays.data,

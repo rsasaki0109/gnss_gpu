@@ -1,0 +1,24 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -1011,8 +1011,10 @@
+     }
+     // Substantial meshes amortize one winner reduction per ray. Keep the
+     // candidate scratch bounded to 16,384 winners (640 KiB).
+-    bool large_parallel = n_order >= 128 && total <= 16384;
+-    if (total > 4096 && !large_parallel) {
++    bool large_parallel = n_order >= 64 && total <= 16384;
++    // A tiny mesh leaves most candidate lanes idle. Once enough rays are
++    // available, reuse the same normals with the serial ray kernel instead.
++    if ((total > 4096 && !large_parallel) || (n_order < 64 && total > 1024)) {
+       if (!normals_ready) {
+         normals.reserve((size_t)n_order);
+         reflection_normals_kernel<<<(n_order + 255) / 256, 256>>>(
+@@ -1113,7 +1115,7 @@
+   state->n_nodes = n_nodes;
+   state->nodes.upload(h_nodes, (size_t)n_nodes);
+   state->triangles.upload(h_tri, (size_t)referenced);
+-  if (referenced >= 128) {
++  if (referenced >= 32) {
+     state->ordered = multipath_triangle_order(h_nodes, n_nodes, referenced, state->host_order);
+     if (state->ordered) {
+       state->n_order = (int)state->host_order.size();

@@ -1,6 +1,14 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <cmath>
+#if defined(_M_X64) || defined(__x86_64__)
+#include <immintrin.h>
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
+#endif
+#include <cstdint>
+#include <vector>
 #include <stdexcept>
 #include <string>
 #include "gnss_gpu/pf_device.h"
@@ -106,6 +114,96 @@ struct PFDeviceStateDeleter {
         }
     }
 };
+
+#if defined(_M_X64) || defined(__x86_64__)
+#if defined(_MSC_VER) || defined(__GNUC__) || defined(__clang__)
+static bool cdf_cpu_has_avx2() {
+#if defined(_MSC_VER)
+    int info[4];
+    __cpuid(info, 0);
+    if (info[0] < 7) return false;
+    __cpuidex(info, 1, 0);
+    const int avx_osxsave = (1 << 28) | (1 << 27);
+    if ((info[2] & avx_osxsave) != avx_osxsave) return false;
+    if ((_xgetbv(0) & 6) != 6) return false;
+    __cpuidex(info, 7, 0);
+    return (info[1] & (1 << 5)) != 0;
+#else
+    __builtin_cpu_init();
+    return __builtin_cpu_supports("avx2");
+#endif
+}
+
+// Keep AVX2 instructions inside a separately dispatched function. Do not
+// raise the translation unit's baseline ISA or require AVX2 on every host.
+#if defined(_MSC_VER)
+__declspec(noinline)
+#else
+__attribute__((target("avx2"), noinline))
+#endif
+static bool finite_monotone_cdf_avx2(const double* input, py::ssize_t size) {
+    if (!std::isfinite(input[0])) return false;
+    const __m256i exponent = _mm256_set1_epi64x(0x7ff0000000000000LL);
+    py::ssize_t i = 1;
+    for (; i + 7 < size; i += 8) {
+        const __m256d a = _mm256_loadu_pd(input + i);
+        const __m256d b = _mm256_loadu_pd(input + i + 4);
+        const __m256i bad_a = _mm256_cmpeq_epi64(
+            _mm256_and_si256(_mm256_castpd_si256(a), exponent), exponent);
+        const __m256i bad_b = _mm256_cmpeq_epi64(
+            _mm256_and_si256(_mm256_castpd_si256(b), exponent), exponent);
+        if (_mm256_movemask_pd(_mm256_castsi256_pd(_mm256_or_si256(bad_a, bad_b)))) return false;
+        const __m256d before_a = _mm256_loadu_pd(input + i - 1);
+        const __m256d before_b = _mm256_loadu_pd(input + i + 3);
+        if (_mm256_movemask_pd(_mm256_or_pd(_mm256_cmp_pd(a, before_a, _CMP_LT_OQ),
+                                          _mm256_cmp_pd(b, before_b, _CMP_LT_OQ)))) return false;
+    }
+    for (; i < size; ++i) {
+        if (!std::isfinite(input[i]) || input[i] < input[i - 1]) return false;
+    }
+    return true;
+}
+#endif
+#endif
+
+// Validate every element before any state/scratch mutation. x86-64 has SSE2
+// as its baseline ISA; other targets and small inputs retain the scalar path.
+static bool finite_monotone_cdf(const double* input, py::ssize_t size) {
+#if defined(_M_X64) || defined(__x86_64__)
+    if (size >= 65536) {
+#if defined(_MSC_VER) || defined(__GNUC__) || defined(__clang__)
+        static const bool has_avx2 = cdf_cpu_has_avx2();
+        if (has_avx2) return finite_monotone_cdf_avx2(input, size);
+#endif
+        if (!std::isfinite(input[0])) return false;
+        const __m128i exponent = _mm_set1_epi64x(0x7ff0000000000000LL);
+        py::ssize_t i = 1;
+        for (; i + 3 < size; i += 4) {
+            const __m128d a = _mm_loadu_pd(input + i);
+            const __m128d b = _mm_loadu_pd(input + i + 2);
+            // Integer exponent tests reject Inf and both NaN kinds without
+            // performing floating-point comparisons on signaling NaNs.
+            const __m128i bad_a = _mm_cmpeq_epi32(
+                _mm_and_si128(_mm_castpd_si128(a), exponent), exponent);
+            const __m128i bad_b = _mm_cmpeq_epi32(
+                _mm_and_si128(_mm_castpd_si128(b), exponent), exponent);
+            if (_mm_movemask_pd(_mm_castsi128_pd(_mm_or_si128(bad_a, bad_b)))) return false;
+            const __m128d before_a = _mm_loadu_pd(input + i - 1);
+            const __m128d before_b = _mm_loadu_pd(input + i + 1);
+            if (_mm_movemask_pd(_mm_or_pd(_mm_cmplt_pd(a, before_a),
+                                         _mm_cmplt_pd(b, before_b)))) return false;
+        }
+        for (; i < size; ++i) {
+            if (!std::isfinite(input[i]) || input[i] < input[i - 1]) return false;
+        }
+        return true;
+    }
+#endif
+    for (py::ssize_t i = 0; i < size; ++i) {
+        if (!std::isfinite(input[i]) || (i > 0 && input[i] < input[i - 1])) return false;
+    }
+    return true;
+}
 
 PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
     m.doc() = "GPU-accelerated Particle Filter with persistent device memory";
@@ -516,6 +614,35 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
     }, "Compute weighted mean on device, return [4] to host",
        py::arg("state"));
 
+    m.def("pf_device_position_mixture_components", [](const gnss_gpu::PFDeviceState* state,
+        py::array_t<double, py::array::c_style | py::array::forcecast> refs,
+        py::array_t<double, py::array::c_style | py::array::forcecast> log_mix,
+        double sigma_squared) -> py::object {
+        validate_device_state(state, "pf_device_position_mixture_components");
+        auto r = refs.request(), w = log_mix.request();
+        if (r.ndim != 2 || r.shape[1] != 3 || r.shape[0] < 2 || r.shape[0] > 4) {
+            throw std::runtime_error("refs shape must be (2..4, 3)");
+        }
+        if (w.ndim != 1 || w.size != r.shape[0]) {
+            throw std::runtime_error("log_mix length must match refs");
+        }
+        ensure_finite_doubles(r, "refs must be finite");
+        const double* weights = static_cast<const double*>(w.ptr);
+        for (py::ssize_t i = 0; i < w.size; ++i) {
+            if (std::isnan(weights[i]) || weights[i] == INFINITY) {
+                throw std::runtime_error("log_mix must be finite or negative infinity");
+            }
+        }
+        validate_positive_finite(sigma_squared, "sigma_squared");
+        py::array_t<double> output({state->n_particles, static_cast<int>(r.shape[0])});
+        bool finite = gnss_gpu::pf_device_position_mixture_components(state,
+            static_cast<const double*>(r.ptr), weights, static_cast<int>(r.shape[0]),
+            sigma_squared, output.mutable_data());
+        if (!finite) return py::none();
+        return output;
+    }, "Exact FP64 mixture components, or None for a nonfinite-coordinate CPU fallback",
+       py::arg("state"), py::arg("refs"), py::arg("log_mix"), py::arg("sigma_squared"));
+
     m.def("pf_device_get_particles", [](const gnss_gpu::PFDeviceState* state) {
         int N = state->n_particles;
         auto output = py::array_t<double>({N, 4});
@@ -534,6 +661,66 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
     }, "Copy full particle states [x,y,z,cb,mu_vx,mu_vy,mu_vz,Sigma_v(3x3)] to host",
        py::arg("state"));
 
+    m.def("pf_device_gather_from", [](gnss_gpu::PFDeviceState* target,
+            const gnss_gpu::PFDeviceState* source,
+            py::array_t<std::int64_t, py::array::c_style | py::array::forcecast> ancestors) {
+        validate_device_state(target, "pf_device_gather_from target");
+        validate_device_state(source, "pf_device_gather_from source");
+        auto r = ancestors.request();
+        if (r.ndim != 1 || r.size != target->n_particles) {
+            throw std::runtime_error("pf_device_gather_from: ancestors length must match target");
+        }
+        const auto* input = static_cast<const std::int64_t*>(r.ptr);
+        std::vector<int> indices((size_t)r.size);
+        for (py::ssize_t i = 0; i < r.size; ++i) {
+            if (input[i] < 0 || input[i] >= source->n_particles) {
+                throw std::runtime_error("pf_device_gather_from: ancestor outside source");
+            }
+            indices[(size_t)i] = static_cast<int>(input[i]);
+        }
+        return gnss_gpu::pf_device_gather_from(target, source, indices.data());
+    }, "Gather full source states into a distinct resident target; reset weights; sync",
+       py::arg("target"), py::arg("source"), py::arg("ancestors"));
+
+    m.def("pf_device_gather_from_cdf", [](gnss_gpu::PFDeviceState* target,
+            const gnss_gpu::PFDeviceState* source,
+            py::array_t<double, py::array::c_style | py::array::forcecast> cdf) {
+        validate_device_state(target, "pf_device_gather_from_cdf target");
+        validate_device_state(source, "pf_device_gather_from_cdf source");
+        auto r = cdf.request();
+        if (r.ndim != 1 || r.size != source->n_particles) {
+            throw std::runtime_error("pf_device_gather_from_cdf: CDF length must match source");
+        }
+        const auto* input = static_cast<const double*>(r.ptr);
+        // Decline unsupported CDFs before any state or scratch mutation.
+        if (!finite_monotone_cdf(input, r.size)) return false;
+        return gnss_gpu::pf_device_gather_from_cdf(target, source, input);
+    }, "Gather using exact left search on a finite monotone CPU CDF; reset weights; sync",
+       py::arg("target"), py::arg("source"), py::arg("cdf"));
+
+    m.attr("_uniform_cdf_checked_gather") = m.attr("pf_device_gather_from_cdf");
+    m.def("pf_device_gather_from_uniform_cdf", [](gnss_gpu::PFDeviceState* target,
+            const gnss_gpu::PFDeviceState* source, py::object cdf_output) {
+        validate_device_state(target, "pf_device_gather_from_uniform_cdf target");
+        validate_device_state(source, "pf_device_gather_from_uniform_cdf source");
+        double* output = nullptr;
+        py::array owner;
+        if (!cdf_output.is_none()) {
+            if (!py::isinstance<py::array>(cdf_output)) {
+                throw std::runtime_error("CDF output must be a writable contiguous float64 array");
+            }
+            owner = py::cast<py::array>(cdf_output);
+            auto r = owner.request();
+            if (!owner.dtype().is(py::dtype::of<double>()) || !owner.writeable() ||
+                !(owner.flags() & py::array::c_style) || r.ndim != 1 || r.size != source->n_particles) {
+                throw std::runtime_error("CDF output must be a writable contiguous float64 array matching source");
+            }
+            output = static_cast<double*>(r.ptr);
+        }
+        return gnss_gpu::pf_device_gather_from_uniform_cdf(target, source, output);
+    }, "Gather from the exact sequential uniform FP64 CDF; optional full CDF output; sync",
+       py::arg("target"), py::arg("source"), py::arg("cdf_output") = py::none());
+
     m.def("pf_device_set_particle_states", [](gnss_gpu::PFDeviceState* state,
                                               py::array_t<double, py::array::c_style | py::array::forcecast> input) {
         int N = state->n_particles;
@@ -544,6 +731,18 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
         gnss_gpu::pf_device_set_particle_states(state, static_cast<const double*>(r.ptr));
     }, "Upload full particle states [x,y,z,cb,mu_vx,mu_vy,mu_vz,Sigma_v(3x3)] and reset weights",
        py::arg("state"), py::arg("input"));
+
+    m.def("pf_device_set_velocity_covariance", [](gnss_gpu::PFDeviceState* state,
+            py::array_t<double, py::array::c_style | py::array::forcecast> covariance) {
+        validate_device_state(state, "pf_device_set_velocity_covariance");
+        auto r = covariance.request();
+        if (r.ndim != 2 || r.shape[0] != 3 || r.shape[1] != 3) {
+            throw std::runtime_error("pf_device_set_velocity_covariance: covariance shape must be (3, 3)");
+        }
+        ensure_finite_doubles(r, "pf_device_set_velocity_covariance: covariance must be finite");
+        gnss_gpu::pf_device_set_velocity_covariance(state, static_cast<const double*>(r.ptr));
+    }, "Broadcast velocity covariance on device without changing other state or weights",
+       py::arg("state"), py::arg("covariance"));
 
     m.def("pf_device_get_log_weights", [](const gnss_gpu::PFDeviceState* state,
                                          py::array_t<double> out) {
@@ -556,6 +755,15 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
     }, "Copy log-weights to host (D2H, synchronizes stream)",
        py::arg("state"), py::arg("out"));
 
+    m.attr("_uniform_scan_getter") = m.attr("pf_device_get_log_weights");
+    m.attr("_uniform_scan_cdf") = m.attr("pf_device_gather_from_uniform_cdf");
+    m.attr("_uniform_scan_state_type") = m.attr("PFDeviceState");
+    m.def("pf_device_try_gather_uniform_weights", [](gnss_gpu::PFDeviceState* target,
+                                                    const gnss_gpu::PFDeviceState* source) {
+        return gnss_gpu::pf_device_try_gather_uniform_weights(target, source);
+    }, "Try exact full GPU finite/equal-weight validation and D199 gather; false leaves visible state unchanged",
+       py::arg("target"), py::arg("source"));
+
     m.def("pf_device_set_log_weights", [](gnss_gpu::PFDeviceState* state,
                                           py::array_t<double, py::array::c_style | py::array::forcecast> input) {
         int N = state->n_particles;
@@ -566,6 +774,14 @@ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
         gnss_gpu::pf_device_set_log_weights(state, static_cast<const double*>(r.ptr));
     }, "Upload log-weights from host (H2D, sync)",
        py::arg("state"), py::arg("input"));
+
+    // Keep the original array setter identity even when callers replace it.
+    m.attr("_uniform_weights_array_setter") = m.attr("pf_device_set_log_weights");
+    m.def("pf_device_fill_log_weights", [](gnss_gpu::PFDeviceState* state, double value) {
+        validate_device_state(state, "pf_device_fill_log_weights");
+        gnss_gpu::pf_device_fill_log_weights(state, value);
+    }, "Broadcast exact FP64 log-weight bits; invalidate ESS; synchronize stream",
+       py::arg("state"), py::arg("value"));
 
     m.def("pf_device_get_resample_ancestors", [](const gnss_gpu::PFDeviceState* state,
                                                   py::array_t<int> out) {

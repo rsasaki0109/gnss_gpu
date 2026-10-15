@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "verified": true,
+  "current_source_build_installed_match": true,
+  "before_after_bit_cases": 6678,
+  "timed_conditions": 52,
+  "rounds": 5,
+  "repeats": 20,
+  "regression_tests": 1456,
+  "sanitizer_tests": 60,
+  "sanitizer_errors": 0,
+  "leaked_bytes": 0,
+  "unchanged_device_functions": 55,
+  "individual_nan_and_prior_update_verified": true,
+  "independent_ungated_subset_oracle": true,
+  "signal_descriptor_trial_rejected_and_restored": true,
+  "bvh_native_retained": true,
+  "signal_batch_retained": true,
+  "public_product_label_violations": 0,
+  "public_text_files_scanned": 2410,
+  "artifacts": {
+    "benchmarks/RESULTS.md": "c2e991f575819959dc116478dcb6f0ef203014606ac60d259a74633b95181fd8",
+    "internal_docs/decisions.md": "7abcb5fe09840193d63cba2922ac5822aa338e19ae8ca43ceeccf4781b12c0c6",
+    "benchmarks/pf_dd_mixed_gate_gpu_20261012.json": "39bf9bf86be23e1352ce6d8199279cd55bb88bf5ad43c9332805caf17850b741",
+    "benchmarks/pf_dd_mixed_gate_device_code_20261012.json": "4859f7584b27290abec1a7b7942053f706ac2e41ccf65b7a1db182636497228e",
+    "tests/test_pf_dd_mixed_gate.py": "bfe42dd319f47abdb4c29da82438add16d8e703d1b471eb0f27dd99c061ec8d2",
+    "tests/test_pf_dd_reference_range.py": "c28d76b13d3c34c70ed8fccaf7ab80027fdbfd952f9f5067349badd2912db9ed",
+    "tests/test_pf_dd_single_huber_gate.py": "1dc8b14554b6329d5796d8fdc5abc7c882815defe3dc8271f4567b7a96767e49",
+    "benchmarks/signal_batch_descriptor_rejected_20261012.json": "3ab6b79ba3cc8515ac3fa5538e4261dc3d8309b6f15b1c0d4f9b10f0dcd126dc",
+    "benchmarks/signal_batch_descriptor_probe_20261012.json": "a1df61ded9d38845311c2bf223c493c7c1184deca03b4b73ce2b4930502c9db3",
+    "benchmarks/signal_batch_descriptor_device_code_20261012.json": "ed7a6b148d918af925e3ace5044997adb35ef466e397386b76587b8a4dde6b03"
+  }
+}

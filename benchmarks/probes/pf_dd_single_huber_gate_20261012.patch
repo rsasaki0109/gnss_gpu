@@ -1,0 +1,107 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -528,6 +528,59 @@
+         all = __fma_rn(term, inv_sigma2, all);
+         if (!(fabs(residual) > threshold))
+             filtered = __fma_rn(term, inv_sigma2, filtered);
++    }
++    int minimum = n_dd < 3 ? n_dd : 3;
++    double value = kept >= minimum ? filtered : all;
++    if constexpr (Carrier)
++        log_weights[tid] = __dadd_rn(log_weights[tid], value);
++    else
++        log_weights[tid] = value;
++}
++
++// Individual Huber gates retain the normalized cost and weight FMA,
++// original skip-if-greater semantics, and the overwrite/add distinction.
++template<bool Carrier>
++__global__ void pfd_weight_dd_single_huber_gated_kernel(
++    const double* px, const double* py, const double* pz, const double* dd_data,
++    double* log_weights, int N, int n_dd, double sigma, double threshold, double huber_k) {
++    extern __shared__ double data[];
++    constexpr int columns = Carrier ? 11 : 10;
++    int total_shared = n_dd * columns;
++    for (int i = threadIdx.x; i < total_shared; i += blockDim.x) {
++        if constexpr (Carrier)
++            data[i] = i >= n_dd * 10 ? 1.0 / dd_data[i] : dd_data[i];
++        else
++            data[i] = dd_data[i];
++    }
++    __syncthreads();
++    int tid = blockIdx.x * blockDim.x + threadIdx.x;
++    if (tid >= N) return;
++    double x = px[tid], y = py[tid], z = pz[tid];
++    double dx_ref = x - data[n_dd * 3];
++    double dy_ref = y - data[n_dd * 3 + 1];
++    double dz_ref = z - data[n_dd * 3 + 2];
++    double r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
++    double all = 0.0, filtered = 0.0;
++    int kept = 0;
++    for (int d = 0; d < n_dd; ++d) {
++        double dx = x - data[d * 3];
++        double dy = y - data[d * 3 + 1];
++        double dz = z - data[d * 3 + 2];
++        double range = sqrt(dx * dx + dy * dy + dz * dz) - r_ref
++            - data[n_dd * 7 + d] + data[n_dd * 8 + d];
++        double residual;
++        if constexpr (Carrier) {
++            double cycles = data[n_dd * 6 + d] - range * data[n_dd * 10 + d];
++            residual = cycles - rint(cycles);
++        } else {
++            residual = data[n_dd * 6 + d] - range;
++        }
++        if (fabs(residual) <= threshold) ++kept;
++        double rho = pfd_weighted_huber_cost(residual, sigma, 1.0, huber_k);
++        double weight = data[n_dd * 9 + d];
++        all = __fma_rn(-weight, rho, all);
++        if (!(fabs(residual) > threshold))
++            filtered = __fma_rn(-weight, rho, filtered);
+     }
+     int minimum = n_dd < 3 ? n_dd : 3;
+     double value = kept >= minimum ? filtered : all;
+@@ -2379,13 +2432,19 @@
+ 
+     size_t smem = (size_t)total_doubles * sizeof(double);
+     if (pfd_has_common_dd_reference(ref_ecef, n_dd)) {
+-        bool fused_gate = !per_particle_huber && per_particle_nlos_threshold_m > 0.0;
++        bool fused_huber = per_particle_huber && per_particle_huber_k > 0.0 &&
++            std::isfinite(per_particle_huber_k);
++        bool fused_gate = (!per_particle_huber || fused_huber) && per_particle_nlos_threshold_m > 0.0;
+         if (fused_gate) {
+             for (int i = 0; i < total_doubles; ++i) {
+                 if (!std::isfinite(h_buf[i])) { fused_gate = false; break; }
+             }
+         }
+-        if (fused_gate) {
++        if (fused_gate && fused_huber) {
++            pfd_weight_dd_single_huber_gated_kernel<false><<<grid, BLOCK_SIZE, smem, state->stream>>>(
++                state->d_px, state->d_py, state->d_pz, state->d_obs_scratch, state->d_log_weights,
++                N, n_dd, sigma_pr, per_particle_nlos_threshold_m, per_particle_huber_k);
++        } else if (fused_gate) {
+             pfd_weight_dd_single_gated_kernel<false><<<grid, BLOCK_SIZE, smem + sizeof(double), state->stream>>>(
+                 state->d_px, state->d_py, state->d_pz, state->d_obs_scratch, state->d_log_weights,
+                 N, n_dd, sigma_pr, per_particle_nlos_threshold_m);
+@@ -2940,14 +2999,20 @@
+                 break;
+             }
+         }
+-        bool fused_gate = normal_wavelengths && !per_particle_huber &&
++        bool fused_huber = per_particle_huber && per_particle_huber_k > 0.0 &&
++            std::isfinite(per_particle_huber_k);
++        bool fused_gate = normal_wavelengths && (!per_particle_huber || fused_huber) &&
+             per_particle_nlos_threshold_cycles > 0.0;
+         if (fused_gate) {
+             for (int i = 0; i < total_doubles; ++i) {
+                 if (!std::isfinite(h_buf[i])) { fused_gate = false; break; }
+             }
+         }
+-        if (fused_gate) {
++        if (fused_gate && fused_huber) {
++            pfd_weight_dd_single_huber_gated_kernel<true><<<grid, BLOCK_SIZE, smem, state->stream>>>(
++                state->d_px, state->d_py, state->d_pz, state->d_obs_scratch, state->d_log_weights,
++                N, n_dd, sigma_cycles, per_particle_nlos_threshold_cycles, per_particle_huber_k);
++        } else if (fused_gate) {
+             pfd_weight_dd_single_gated_kernel<true><<<grid, BLOCK_SIZE, smem + sizeof(double), state->stream>>>(
+                 state->d_px, state->d_py, state->d_pz, state->d_obs_scratch, state->d_log_weights,
+                 N, n_dd, sigma_cycles, per_particle_nlos_threshold_cycles);

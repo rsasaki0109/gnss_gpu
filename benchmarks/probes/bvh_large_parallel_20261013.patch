@@ -1,0 +1,14 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -1009,7 +1009,10 @@
+       order.upload(host_order.data(), host_order.size());
+       std::vector<int>().swap(host_order);
+     }
+-    if (total > 4096) {
++    // Substantial meshes amortize one winner reduction per ray. Keep the
++    // candidate scratch bounded to 16,384 winners (640 KiB).
++    bool large_parallel = n_order >= 8192 && total <= 16384;
++    if (total > 4096 && !large_parallel) {
+       if (!normals_ready) {
+         normals.reserve((size_t)n_order);
+         reflection_normals_kernel<<<(n_order + 255) / 256, 256>>>(

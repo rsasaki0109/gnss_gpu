@@ -1,0 +1,215 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -4128,6 +4128,70 @@
+     }
+     CUDA_CHECK(cudaStreamSynchronize(target->stream));
+     return true;
++}
++
++// Classify every current device weight, including signed zeros, without
++// FP arithmetic/comparison on NaNs or subnormals. Finite FP64 equality is
++// bit equality except for the two zero representations.
++__global__ void pfd_uniform_weights_flags_kernel(const double* weights, int N, int* partial) {
++    __shared__ int flags[BLOCK_SIZE];
++    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
++    int invalid = 0;
++    if (tid < N) {
++        const unsigned long long bits = __double_as_longlong(weights[tid]);
++        const unsigned long long first = __double_as_longlong(weights[0]);
++        const unsigned long long magnitude = 0x7fffffffffffffffULL;
++        const bool both_zero = (bits & magnitude) == 0 && (first & magnitude) == 0;
++        invalid = ((bits & 0x7ff0000000000000ULL) == 0x7ff0000000000000ULL) ||
++            (bits != first && !both_zero);
++    }
++    flags[threadIdx.x] = invalid;
++    __syncthreads();
++    for (int stride = BLOCK_SIZE / 2; stride > 0; stride /= 2) {
++        if (threadIdx.x < stride) flags[threadIdx.x] |= flags[threadIdx.x + stride];
++        __syncthreads();
++    }
++    if (threadIdx.x == 0) partial[blockIdx.x] = flags[0];
++}
++
++__global__ void pfd_uniform_weights_finish_kernel(const int* partial, int count, int* result) {
++    __shared__ int flags[BLOCK_SIZE];
++    int invalid = 0;
++    for (int i = threadIdx.x; i < count; i += BLOCK_SIZE) invalid |= partial[i];
++    flags[threadIdx.x] = invalid;
++    __syncthreads();
++    for (int stride = BLOCK_SIZE / 2; stride > 0; stride /= 2) {
++        if (threadIdx.x < stride) flags[threadIdx.x] |= flags[threadIdx.x + stride];
++        __syncthreads();
++    }
++    if (threadIdx.x == 0) result[0] = flags[0] == 0;
++}
++
++bool pf_device_try_gather_uniform_weights(PFDeviceState* target, const PFDeviceState* source) {
++    if (target == nullptr || source == nullptr || !target->allocated || !source->allocated ||
++        target == source || source->n_particles < 65536) return false;
++    cudaPointerAttributes src_attributes, dst_attributes;
++    CUDA_CHECK(cudaPointerGetAttributes(&src_attributes, source->d_px));
++    CUDA_CHECK(cudaPointerGetAttributes(&dst_attributes, target->d_px));
++    int current_device;
++    CUDA_CHECK(cudaGetDevice(&current_device));
++    if (src_attributes.device != dst_attributes.device || dst_attributes.device != current_device) return false;
++    // Source stream ordering observes every preceding producer. Integer flags
++    // borrow existing reduction scratch; no particles, weights or ESS cache
++    // change, and later reductions overwrite their complete scratch as usual.
++    int* partial = reinterpret_cast<int*>(source->d_partial_c);
++    int* result = reinterpret_cast<int*>(source->d_reduction_result);
++    pfd_uniform_weights_flags_kernel<<<source->grid_size, BLOCK_SIZE, 0, source->stream>>>(
++        source->d_log_weights, source->n_particles, partial);
++    CUDA_CHECK_LAST();
++    pfd_uniform_weights_finish_kernel<<<1, BLOCK_SIZE, 0, source->stream>>>(partial, source->grid_size, result);
++    CUDA_CHECK_LAST();
++    int accepted = 0;
++    CUDA_CHECK(cudaMemcpyAsync(&accepted, result, sizeof(accepted), cudaMemcpyDeviceToHost, source->stream));
++    CUDA_CHECK(cudaStreamSynchronize(source->stream));
++    if (!accepted) return false;
++    // Keep D199's exact sequential CDF and original left search/gather/reset.
++    return pf_device_gather_from_uniform_cdf(target, source);
+ }
+ 
+ void pf_device_set_particle_states(PFDeviceState* state, const double* input) {
+--- a/include/gnss_gpu/pf_device.h
++++ b/include/gnss_gpu/pf_device.h
+@@ -283,6 +283,13 @@
+ bool pf_device_gather_from_uniform_cdf(PFDeviceState* target, const PFDeviceState* source,
+                                       double* cdf_output = nullptr);
+ 
++// Try the same exact uniform-CDF gather after checking every current GPU
++// log-weight for finite numeric equality. Copies one integer flag to host,
++// borrows existing reduction scratch, and synchronizes source producers.
++// False leaves particle states, log-weights and ESS caches unchanged; this
++// includes nonuniform/nonfinite/small/invalid/in-place/cross-device cases.
++bool pf_device_try_gather_uniform_weights(PFDeviceState* target, const PFDeviceState* source);
++
+ // Upload full particle states from host:
+ // [x, y, z, cb, mu_vx, mu_vy, mu_vz, Sigma_v(3x3 row-major)].
+ // Resets log-weights to uniform after upload.
+--- a/python/gnss_gpu/_pf_device_bindings.cpp
++++ b/python/gnss_gpu/_pf_device_bindings.cpp
+@@ -755,6 +755,15 @@
+     }, "Copy log-weights to host (D2H, synchronizes stream)",
+        py::arg("state"), py::arg("out"));
+ 
++    m.attr("_uniform_scan_getter") = m.attr("pf_device_get_log_weights");
++    m.attr("_uniform_scan_cdf") = m.attr("pf_device_gather_from_uniform_cdf");
++    m.attr("_uniform_scan_state_type") = m.attr("PFDeviceState");
++    m.def("pf_device_try_gather_uniform_weights", [](gnss_gpu::PFDeviceState* target,
++                                                    const gnss_gpu::PFDeviceState* source) {
++        return gnss_gpu::pf_device_try_gather_uniform_weights(target, source);
++    }, "Try exact full GPU finite/equal-weight validation and D199 gather; false leaves visible state unchanged",
++       py::arg("target"), py::arg("source"));
++
+     m.def("pf_device_set_log_weights", [](gnss_gpu::PFDeviceState* state,
+                                           py::array_t<double, py::array::c_style | py::array::forcecast> input) {
+         int N = state->n_particles;
+--- a/python/gnss_gpu/pf_device_runtime.py
++++ b/python/gnss_gpu/pf_device_runtime.py
+@@ -908,6 +908,9 @@
+         self._pf_device_get_log_weights(self._state, out)
+         return out
+ 
++    # Keep the getter identity across instance/class wrapper overrides.
++    _migration_weights_getter = get_log_weights
++
+     def set_log_weights(self, log_weights):
+         """Replace per-particle log-weights on the device."""
+         if not self._initialized:
+--- a/python/gnss_gpu/pf_device_config.py
++++ b/python/gnss_gpu/pf_device_config.py
+@@ -84,6 +84,14 @@
+         pf_device_get_particles=pf_device_get_particles,
+         pf_device_get_particle_states=pf_device_get_particle_states,
+         pf_device_set_particle_states=pf_device_set_particle_states,
++        pf_device_try_gather_uniform_weights=getattr(
++            import_module("gnss_gpu._gnss_gpu_pf_device"), "pf_device_try_gather_uniform_weights", None),
++        pf_device_uniform_scan_getter=getattr(
++            import_module("gnss_gpu._gnss_gpu_pf_device"), "_uniform_scan_getter", None),
++        pf_device_uniform_scan_cdf=getattr(
++            import_module("gnss_gpu._gnss_gpu_pf_device"), "_uniform_scan_cdf", None),
++        pf_device_uniform_scan_state_type=getattr(
++            import_module("gnss_gpu._gnss_gpu_pf_device"), "_uniform_scan_state_type", None),
+         pf_device_gather_from_uniform_cdf=getattr(
+             import_module("gnss_gpu._gnss_gpu_pf_device"), "pf_device_gather_from_uniform_cdf", None),
+         pf_device_uniform_cdf_checked_gather=getattr(
+@@ -148,6 +156,9 @@
+     pf._pf_device_fill_log_weights = getattr(bindings, "pf_device_fill_log_weights", None)
+     pf._pf_device_fill_log_weights_setter = getattr(bindings, "pf_device_fill_log_weights_setter", None)
+     pf._pf_device_gather_from = getattr(bindings, "pf_device_gather_from", None)
++    for name in ("pf_device_try_gather_uniform_weights", "pf_device_uniform_scan_getter",
++                 "pf_device_uniform_scan_cdf", "pf_device_uniform_scan_state_type"):
++        setattr(pf, f"_{name}", getattr(bindings, name, None))
+     pf._pf_device_gather_from_uniform_cdf = getattr(bindings, "pf_device_gather_from_uniform_cdf", None)
+     pf._pf_device_uniform_cdf_checked_gather = getattr(bindings, "pf_device_uniform_cdf_checked_gather", None)
+     pf._pf_device_gather_from_cdf = getattr(bindings, "pf_device_gather_from_cdf", None)
+--- a/python/gnss_gpu/realtime_runtime.py
++++ b/python/gnss_gpu/realtime_runtime.py
+@@ -404,6 +404,18 @@
+         target.set_log_weights(np.full(count, value, dtype=np.float64))
+ 
+     @staticmethod
++    def _migration_numpy_reuse_allowed() -> bool:
++        error_modes = np.geterr().values()
++        reuse = all(mode in ("warn", "ignore") for mode in error_modes)
++        if reuse and "warn" in error_modes:
++            import warnings
++            reuse = not any(
++                action == "error" and issubclass(RuntimeWarning, category)
++                for action, _, category, _, _ in warnings.filters
++            )
++        return reuse
++
++    @staticmethod
+     def _migrate(source: _ParticleRuntime, target: _ParticleRuntime) -> None:
+         if not source._initialized:
+             raise RuntimeError("cannot migrate an uninitialized particle runtime")
+@@ -415,18 +427,39 @@
+                     gather is getattr(source, "_pf_device_gather_from", None) and
+                     source_state is not None and target_state is not None and source_count > 0)
+         states = None if resident else np.asarray(source.get_particle_states(), dtype=np.float64)
++        reuse_allowed = None
++        uniform_try = getattr(target, "_pf_device_try_gather_uniform_weights", None)
++        state_type = getattr(source, "_pf_device_uniform_scan_state_type", None)
++        getter = getattr(source, "_pf_device_uniform_scan_getter", None)
++        uniform_cdf = getattr(source, "_pf_device_uniform_scan_cdf", None)
++        checked = getattr(source, "_pf_device_uniform_cdf_checked_gather", None)
++        if (resident and source_count >= 65536 and callable(uniform_try) and
++                uniform_try is getattr(source, "_pf_device_try_gather_uniform_weights", None) and
++                state_type is not None and type(source_state) is state_type and type(target_state) is state_type and
++                state_type is getattr(target, "_pf_device_uniform_scan_state_type", None) and
++                getter is not None and getter is getattr(source, "_pf_device_get_log_weights", None) and
++                uniform_cdf is not None and uniform_cdf is getattr(target, "_pf_device_uniform_scan_cdf", None) and
++                uniform_cdf is getattr(source, "_pf_device_gather_from_uniform_cdf", None) and
++                uniform_cdf is getattr(target, "_pf_device_gather_from_uniform_cdf", None) and
++                checked is not None and checked is getattr(target, "_pf_device_uniform_cdf_checked_gather", None) and
++                checked is getattr(source, "_pf_device_gather_from_cdf", None) and
++                checked is getattr(target, "_pf_device_gather_from_cdf", None) and
++                type(source.n_particles) is int and source.n_particles == source_count and
++                type(target.n_particles) is int and target.n_particles == getattr(target_state, "n_particles", 0)):
++            from gnss_gpu.pf_device_runtime import ParticleFilterDeviceRuntime
++            expected = getattr(ParticleFilterDeviceRuntime, "_migration_weights_getter", None)
++            if expected is not None and getattr(source.get_log_weights, "__func__", None) is expected:
++                reuse_allowed = PersistentParticleRuntimePool._migration_numpy_reuse_allowed()
++                if reuse_allowed and uniform_try(target_state, source_state):
++                    PersistentParticleRuntimePool._set_migration_log_weights(target, target.n_particles)
++                    return
+         log_weights = np.asarray(source.get_log_weights(), dtype=np.float64)
+         finite = np.isfinite(log_weights)
+         reuse = log_weights.ndim == 1 and log_weights.size >= 65536
+         if reuse:
+-            error_modes = np.geterr().values()
+-            reuse = all(mode in ("warn", "ignore") for mode in error_modes)
+-            if reuse and "warn" in error_modes:
+-                import warnings
+-                reuse = not any(
+-                    action == "error" and issubclass(RuntimeWarning, category)
+-                    for action, _, category, _, _ in warnings.filters
+-                )
++            if reuse_allowed is None:
++                reuse_allowed = PersistentParticleRuntimePool._migration_numpy_reuse_allowed()
++            reuse = reuse_allowed
+         if reuse and np.all(finite):
+             # A private copy preserves caller-owned weights, including views.
+             # All-finite input makes the original floor/where work redundant.

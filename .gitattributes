@@ -4,6 +4,9 @@ experiments/rbpf_fgo/*.sh text eol=lf
 # Data artifacts are SHA-256 locked byte-for-byte by tests and audit scripts.
 # Never convert their line endings (core.autocrlf on Windows would break the
 # hashes); this is a no-op on LF checkouts.
-*.json -text
+*.json -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 *.csv -text
 *.pos -text
+
+# Exact reconstruction patches retain context whitespace and original line endings.
+benchmarks/probes/*.patch -text -whitespace

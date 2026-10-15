@@ -1,0 +1,48 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -60,6 +60,26 @@
+   double centroid[3];
+ };
+ 
++// Only the integer bucket is consumed. A product safely inside a bucket
++// gives the same clamped integer as the original division. The2^-40 guard
++// is wider than the conservative2^-46 absolute error bound for0<scaled<12,
++// including a subnormal rounded reciprocal. Near boundaries and nonfinite
++// values keep the original division/conversion/clamping.
++static int build_bin_index(double centroid, double axis_min, double width,
++                           double inverse_width) {
++  double numerator = centroid - axis_min;
++  double scaled = numerator * inverse_width;
++  if (scaled > 0.0 && scaled < SAH_BINS) {
++    int candidate = (int)scaled;
++    if (scaled - candidate > 0x1p-40 && candidate + 1.0 - scaled > 0x1p-40)
++      return candidate;
++  }
++  int b = (int)(numerator / width);
++  if (b < 0) b = 0;
++  if (b >= SAH_BINS) b = SAH_BINS - 1;
++  return b;
++}
++
+ // Recursive top-down build. indices[start..end) are the triangle indices to partition.
+ static int build_recursive(const BuildTriangle* geometry,
+                            std::vector<int>& indices, int start, int end,
+@@ -99,6 +119,7 @@
+     if (axis_max - axis_min < 1e-15) continue;
+ 
+     double bin_width = (axis_max - axis_min) / SAH_BINS;
++    double inverse_bin_width = 1.0 / bin_width;
+ 
+     // Count triangles per bin and compute bin bounds
+     int bin_count[SAH_BINS] = {};
+@@ -110,9 +131,7 @@
+ 
+     for (int i = start; i < end; i++) {
+       double c = geometry[indices[i]].centroid[axis];
+-      int b = (int)((c - axis_min) / bin_width);
+-      if (b < 0) b = 0;
+-      if (b >= SAH_BINS) b = SAH_BINS - 1;
++      int b = build_bin_index(c, axis_min, bin_width, inverse_bin_width);
+       bin_count[b]++;
+       AABB tb = geometry[indices[i]].bounds;
+       bin_bounds[b] = union_aabb(bin_bounds[b], tb);

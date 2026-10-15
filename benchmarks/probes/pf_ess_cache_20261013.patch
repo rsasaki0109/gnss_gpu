@@ -1,0 +1,177 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -2980,6 +2980,7 @@
+     state->grid_size = (n_particles + BLOCK_SIZE - 1) / BLOCK_SIZE;
+     state->allocated = false;
+     state->covariance_uniform = false;
++    state->ess_cached = false;
+ 
+     size_t sz = (size_t)n_particles * sizeof(double);
+     int grid = state->grid_size;
+@@ -3152,6 +3153,7 @@
+     double init_vx, double init_vy, double init_vz,
+     double spread_vel,
+     double init_vel_sigma) {
++    state->ess_cached = false;
+ 
+     int N = state->n_particles;
+     int grid = state->grid_size;
+@@ -3274,6 +3276,7 @@
+     double per_particle_nlos_threshold_m,
+     bool per_particle_huber,
+     double per_particle_huber_k) {
++    state->ess_cached = false;
+ 
+     int N = state->n_particles;
+     int grid = state->grid_size;
+@@ -3359,6 +3362,7 @@
+     double per_particle_nlos_threshold_m,
+     bool per_particle_huber,
+     double per_particle_huber_k) {
++    state->ess_cached = false;
+ 
+     int N = state->n_particles;
+     int grid = state->grid_size;
+@@ -3435,6 +3439,7 @@
+     const double* weights_sat,
+     int n_sat, double sigma_pr,
+     double w_los, double mu_nlos, double sigma_nlos) {
++    state->ess_cached = false;
+ 
+     int N = state->n_particles;
+     int grid = state->grid_size;
+@@ -3467,6 +3472,7 @@
+ 
+ void pf_device_position_update(PFDeviceState* state,
+     double ref_x, double ref_y, double ref_z, double sigma_pos) {
++    state->ess_cached = false;
+     int N = state->n_particles;
+     int grid = state->grid_size;
+     double inv_sigma2 = 1.0 / (sigma_pos * sigma_pos);
+@@ -3504,6 +3510,7 @@
+ void pf_device_reset_position(PFDeviceState* state,
+     double ref_x, double ref_y, double ref_z, double sigma_pos,
+     unsigned long long seed, int step) {
++    state->ess_cached = false;
+     int N = state->n_particles;
+     int grid = state->grid_size;
+ 
+@@ -3519,6 +3526,12 @@
+ // ============================================================
+ 
+ double pf_device_ess(const PFDeviceState* state) {
++    if (state->ess_cached) {
++        // Preserve the completion/error boundary even after weight-preserving
++        // asynchronous operations such as predict or position shifts.
++        CUDA_CHECK(cudaStreamSynchronize(state->stream));
++        return state->cached_ess;
++    }
+     int N = state->n_particles;
+     int grid = state->grid_size;
+ 
+@@ -3544,7 +3557,10 @@
+         state->h_result_pinned, state->d_reduction_result, sizeof(double),
+         cudaMemcpyDeviceToHost, state->stream));
+     CUDA_CHECK(cudaStreamSynchronize(state->stream));
+-    return state->h_result_pinned[0];
++    // This separate host slot survives estimate/spread reuse of result buffers.
++    state->cached_ess = state->h_result_pinned[0];
++    state->ess_cached = true;
++    return state->cached_ess;
+ }
+ 
+ double pf_device_position_spread(
+@@ -3581,6 +3597,7 @@
+ // ============================================================
+ 
+ void pf_device_resample_systematic(PFDeviceState* state, unsigned long long seed) {
++    state->ess_cached = false;
+     int N = state->n_particles;
+     int grid = state->grid_size;
+ 
+@@ -3645,6 +3662,7 @@
+ // ============================================================
+ 
+ void pf_device_resample_megopolis(PFDeviceState* state, int n_iterations, unsigned long long seed) {
++    state->ess_cached = false;
+     int N = state->n_particles;
+     int grid = state->grid_size;
+ 
+@@ -3683,6 +3701,7 @@
+ 
+ void pf_device_resample_megopolis_coalesced(PFDeviceState* state, int n_iterations,
+                                            unsigned long long seed) {
++    state->ess_cached = false;
+     int N = state->n_particles;
+     int grid = state->grid_size;
+     // Extra covariance copy is amortized only for large, well-mixed gathers.
+@@ -3812,6 +3831,7 @@
+ }
+ 
+ void pf_device_set_particle_states(PFDeviceState* state, const double* input) {
++    state->ess_cached = false;
+     // Imported covariance can differ by particle, even if positions match.
+     state->covariance_uniform = false;
+     int N = state->n_particles;
+@@ -3853,6 +3873,7 @@
+ }
+ 
+ void pf_device_set_log_weights(PFDeviceState* state, const double* input) {
++    state->ess_cached = false;
+     int N = state->n_particles;
+     CUDA_CHECK(cudaMemcpyAsync(
+         state->d_log_weights,
+@@ -3878,6 +3899,7 @@
+     const double* sat_ecef, const double* carrier_phase,
+     const double* weights_sat,
+     int n_sat, double wavelength, double sigma_cycles) {
++    state->ess_cached = false;
+ 
+     int N = state->n_particles;
+     int grid = state->grid_size;
+@@ -3908,6 +3930,7 @@
+     double per_particle_nlos_threshold_cycles,
+     bool per_particle_huber,
+     double per_particle_huber_k) {
++    state->ess_cached = false;
+ 
+     int N = state->n_particles;
+     int grid = state->grid_size;
+@@ -4006,6 +4029,7 @@
+     bool per_particle_huber,
+     double per_particle_huber_dd_pr_k,
+     double per_particle_huber_dd_carrier_k) {
++    state->ess_cached = false;
+ 
+     if (n_dd <= 0 || sigma_pr <= 0.0 || sigma_cycles <= 0.0) return;
+ 
+@@ -4135,6 +4159,7 @@
+     double sigma_mps,
+     double velocity_update_gain,
+     double max_velocity_update_mps) {
++    state->ess_cached = false;
+ 
+     if (n_sat <= 0 || sigma_mps <= 0.0 || wavelength_m <= 0.0) {
+         return;
+@@ -4218,6 +4243,7 @@
+     const double* doppler_hz, const double* weights_sat,
+     int n_sat, double wavelength_m,
+     double sigma_mps) {
++    state->ess_cached = false;
+ 
+     if (n_sat <= 0 || sigma_mps <= 0.0 || wavelength_m <= 0.0) {
+         return;
+--- a/include/gnss_gpu/pf_device.h
++++ b/include/gnss_gpu/pf_device.h
+@@ -73,6 +73,11 @@
+     // subsequent common process noise) guarantees identical nine components.
+     // Importing particle states or a Doppler KF update invalidates this fact.
+     bool covariance_uniform;
++    // Host-only ESS result, valid until an API operation can write log-weights.
++    // A cache hit still synchronizes this state's stream. Do not write the
++    // device weight pointer directly without invalidating this result.
++    mutable double cached_ess;
++    mutable bool ess_cached;
+ };
+ 
+ // Lifecycle management

@@ -1,0 +1,65 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -962,6 +962,7 @@
+   bool normals_ready = false;
+   DeviceBuffer<ReflectionMirror> mirrors;
+   bool mirrors_active = false;
++  int mirror_epochs = 0;
+   bool cached_serial = false;
+ 
+   ~Impl() {
+@@ -999,6 +1000,7 @@
+ 
+   int prepare_multipath(int total, int n_epoch, int n_sat) {
+     mirrors_active = false;
++    mirror_epochs = 0;
+     cached_serial = false;
+     points.reserve((size_t)total * 3);
+     delays.reserve((size_t)total);
+@@ -1037,12 +1039,14 @@
+       normals_ready = true;
+     }
+     // Share receiver-dependent work only when a substantial mesh and satellite
+-    // group can amortize the extra launch. Bound retained scratch to 32 MiB;
+-    // larger epoch batches use the existing normal-cache candidate instead.
+-    size_t mirror_count = (size_t)n_epoch * n_order;
+-    mirrors_active = n_order >= 8192 && n_sat >= 16 &&
+-        mirror_count <= (32u * 1024u * 1024u) / sizeof(ReflectionMirror);
+-    if (mirrors_active) mirrors.reserve(mirror_count);
++    // group can amortize the extra launch. Reuse at most32 MiB across epoch
++    // chunks; the stream finishes each consumer before overwriting its mirrors.
++    size_t max_epochs = ((32u * 1024u * 1024u) / sizeof(ReflectionMirror)) / n_order;
++    mirrors_active = n_order >= 8192 && n_sat >= 16 && max_epochs > 0;
++    if (mirrors_active) {
++      mirror_epochs = (int)std::min((size_t)n_epoch, max_epochs);
++      mirrors.reserve((size_t)mirror_epochs * n_order);
++    }
+     return tiles;
+   }
+ 
+@@ -1050,12 +1054,19 @@
+     int total = n_epoch * n_sat;
+     if (tiles) {
+       if (mirrors_active) {
+-        reflection_mirrors_kernel<<<dim3((n_order + 255) / 256, n_epoch), 256>>>(
+-            rx.data, triangles.data, order.data, normals.data, mirrors.data, n_order);
+-        CUDA_CHECK_LAST();
+-        multipath_candidates_kernel<true, true><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
+-            rx.data, sat.data, triangles.data, order.data, partial.data, n_sat, n_order, tiles,
+-            normals.data, mirrors.data);
++        for (int first_epoch = 0; first_epoch < n_epoch; first_epoch += mirror_epochs) {
++          int epochs = std::min(mirror_epochs, n_epoch - first_epoch);
++          size_t ray_offset = (size_t)first_epoch * n_sat;
++          reflection_mirrors_kernel<<<dim3((n_order + 255) / 256, epochs), 256>>>(
++              rx.data + (size_t)first_epoch * 3, triangles.data, order.data,
++              normals.data, mirrors.data, n_order);
++          CUDA_CHECK_LAST();
++          multipath_candidates_kernel<true, true><<<epochs * n_sat * tiles, MULTIPATH_BLOCK_SIZE>>>(
++              rx.data + (size_t)first_epoch * 3, sat.data + ray_offset * 3,
++              triangles.data, order.data, partial.data + ray_offset * tiles,
++              n_sat, n_order, tiles, normals.data, mirrors.data);
++          CUDA_CHECK_LAST();
++        }
+       } else {
+         multipath_candidates_kernel<true, false><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
+             rx.data, sat.data, triangles.data, order.data, partial.data, n_sat, n_order, tiles,

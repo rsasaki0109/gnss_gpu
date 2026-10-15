@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "verified": true,
+  "current_source_build_installed_match": true,
+  "before_after_bit_cases": 6102,
+  "timed_conditions": 36,
+  "rounds": 5,
+  "repeats": 20,
+  "regression_tests": 1334,
+  "sanitizer_tests": 54,
+  "sanitizer_errors": 0,
+  "leaked_bytes": 0,
+  "unchanged_device_functions": 51,
+  "individual_nan_and_prior_update_verified": true,
+  "bvh_native_retained": true,
+  "signal_batch_retained": true,
+  "public_product_label_violations": 0,
+  "public_text_files_scanned": 2393,
+  "artifacts": {
+    "benchmarks/RESULTS.md": "7de7e1fcc1a9f82bf12ea89b39b078d8fc59a6665f3a7fb5ada2e971ea8e3a1f",
+    "internal_docs/decisions.md": "a5782881eb59893880cde54ae70f0cf8692d66e8e14993a357a7a7f8d5e7141b",
+    "benchmarks/pf_dd_single_gate_gpu_20261012.json": "8c672295c8265cf3b36dc6daa33f30081c3a0094b58d5151159ae8d779980c70",
+    "benchmarks/pf_dd_single_gate_device_code_20261012.json": "4f8787c577aef1006b1b92e5bf04bcfdac1f83add696d312433aa0a6ad72076b",
+    "tests/test_pf_dd_single_gate.py": "8208c8bebdbe30bd0a696cb341d25b2ba76973ea97778f4a77db39264ff884b5"
+  }
+}

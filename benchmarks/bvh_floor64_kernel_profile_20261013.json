@@ -1,0 +1,412 @@
+{
+  "schema_version": 1,
+  "profile_completed": true,
+  "profiler": "nvprof; installed CUDA12.8 toolkit; installed CUPTI directory added only to child PATH",
+  "baseline_reference": {
+    "path": "benchmarks/bvh_tiny_order_gpu_20261013.json",
+    "sha256": "3d4b9a5c6ffd9536c4da225504055cfc4a531761a1e033ecf70639cd6cd23ec1"
+  },
+  "source_sha256": {
+    "src/raytrace/bvh.cu": "476938faea4f22b8ebfb9974a958d508f4ade98eab98c5b0baa08f0004d498f8",
+    "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+    "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+    "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+    "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+  },
+  "extension_sha256": "e211606ac5aa0007c0ed57034f38f413b268cacc44ec4eb8220745f2498e6b33",
+  "build_configuration": "CUDA12.8 / MSVC Release / compute7.5 / C++20 / no fast math",
+  "method": "One nonexclusive-host process; owned baseline scene; first trace warms lazy normals, second native trace profiled; CPU build/hash excluded; GPU activity times are not unprofiled wall-time speedups.",
+  "condition": {
+    "input_sha256": "b97105a3bb2ad97892849a4900d1c71911a7929456ee7972a6a3d089bd9cc375",
+    "output_sha256": "12a85f9d350e2da66eb430c3a1958ca44b93572250922f0419f0364737771384",
+    "extension_sha256": "e211606ac5aa0007c0ed57034f38f413b268cacc44ec4eb8220745f2498e6b33",
+    "triangles": 12000,
+    "rays": 4128,
+    "allocated_bytes": 2247000
+  },
+  "events": [
+    {
+      "name": "[CUDA memcpy HtoD]",
+      "start_ms": 306.355125,
+      "duration_ms": 0.045055,
+      "kind": "copy",
+      "bytes": 535104,
+      "source_memory": "Pageable",
+      "destination_memory": "Device"
+    },
+    {
+      "name": "[CUDA memcpy HtoD]",
+      "start_ms": 306.49877,
+      "duration_ms": 0.070975,
+      "kind": "copy",
+      "bytes": 864000,
+      "source_memory": "Pageable",
+      "destination_memory": "Device"
+    },
+    {
+      "name": "[CUDA memcpy HtoD]",
+      "start_ms": 306.852972,
+      "duration_ms": 0.000832,
+      "kind": "copy",
+      "bytes": 3096,
+      "source_memory": "Pageable",
+      "destination_memory": "Device"
+    },
+    {
+      "name": "[CUDA memcpy HtoD]",
+      "start_ms": 306.875723,
+      "duration_ms": 0.009472,
+      "kind": "copy",
+      "bytes": 99072,
+      "source_memory": "Pageable",
+      "destination_memory": "Device"
+    },
+    {
+      "name": "[CUDA memcpy HtoD]",
+      "start_ms": 306.91809,
+      "duration_ms": 0.00304,
+      "kind": "copy",
+      "bytes": 48000,
+      "source_memory": "Pageable",
+      "destination_memory": "Device"
+    },
+    {
+      "name": "gnss_gpu::reflection_normals_kernel(gnss_gpu::Triangle const *, int const *, gnss_gpu::ReflectionNormal*, int)",
+      "start_ms": 308.090357,
+      "duration_ms": 0.021215,
+      "kind": "kernel",
+      "grid": [
+        47,
+        1,
+        1
+      ],
+      "block": [
+        256,
+        1,
+        1
+      ],
+      "registers_per_thread": 36,
+      "static_shared_bytes": 0,
+      "dynamic_shared_bytes": 0
+    },
+    {
+      "name": "gnss_gpu::los_check_bvh_batch_kernel(double const *, double const *, gnss_gpu::BVHNode const *, gnss_gpu::Triangle const *, int*, int, int, int)",
+      "start_ms": 308.128692,
+      "duration_ms": 0.983789,
+      "kind": "kernel",
+      "grid": [
+        17,
+        1,
+        1
+      ],
+      "block": [
+        256,
+        1,
+        1
+      ],
+      "registers_per_thread": 63,
+      "static_shared_bytes": 0,
+      "dynamic_shared_bytes": 0
+    },
+    {
+      "name": "void gnss_gpu::multipath_candidates_kernel<bool=1, bool=0>(double const *, double const , gnss_gpu::Triangle const *, int const *, gnss_gpu::MultipathCandidate*, int, int, int, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror const *)",
+      "start_ms": 309.11389,
+      "duration_ms": 74.71105,
+      "kind": "kernel",
+      "grid": [
+        4128,
+        1,
+        1
+      ],
+      "block": [
+        128,
+        1,
+        1
+      ],
+      "registers_per_thread": 78,
+      "static_shared_bytes": 5120,
+      "dynamic_shared_bytes": 0
+    },
+    {
+      "name": "gnss_gpu::multipath_finalize_kernel(gnss_gpu::MultipathCandidate const *, double*, double*, int, int)",
+      "start_ms": 383.826412,
+      "duration_ms": 0.002208,
+      "kind": "kernel",
+      "grid": [
+        33,
+        1,
+        1
+      ],
+      "block": [
+        128,
+        1,
+        1
+      ],
+      "registers_per_thread": 25,
+      "static_shared_bytes": 0,
+      "dynamic_shared_bytes": 0
+    },
+    {
+      "name": "[CUDA memcpy DtoH]",
+      "start_ms": 383.963177,
+      "duration_ms": 0.002209,
+      "kind": "copy",
+      "bytes": 16512,
+      "source_memory": "Device",
+      "destination_memory": "Pageable"
+    },
+    {
+      "name": "[CUDA memcpy DtoH]",
+      "start_ms": 383.995465,
+      "duration_ms": 0.00928,
+      "kind": "copy",
+      "bytes": 99072,
+      "source_memory": "Device",
+      "destination_memory": "Pageable"
+    },
+    {
+      "name": "[CUDA memcpy DtoH]",
+      "start_ms": 384.034888,
+      "duration_ms": 0.002688,
+      "kind": "copy",
+      "bytes": 33024,
+      "source_memory": "Device",
+      "destination_memory": "Pageable"
+    },
+    {
+      "name": "[CUDA memcpy HtoD]",
+      "start_ms": 384.130471,
+      "duration_ms": 0.000832,
+      "kind": "copy",
+      "bytes": 3096,
+      "source_memory": "Pageable",
+      "destination_memory": "Device"
+    },
+    {
+      "name": "[CUDA memcpy HtoD]",
+      "start_ms": 384.180998,
+      "duration_ms": 0.009855,
+      "kind": "copy",
+      "bytes": 99072,
+      "source_memory": "Pageable",
+      "destination_memory": "Device"
+    },
+    {
+      "name": "gnss_gpu::los_check_bvh_batch_kernel(double const *, double const *, gnss_gpu::BVHNode const *, gnss_gpu::Triangle const *, int*, int, int, int)",
+      "start_ms": 384.223301,
+      "duration_ms": 0.96587,
+      "kind": "kernel",
+      "grid": [
+        17,
+        1,
+        1
+      ],
+      "block": [
+        256,
+        1,
+        1
+      ],
+      "registers_per_thread": 63,
+      "static_shared_bytes": 0,
+      "dynamic_shared_bytes": 0
+    },
+    {
+      "name": "void gnss_gpu::multipath_candidates_kernel<bool=1, bool=0>(double const *, double const , gnss_gpu::Triangle const *, int const *, gnss_gpu::MultipathCandidate*, int, int, int, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror const *)",
+      "start_ms": 385.190451,
+      "duration_ms": 72.626961,
+      "kind": "kernel",
+      "grid": [
+        4128,
+        1,
+        1
+      ],
+      "block": [
+        128,
+        1,
+        1
+      ],
+      "registers_per_thread": 78,
+      "static_shared_bytes": 5120,
+      "dynamic_shared_bytes": 0
+    },
+    {
+      "name": "gnss_gpu::multipath_finalize_kernel(gnss_gpu::MultipathCandidate const *, double*, double*, int, int)",
+      "start_ms": 457.81882,
+      "duration_ms": 0.002144,
+      "kind": "kernel",
+      "grid": [
+        33,
+        1,
+        1
+      ],
+      "block": [
+        128,
+        1,
+        1
+      ],
+      "registers_per_thread": 25,
+      "static_shared_bytes": 0,
+      "dynamic_shared_bytes": 0
+    },
+    {
+      "name": "[CUDA memcpy DtoH]",
+      "start_ms": 457.924995,
+      "duration_ms": 0.001567,
+      "kind": "copy",
+      "bytes": 16512,
+      "source_memory": "Device",
+      "destination_memory": "Pageable"
+    },
+    {
+      "name": "[CUDA memcpy DtoH]",
+      "start_ms": 457.954018,
+      "duration_ms": 0.008128,
+      "kind": "copy",
+      "bytes": 99072,
+      "source_memory": "Device",
+      "destination_memory": "Pageable"
+    },
+    {
+      "name": "[CUDA memcpy DtoH]",
+      "start_ms": 458.039072,
+      "duration_ms": 0.00272,
+      "kind": "copy",
+      "bytes": 33024,
+      "source_memory": "Device",
+      "destination_memory": "Pageable"
+    }
+  ],
+  "warm_events": [
+    {
+      "name": "[CUDA memcpy HtoD]",
+      "start_ms": 384.130471,
+      "duration_ms": 0.000832,
+      "kind": "copy",
+      "bytes": 3096,
+      "source_memory": "Pageable",
+      "destination_memory": "Device"
+    },
+    {
+      "name": "[CUDA memcpy HtoD]",
+      "start_ms": 384.180998,
+      "duration_ms": 0.009855,
+      "kind": "copy",
+      "bytes": 99072,
+      "source_memory": "Pageable",
+      "destination_memory": "Device"
+    },
+    {
+      "name": "gnss_gpu::los_check_bvh_batch_kernel(double const *, double const *, gnss_gpu::BVHNode const *, gnss_gpu::Triangle const *, int*, int, int, int)",
+      "start_ms": 384.223301,
+      "duration_ms": 0.96587,
+      "kind": "kernel",
+      "grid": [
+        17,
+        1,
+        1
+      ],
+      "block": [
+        256,
+        1,
+        1
+      ],
+      "registers_per_thread": 63,
+      "static_shared_bytes": 0,
+      "dynamic_shared_bytes": 0
+    },
+    {
+      "name": "void gnss_gpu::multipath_candidates_kernel<bool=1, bool=0>(double const *, double const , gnss_gpu::Triangle const *, int const *, gnss_gpu::MultipathCandidate*, int, int, int, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror const *)",
+      "start_ms": 385.190451,
+      "duration_ms": 72.626961,
+      "kind": "kernel",
+      "grid": [
+        4128,
+        1,
+        1
+      ],
+      "block": [
+        128,
+        1,
+        1
+      ],
+      "registers_per_thread": 78,
+      "static_shared_bytes": 5120,
+      "dynamic_shared_bytes": 0
+    },
+    {
+      "name": "gnss_gpu::multipath_finalize_kernel(gnss_gpu::MultipathCandidate const *, double*, double*, int, int)",
+      "start_ms": 457.81882,
+      "duration_ms": 0.002144,
+      "kind": "kernel",
+      "grid": [
+        33,
+        1,
+        1
+      ],
+      "block": [
+        128,
+        1,
+        1
+      ],
+      "registers_per_thread": 25,
+      "static_shared_bytes": 0,
+      "dynamic_shared_bytes": 0
+    },
+    {
+      "name": "[CUDA memcpy DtoH]",
+      "start_ms": 457.924995,
+      "duration_ms": 0.001567,
+      "kind": "copy",
+      "bytes": 16512,
+      "source_memory": "Device",
+      "destination_memory": "Pageable"
+    },
+    {
+      "name": "[CUDA memcpy DtoH]",
+      "start_ms": 457.954018,
+      "duration_ms": 0.008128,
+      "kind": "copy",
+      "bytes": 99072,
+      "source_memory": "Device",
+      "destination_memory": "Pageable"
+    },
+    {
+      "name": "[CUDA memcpy DtoH]",
+      "start_ms": 458.039072,
+      "duration_ms": 0.00272,
+      "kind": "copy",
+      "bytes": 33024,
+      "source_memory": "Device",
+      "destination_memory": "Pageable"
+    }
+  ],
+  "warm_summary": {
+    "kernel_ms": 73.59497499999999,
+    "copy_gpu_ms": 0.023101999999999998,
+    "candidate_ms": 72.626961,
+    "los_ms": 0.96587,
+    "finalize_ms": 0.002144,
+    "candidate_share_of_kernel_time_percent": 98.68467378377396,
+    "candidate_share_of_recorded_gpu_activity_percent": 98.65370566525394
+  },
+  "interpretation": "The candidate kernel dominates this profiled condition. This timeline alone does not distinguish FP64 pipeline saturation from memory stalls, occupancy or instruction latency.",
+  "hardware_counters_obtained": false,
+  "nsight_compute_unavailable": {
+    "attempted_operation": "--list-sections",
+    "direct_returncode_hex": "0xc0000409",
+    "cupti_path_retry": {
+      "returncode": 3221226505,
+      "returncode_hex": "0xc0000409",
+      "console_bytes": 0
+    }
+  },
+  "raw_reference": {
+    "path": "dist/bvh_floor64_nvprof_available_20261013.csv",
+    "sha256": "67b25e083b7743c023cbe21ae84fa4ca340979d0ee462a983a66b5901c796e83",
+    "public_device_fields_omitted": true
+  },
+  "helper_sha256": {
+    "dist/profile_bvh_candidates_20261013.py": "717a3c3836862f3675afdd2eaedcc69800927d306c6320b6a5183f361b8acf72",
+    "dist/run_bvh_nvprof_20261013.py": "6811100d12aec4793043fd932f2ce601c90bf5412381667aa9c023bf9d6b759e"
+  }
+}

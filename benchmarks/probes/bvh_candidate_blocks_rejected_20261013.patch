@@ -1,0 +1,23 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -1049,15 +1049,18 @@
+   void launch_multipath(int n_epoch, int n_sat, int tiles) {
+     int total = n_epoch * n_sat;
+     if (tiles) {
++      // Keep the same candidate instructions and scratch. With enough rays,
++      // each 64-thread block visits all ordinals using the existing stride.
++      int candidate_threads = total >= 256 ? 64 : MULTIPATH_BLOCK_SIZE;
+       if (mirrors_active) {
+         reflection_mirrors_kernel<<<dim3((n_order + 255) / 256, n_epoch), 256>>>(
+             rx.data, triangles.data, order.data, normals.data, mirrors.data, n_order);
+         CUDA_CHECK_LAST();
+-        multipath_candidates_kernel<true, true><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
++        multipath_candidates_kernel<true, true><<<total * tiles, candidate_threads>>>(
+             rx.data, sat.data, triangles.data, order.data, partial.data, n_sat, n_order, tiles,
+             normals.data, mirrors.data);
+       } else {
+-        multipath_candidates_kernel<true, false><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
++        multipath_candidates_kernel<true, false><<<total * tiles, candidate_threads>>>(
+             rx.data, sat.data, triangles.data, order.data, partial.data, n_sat, n_order, tiles,
+             normals.data, nullptr);
+       }

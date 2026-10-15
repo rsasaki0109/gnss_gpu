@@ -1,0 +1,18 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -948,6 +948,7 @@
+     // large unrolled update/register footprint for every satellite count.
+     double geometry[CACHE_SATS > 0 ? CACHE_SATS * 4 : 1];
+     unsigned int valid_geometry = 0;
++    #pragma unroll 1
+     for (int s = 0; s < n_sat; s++) {
+         double w = fmax(s_weights[s], 0.0);
+         if (w <= 0.0) continue;
+@@ -990,6 +991,7 @@
+     y_mean /= weight_sum;
+ 
+     double log_w = 0.0;
++    #pragma unroll 1
+     for (int s = 0; s < n_sat; s++) {
+         double obs_weight = fmax(s_weights[s], 0.0);
+         if (obs_weight <= 0.0) continue;

@@ -1,0 +1,32 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -931,13 +931,6 @@
+     double x = px[tid];
+     double y = py[tid];
+     double z = pz[tid];
+-    double mui[3] = {vx[tid], vy[tid], vz[tid]};
+-
+-    int cov_off = tid * 9;
+-    double P[9];
+-    for (int k = 0; k < 9; k++) {
+-        P[k] = vcov[cov_off + k];
+-    }
+ 
+     double h_mean[3] = {0.0, 0.0, 0.0};
+     double y_mean = 0.0;
+@@ -988,6 +981,15 @@
+     h_mean[1] /= weight_sum;
+     h_mean[2] /= weight_sum;
+     y_mean /= weight_sum;
++
++    // Velocity/covariance are only needed by the scalar updates. Load them
++    // after geometry centering so they do not occupy registers in the first pass.
++    double mui[3] = {vx[tid], vy[tid], vz[tid]};
++    int cov_off = tid * 9;
++    double P[9];
++    for (int k = 0; k < 9; k++) {
++        P[k] = vcov[cov_off + k];
++    }
+ 
+     double log_w = 0.0;
+     for (int s = 0; s < n_sat; s++) {

@@ -87,6 +87,9 @@ def robust_spp(
     cb = float(np.median(pr - ranges))
 
     state = np.array([pos[0], pos[1], pos[2], cb], dtype=np.float64)
+    H = np.empty((n_sat, 4), dtype=np.float64)
+    H[:, 3] = 1.0
+    HTW = np.empty((4, n_sat), dtype=np.float64)
 
     for iteration in range(max_iter):
         dx_vec = sat - state[:3]
@@ -99,7 +102,7 @@ def robust_spp(
         los = dx_vec / ranges[:, np.newaxis]
 
         # Design matrix H: [-los_x, -los_y, -los_z, 1]
-        H = np.column_stack([-los, np.ones(n_sat)])
+        H[:, :3] = -los
 
         # Observation residuals: observed - predicted
         predicted = ranges + state[3]
@@ -120,9 +123,10 @@ def robust_spp(
             return None
 
         # Weighted least squares: (H^T W H)^{-1} H^T W y
-        W = np.diag(w_total)
-        HTWH = H.T @ W @ H
-        HTWy = H.T @ W @ y
+        # Scale columns directly, keeping the dense path's C-order HTW layout.
+        np.multiply(H.T, w_total, out=HTW)
+        HTWH = HTW @ H
+        HTWy = HTW @ y
 
         try:
             delta = np.linalg.solve(HTWH, HTWy)

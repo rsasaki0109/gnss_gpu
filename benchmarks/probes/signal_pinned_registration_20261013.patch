@@ -1,0 +1,66 @@
+--- a/src/signal_sim/signal_sim.cu
++++ b/src/signal_sim/signal_sim.cu
+@@ -477,6 +477,37 @@
+     std::vector<EpochDescriptor> packed_epochs;
+     std::vector<DeviceChannel> packed_channels;
+     std::vector<int> packed_nav_bits;
++    bool host_registration_disabled = false;
++
++    void download(float* destination, size_t num_floats) {
++        size_t bytes = num_floats * sizeof(float);
++        bool registered_here = false;
++        // Registration cost is included. Keep short outputs on the original
++        // path, and never leave returned ordinary NumPy storage registered.
++        if (!host_registration_disabled && bytes >= 8 * 1024 * 1024 && bytes <= 32 * 1024 * 1024) {
++            cudaError_t status = cudaHostRegister(destination, bytes, cudaHostRegisterDefault);
++            if (status == cudaSuccess) {
++                registered_here = true;
++            } else if (status == cudaErrorInvalidValue || status == cudaErrorMemoryAllocation ||
++                       status == cudaErrorHostMemoryAlreadyRegistered || status == cudaErrorNotSupported) {
++                // Producer synchronization already completed successfully.
++                // Clear this optional registration failure only; existing
++                // external registrations remain owned by their caller.
++                cudaGetLastError();
++                if (status != cudaErrorHostMemoryAlreadyRegistered) host_registration_disabled = true;
++            } else {
++                CUDA_CHECK(status);
++            }
++        }
++        try {
++            CUDA_CHECK(cudaMemcpy(destination, output.data, bytes, cudaMemcpyDeviceToHost));
++        } catch (...) {
++            if (registered_here) cudaHostUnregister(destination);
++            throw;
++        }
++        if (registered_here) CUDA_CHECK(cudaHostUnregister(destination));
++    }
++
+ 
+     ~Impl() {
+         int previous = 0;
+@@ -526,7 +557,6 @@
+ 
+     int blocks = (n_samples + kBlockSize - 1) / kBlockSize;
+     size_t num_floats = (size_t)n_samples * 2;
+-    size_t output_bytes = num_floats * sizeof(float);
+ 
+     auto& packed_channels = impl_->packed_channels;
+     auto& packed_nav_bits = impl_->packed_nav_bits;
+@@ -600,7 +630,7 @@
+     CUDA_CHECK(cudaGetLastError());
+     CUDA_CHECK(cudaDeviceSynchronize());
+ 
+-    CUDA_CHECK(cudaMemcpy(iq_output, d_output, output_bytes, cudaMemcpyDeviceToHost));
++    impl_->download(iq_output, num_floats);
+ 
+ }
+ 
+@@ -674,7 +704,7 @@
+     }
+     CUDA_CHECK(cudaGetLastError());
+     CUDA_CHECK(cudaDeviceSynchronize());
+-    CUDA_CHECK(cudaMemcpy(iq_output, impl_->output.data, floats * sizeof(float), cudaMemcpyDeviceToHost));
++    impl_->download(iq_output, floats);
+ }
+ 
+ void generate_single_channel(const SatChannel& ch,

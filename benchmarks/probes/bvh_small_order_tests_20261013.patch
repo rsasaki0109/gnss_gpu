@@ -1,0 +1,22 @@
+--- a/tests/test_bvh_normal_cache.py
++++ b/tests/test_bvh_normal_cache.py
+@@ -167,7 +167,7 @@
+         scene.multipath_batch(rx, sat)
+         assert scene.allocated_bytes == (
+             geometry_bytes + rx.nbytes + sat.nbytes + 4097 * (4 + 3 * 8 + 8)
+-            + ((36 * count + 40 * 4097) if count >= 512 else 0))
++            + ((36 * count + 40 * 4097) if count >= 128 else 0))
+     finally:
+         scene.close()
+ 
+--- a/tests/test_bvh_serial_cache.py
++++ b/tests/test_bvh_serial_cache.py
+@@ -137,7 +137,7 @@
+         scene.check_los_batch(rx,sat)
+         assert scene.allocated_bytes==geometry+rx.nbytes+sat.nbytes+4097*4
+         scene.multipath_batch(rx,sat)
+-        assert scene.allocated_bytes==geometry+rx.nbytes+sat.nbytes+4097*(4+3*8+8)+((36*count+40*4097) if count>=512 else 0)
++        assert scene.allocated_bytes==geometry+rx.nbytes+sat.nbytes+4097*(4+3*8+8)+((36*count+40*4097) if count>=128 else 0)
+     finally:
+         scene.close()
+     assert scene.allocated_bytes==0

@@ -1,0 +1,596 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-13T00:34:52.735138+00:00",
+  "baseline_reference": {
+    "path": "benchmarks/bvh_serial_cache_gpu_20261013.json",
+    "sha256": "2b1867236ce29d897d78bc216c50b5e108c10a5ded7503e61e087e206ef2debf"
+  },
+  "method": "same process; sequential whole calls; alternating order per call/round; nonexclusive host",
+  "scope": "native reflection/public LOS+reflection/native owner creation+first trace+close/unchanged LOS at 16384 and 16416 rays; all timed arrays checked bitwise; preceding full validator separately covers 16384/16385 boundaries",
+  "rounds": 3,
+  "repeats": 5,
+  "source_sha256": {
+    "baseline": {
+      "src/raytrace/bvh.cu": "4fd4a2702b1b410350a59f7bc99d77f8b85758ef3e553732af2839a34c48e361",
+      "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+      "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+      "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+      "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+    },
+    "candidate": {
+      "src/raytrace/bvh.cu": "5478163827fed2d9ee9beac6b41cf41086f76a172bc5ac48e7a54f74117427cb",
+      "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+      "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+      "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+      "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+    }
+  },
+  "extension_sha256": {
+    "baseline": "fefd2f97649a19e1e588f56539e1b86b5d7a1176ea862b62719998bd507385b3",
+    "candidate": "85d444ba74f2d18943113f4f289bae8e9ca894738345a9aa431fe13a0feb66cf"
+  },
+  "benchmark_sha256": {
+    "benchmarks/bench_bvh_large_parallel_upper_check.py": "675f534c61f14a9d782b44b311d3b54c027b27f8184ec9141332e2394bc610d8",
+    "benchmarks/bench_bvh_large_parallel_compare.py": "8605e96c3e6d9e738fe58be55091c43d3bfdac54bfdd8a2778dcb8c3a3e07980",
+    "benchmarks/bench_bvh_build_compare.py": "653a9e3c0307b0ff98da06b6999d0d2abfbdd9e514c0d310c66264765dd8f218",
+    "benchmarks/bench_bvh_combined_compare.py": "7f166d08584fa4d2c6f5eec42f1dd0365d5494d6f7fe3740c642bbad70f0e71f",
+    "benchmarks/bench_bvh_multipath_compare.py": "ad3311b0a427ba5cc2e9442d58e078203145a1a41da09d44b773874a1f122c46",
+    "benchmarks/bench_raytrace.py": "44c1a925eef00c2c7577106f4c5cd7f670e1796304075b4d83829c3a53ee2100"
+  },
+  "measurements": {
+    "triangles12000/epochs512/satellites32/warm_multipath": {
+      "baseline_ms": 256.3973,
+      "candidate_ms": 229.5355,
+      "speedup": 1.1170267779929464,
+      "round_medians_ms": {
+        "baseline": [
+          256.3457,
+          256.4314,
+          256.3973
+        ],
+        "candidate": [
+          229.5041,
+          229.5355,
+          229.5777
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            256.3191,
+            256.3853,
+            256.3457,
+            256.3402,
+            256.3865
+          ],
+          [
+            256.5082,
+            256.3968,
+            256.4349,
+            256.4314,
+            256.3655
+          ],
+          [
+            256.4262,
+            256.4022,
+            256.3158,
+            256.3321,
+            256.3973
+          ]
+        ],
+        "candidate": [
+          [
+            229.8218,
+            230.5489,
+            229.4657,
+            229.5041,
+            229.4937
+          ],
+          [
+            229.6313,
+            229.4647,
+            229.5355,
+            229.5317,
+            230.454
+          ],
+          [
+            229.5777,
+            229.5779,
+            229.5244,
+            229.6117,
+            229.4588
+          ]
+        ]
+      },
+      "output_sha256": "185383b0719506531bcd65df156f0a2afed059d9821ec99bf829932088908495",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "b33c7d7ddd671c58917df25d9eb40cf3a13eaa1121e08404c340e46e73ecc1e1"
+    },
+    "triangles12000/epochs512/satellites32/public_warm_trace": {
+      "baseline_ms": 260.7292,
+      "candidate_ms": 233.6789,
+      "speedup": 1.11575841892443,
+      "round_medians_ms": {
+        "baseline": [
+          260.808,
+          260.7292,
+          260.7156
+        ],
+        "candidate": [
+          233.6522,
+          233.7096,
+          233.6789
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            260.8162,
+            260.7795,
+            260.8713,
+            260.6563,
+            260.808
+          ],
+          [
+            260.748,
+            260.7292,
+            260.7351,
+            260.5964,
+            260.6572
+          ],
+          [
+            260.7797,
+            260.6557,
+            260.7204,
+            260.6956,
+            260.7156
+          ]
+        ],
+        "candidate": [
+          [
+            233.6522,
+            233.5104,
+            233.6518,
+            233.769,
+            233.8134
+          ],
+          [
+            233.7096,
+            233.8735,
+            233.7787,
+            233.6531,
+            233.522
+          ],
+          [
+            233.7386,
+            233.6005,
+            233.5885,
+            233.6789,
+            233.7675
+          ]
+        ]
+      },
+      "output_sha256": "3d7f0cf453f2dd38378e99e99b3ce52c112018d0d1cfce7bcbddb0e6d81b6dd4",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "b33c7d7ddd671c58917df25d9eb40cf3a13eaa1121e08404c340e46e73ecc1e1"
+    },
+    "triangles12000/epochs512/satellites32/native_cold_trace_close": {
+      "baseline_ms": 262.4438,
+      "candidate_ms": 235.5574,
+      "speedup": 1.114139483624798,
+      "round_medians_ms": {
+        "baseline": [
+          262.3926,
+          262.8438,
+          262.4438
+        ],
+        "candidate": [
+          235.5574,
+          235.7986,
+          235.3689
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            262.3926,
+            262.5443,
+            262.4407,
+            262.2907,
+            262.2843
+          ],
+          [
+            262.6445,
+            263.1626,
+            262.8438,
+            263.4646,
+            262.6074
+          ],
+          [
+            262.4519,
+            262.4438,
+            262.5216,
+            262.2747,
+            262.2783
+          ]
+        ],
+        "candidate": [
+          [
+            235.0364,
+            235.6521,
+            235.3969,
+            235.7398,
+            235.5574
+          ],
+          [
+            235.8662,
+            236.0972,
+            235.7986,
+            235.3408,
+            235.1697
+          ],
+          [
+            235.8275,
+            235.7312,
+            235.3689,
+            235.1636,
+            235.2463
+          ]
+        ]
+      },
+      "output_sha256": "984e6deb39877ec9e677a159d6d01d565c4ab3072d4e67c205de4366c8bccc38",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "b33c7d7ddd671c58917df25d9eb40cf3a13eaa1121e08404c340e46e73ecc1e1"
+    },
+    "triangles12000/epochs512/satellites32/unchanged_warm_los": {
+      "baseline_ms": 2.4771,
+      "candidate_ms": 2.5043,
+      "speedup": 0.9891386814678752,
+      "round_medians_ms": {
+        "baseline": [
+          2.4771,
+          2.5172,
+          2.4668
+        ],
+        "candidate": [
+          2.4786,
+          2.5043,
+          2.526
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            2.45,
+            2.4653,
+            2.48,
+            2.4771,
+            2.4955
+          ],
+          [
+            2.5696,
+            2.5172,
+            2.5873,
+            2.5129,
+            2.4602
+          ],
+          [
+            2.453,
+            2.4434,
+            2.517,
+            2.4668,
+            2.5089
+          ]
+        ],
+        "candidate": [
+          [
+            2.4716,
+            2.4459,
+            2.5085,
+            2.5205,
+            2.4786
+          ],
+          [
+            2.5511,
+            2.5043,
+            2.4855,
+            2.5573,
+            2.4981
+          ],
+          [
+            2.527,
+            2.4665,
+            2.526,
+            2.5287,
+            2.5151
+          ]
+        ]
+      },
+      "output_sha256": "abcb84abed491f8e6641044dc9222aae8381f84e9b5a8403cb170d926e3622f4",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "b33c7d7ddd671c58917df25d9eb40cf3a13eaa1121e08404c340e46e73ecc1e1"
+    },
+    "triangles12000/epochs512/satellites32/memory": {
+      "baseline": 2826432,
+      "candidate": 3481792,
+      "extra_bytes": 655360
+    },
+    "triangles12000/epochs513/satellites32/warm_multipath": {
+      "baseline_ms": 258.2055,
+      "candidate_ms": 258.1569,
+      "speedup": 1.00018825760613,
+      "round_medians_ms": {
+        "baseline": [
+          258.193,
+          258.2223,
+          258.2055
+        ],
+        "candidate": [
+          258.1569,
+          258.1237,
+          258.235
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            258.2472,
+            258.119,
+            258.1117,
+            258.2484,
+            258.193
+          ],
+          [
+            258.2223,
+            258.1919,
+            258.2517,
+            258.2391,
+            258.1893
+          ],
+          [
+            258.1843,
+            258.2055,
+            258.2203,
+            258.1868,
+            258.2086
+          ]
+        ],
+        "candidate": [
+          [
+            258.1671,
+            258.1569,
+            258.1428,
+            258.2307,
+            258.1463
+          ],
+          [
+            258.1064,
+            258.1237,
+            258.1102,
+            258.2394,
+            258.2201
+          ],
+          [
+            258.235,
+            258.3101,
+            258.2587,
+            258.1754,
+            258.1238
+          ]
+        ]
+      },
+      "output_sha256": "bfe932506d6777bb8e0aa1b60b88ed875c7bec64f5f22f90d36149f323641f06",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "f08ef0dc4de3a431790bd9d4d3dbd944111a5a769ce795844e06e1974fc3ae4f"
+    },
+    "triangles12000/epochs513/satellites32/public_warm_trace": {
+      "baseline_ms": 260.4746,
+      "candidate_ms": 260.4486,
+      "speedup": 1.000099827758721,
+      "round_medians_ms": {
+        "baseline": [
+          260.4702,
+          260.4746,
+          264.0552
+        ],
+        "candidate": [
+          260.45,
+          260.4374,
+          260.4486
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            260.5412,
+            260.3829,
+            260.4702,
+            260.4368,
+            260.5606
+          ],
+          [
+            260.4746,
+            260.6873,
+            260.3984,
+            260.4898,
+            260.3305
+          ],
+          [
+            267.3103,
+            298.9967,
+            264.0552,
+            260.2983,
+            260.4532
+          ]
+        ],
+        "candidate": [
+          [
+            260.45,
+            260.4136,
+            260.584,
+            260.4833,
+            260.3748
+          ],
+          [
+            260.33,
+            260.5098,
+            260.4374,
+            260.4509,
+            260.4098
+          ],
+          [
+            272.2665,
+            294.4415,
+            260.4003,
+            260.3745,
+            260.4486
+          ]
+        ]
+      },
+      "output_sha256": "76d8908960f56bb070239347a43fc42fada4a6ce14edc2323f241d83523de2c1",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "f08ef0dc4de3a431790bd9d4d3dbd944111a5a769ce795844e06e1974fc3ae4f"
+    },
+    "triangles12000/epochs513/satellites32/native_cold_trace_close": {
+      "baseline_ms": 262.4841,
+      "candidate_ms": 262.6128,
+      "speedup": 0.9995099248779954,
+      "round_medians_ms": {
+        "baseline": [
+          262.4841,
+          262.152,
+          262.5411
+        ],
+        "candidate": [
+          262.6128,
+          262.1774,
+          262.6544
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            262.4841,
+            262.6913,
+            263.1135,
+            262.4338,
+            262.3606
+          ],
+          [
+            262.152,
+            262.0316,
+            262.037,
+            262.5332,
+            262.4719
+          ],
+          [
+            262.5411,
+            262.2758,
+            262.4822,
+            262.598,
+            263.2407
+          ]
+        ],
+        "candidate": [
+          [
+            262.4289,
+            262.2163,
+            263.0685,
+            262.992,
+            262.6128
+          ],
+          [
+            262.1229,
+            262.1774,
+            262.0653,
+            262.3488,
+            262.2381
+          ],
+          [
+            262.6544,
+            262.6739,
+            262.3799,
+            262.8864,
+            262.3864
+          ]
+        ]
+      },
+      "output_sha256": "dc0c30358cd977d55b2971a16a7d7a5893afc304b44ac2cc70e9eefecc42a04f",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "f08ef0dc4de3a431790bd9d4d3dbd944111a5a769ce795844e06e1974fc3ae4f"
+    },
+    "triangles12000/epochs513/satellites32/unchanged_warm_los": {
+      "baseline_ms": 2.5177,
+      "candidate_ms": 2.5745,
+      "speedup": 0.9779374635851622,
+      "round_medians_ms": {
+        "baseline": [
+          2.484,
+          2.6337,
+          2.5177
+        ],
+        "candidate": [
+          2.462,
+          2.6117,
+          2.5745
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            2.4679,
+            2.5061,
+            2.4997,
+            2.484,
+            2.4824
+          ],
+          [
+            2.6293,
+            2.5613,
+            2.6466,
+            2.636,
+            2.6337
+          ],
+          [
+            2.551,
+            2.5177,
+            2.4873,
+            2.5836,
+            2.4517
+          ]
+        ],
+        "candidate": [
+          [
+            2.434,
+            2.4321,
+            2.4725,
+            2.462,
+            2.5985
+          ],
+          [
+            2.5671,
+            2.6699,
+            2.6486,
+            2.6117,
+            2.5263
+          ],
+          [
+            2.5968,
+            2.5745,
+            2.5734,
+            2.6067,
+            2.4237
+          ]
+        ]
+      },
+      "output_sha256": "056f5fb69f7a503fe44982878201bff324b07e85c0dec4769e95f657f173f497",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "f08ef0dc4de3a431790bd9d4d3dbd944111a5a769ce795844e06e1974fc3ae4f"
+    },
+    "triangles12000/epochs513/satellites32/memory": {
+      "baseline": 2828376,
+      "candidate": 2828376,
+      "extra_bytes": 0
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-14T21:53:40.013702+00:00",
+  "verified": true,
+  "adopted": true,
+  "source_build_installed_and_archive_match": true,
+  "measurement_report": {
+    "path": "benchmarks/pf_uniform_cdf_gpu_20261015.json",
+    "sha256": "2b88fd39d8ad60c2dbb33daafd44fd84a2bd971112b1b8916c6a73e058789bfc"
+  },
+  "device_code_report": {
+    "path": "benchmarks/pf_uniform_cdf_device_code_20261013.json",
+    "sha256": "5ff7c157bfb1d648bac71be5dd14f4f32c61785959fea568b472746da0954a95"
+  },
+  "bit_identical_cases": 6587,
+  "output_cases": 6513,
+  "matched_rejections": 74,
+  "new_uniform_CDF_records": 282,
+  "stage_batch_conditions": 36,
+  "probe_conditions": 36,
+  "per_sample_pairs": 225,
+  "paired_full_state_snapshots": 45,
+  "traced_host_peak_cases": 6,
+  "new_test_cases_each": 295,
+  "new_API_contract_tests": 13,
+  "baseline_contract_tests_check_API_absence": true,
+  "regression_passed": 11052,
+  "fresh_pool_sanitizer_tests_each": 2931,
+  "memcheck_errors": 0,
+  "leaked_bytes": 0,
+  "racecheck_hazards": 0,
+  "synccheck_errors": 0,
+  "retained_GPU_bodies_and_resources": 83,
+  "new_GPU_kernels": 1,
+  "new_CDF_GPU_kernel_has_no_FP_arithmetic": true,
+  "new_GPU_owner_buffers_or_allocation": false,
+  "exact_original_sequential_FP64_CDF_every_bit_preserved": true,
+  "queued_source_target_scratch_reuse_and_rounding_fallback_verified": true,
+  "retained_bvh_and_signal": {
+    "benchmarks/bvh_parallel_mirror_chunks_gpu_20261013.json": {
+      "sha256": "bcda1df440f75615bc2d869e031b039f3499d2318444243ef62b4e88d0215cd8",
+      "source_build_installed_match": true
+    },
+    "benchmarks/signal_wide_static_gpu_20261014.json": {
+      "sha256": "086e17293f916911ae63de639b76adf6371b15c514b535e9668fcb43b360d222",
+      "source_build_installed_match": true
+    }
+  },
+  "public_text_files_checked": 2755,
+  "public_device_model_names_absent": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  },
+  "long_real_data_position_error_curve_newly_evaluated": false
+}

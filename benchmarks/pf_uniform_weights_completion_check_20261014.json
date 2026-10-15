@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-14T14:03:54.979983+00:00",
+  "verified": true,
+  "adopted": true,
+  "source_build_installed_and_archive_match": true,
+  "measurement_report": {
+    "path": "benchmarks/pf_uniform_weights_gpu_20261014.json",
+    "sha256": "2089d6d4f786868f40da81c11a58dd1915e8a707faa18d63bf17398f3c4ae00b"
+  },
+  "device_code_report": {
+    "path": "benchmarks/pf_uniform_weights_device_code_20261013.json",
+    "sha256": "033d8607c364ca33c6ebfba3c2cb2df7a1be92d0d58734f77e2895e9abc0d8ba"
+  },
+  "bit_identical_cases": 2727,
+  "output_cases": 2672,
+  "matched_rejections": 55,
+  "new_scalar_cache_particle_cases": 156,
+  "new_queued_histories": 3,
+  "new_public_dispatch_cases": 24,
+  "stage_batch_conditions": 32,
+  "stage_rounds": 3,
+  "stage_repeats": 3,
+  "probe_conditions": 32,
+  "per_sample_conditions": 8,
+  "paired_rounds": 5,
+  "paired_repeats": 5,
+  "per_sample_pairs": 200,
+  "paired_full_state_snapshots": 40,
+  "traced_host_peak_cases": 6,
+  "baseline_new_tests_passed": 183,
+  "baseline_optional_API_tests_skipped": 4,
+  "candidate_new_tests_passed": 187,
+  "regression_passed": 7179,
+  "fresh_pool_scalar_CDF_sanitizer_tests_each": 1215,
+  "memcheck_errors": 0,
+  "leaked_bytes": 0,
+  "racecheck_hazards": 0,
+  "synccheck_errors": 0,
+  "native_state_layout_unchanged": true,
+  "retained_gpu_bodies_and_resources": 82,
+  "new_gpu_kernels": 1,
+  "new_scalar_store_registers": 8,
+  "new_gpu_owner_buffers_or_allocation": false,
+  "original_CPU_log_value_CDF_selection_model_RNG_count_tolerance": true,
+  "scalar_raw_bits_signed_zero_NaN_payload_cache_and_stream_completion": true,
+  "captured_original_setter_identities_and_all_fallbacks_verified": true,
+  "baseline_measurement_fixture_trial_preserved_product_and_expectations_unchanged": true,
+  "retained_bvh_and_signal": {
+    "benchmarks/bvh_parallel_mirror_chunks_gpu_20261013.json": {
+      "sha256": "bcda1df440f75615bc2d869e031b039f3499d2318444243ef62b4e88d0215cd8",
+      "source_build_installed_match": true
+    },
+    "benchmarks/signal_wide_static_gpu_20261014.json": {
+      "sha256": "086e17293f916911ae63de639b76adf6371b15c514b535e9668fcb43b360d222",
+      "source_build_installed_match": true
+    }
+  },
+  "public_text_files_checked": 2734,
+  "public_device_model_names_absent": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  },
+  "long_real_data_position_error_curve_newly_evaluated": false
+}

@@ -1,0 +1,96 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -821,6 +821,55 @@
+   if (threadIdx.x == 0) partial[blockIdx.x] = winners[0];
+ }
+ 
++template <bool CACHED_NORMALS, bool SHARED_MIRRORS>
++__global__ void multipath_compact_candidates_kernel(const double* rx_ecef,
++                                            const double* sat_ecef,
++                                            const Triangle* tris,
++                                            const int* triangle_order,
++                                            MultipathCandidate* partial,
++                                            int n_sat, int n_tri, int tiles,
++                                            const ReflectionNormal* normals,
++                                            const ReflectionMirror* mirrors) {
++  int ray = blockIdx.x / tiles;
++  int tile = blockIdx.x % tiles;
++  int eid = ray / n_sat;
++  double rx[3] = {rx_ecef[eid * 3], rx_ecef[eid * 3 + 1], rx_ecef[eid * 3 + 2]};
++  double sat[3] = {sat_ecef[ray * 3], sat_ecef[ray * 3 + 1], sat_ecef[ray * 3 + 2]};
++  MultipathCandidate best = {};
++  best.order = -1;
++  if (!isfinite(rx[0]) || !isfinite(rx[1]) || !isfinite(rx[2]) ||
++      !isfinite(sat[0]) || !isfinite(sat[1]) || !isfinite(sat[2])) {
++    if (threadIdx.x == 0) partial[blockIdx.x] = best;
++    return;
++  }
++  double d_rx_sat = sqrt((rx[0] - sat[0]) * (rx[0] - sat[0]) +
++                          (rx[1] - sat[1]) * (rx[1] - sat[1]) +
++                          (rx[2] - sat[2]) * (rx[2] - sat[2]));
++  for (int ordinal = tile * blockDim.x + threadIdx.x;
++       ordinal < n_tri; ordinal += tiles * blockDim.x) {
++    MultipathCandidate candidate = {};
++    candidate.order = ordinal;
++    const ReflectionNormal* normal = nullptr;
++    if constexpr (CACHED_NORMALS) normal = normals + ordinal;
++    const ReflectionMirror* mirror = nullptr;
++    if constexpr (SHARED_MIRRORS) mirror = mirrors + (size_t)eid * n_tri + ordinal;
++    if (multipath_candidate<CACHED_NORMALS, SHARED_MIRRORS>(
++            rx, sat, d_rx_sat, tris[triangle_order[ordinal]], candidate, normal, mirror) &&
++        better_multipath(candidate, best)) best = candidate;
++  }
++  __shared__ MultipathCandidate winners[64];
++  winners[threadIdx.x] = best;
++  __syncthreads();
++  for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
++    if (threadIdx.x < stride &&
++        better_multipath(winners[threadIdx.x + stride], winners[threadIdx.x])) {
++      winners[threadIdx.x] = winners[threadIdx.x + stride];
++    }
++    __syncthreads();
++  }
++  if (threadIdx.x == 0) partial[blockIdx.x] = winners[0];
++}
++
+ __global__ void multipath_finalize_kernel(const MultipathCandidate* partial,
+                                           double* reflection_points,
+                                           double* excess_delays, int n_rays, int tiles) {
+@@ -1049,17 +1098,31 @@
+   void launch_multipath(int n_epoch, int n_sat, int tiles) {
+     int total = n_epoch * n_sat;
+     if (tiles) {
++      // The compact kernel retains the candidate body and visits every
++      // ordinal, with 64 winner entries for its 64 participating threads.
+       if (mirrors_active) {
+         reflection_mirrors_kernel<<<dim3((n_order + 255) / 256, n_epoch), 256>>>(
+             rx.data, triangles.data, order.data, normals.data, mirrors.data, n_order);
+         CUDA_CHECK_LAST();
+-        multipath_candidates_kernel<true, true><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
+-            rx.data, sat.data, triangles.data, order.data, partial.data, n_sat, n_order, tiles,
+-            normals.data, mirrors.data);
++        if (total >= 256) {
++          multipath_compact_candidates_kernel<true, true><<<total * tiles, 64>>>(
++              rx.data, sat.data, triangles.data, order.data, partial.data, n_sat, n_order, tiles,
++              normals.data, mirrors.data);
++        } else {
++          multipath_candidates_kernel<true, true><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
++              rx.data, sat.data, triangles.data, order.data, partial.data, n_sat, n_order, tiles,
++              normals.data, mirrors.data);
++        }
+       } else {
+-        multipath_candidates_kernel<true, false><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
+-            rx.data, sat.data, triangles.data, order.data, partial.data, n_sat, n_order, tiles,
+-            normals.data, nullptr);
++        if (total >= 256) {
++          multipath_compact_candidates_kernel<true, false><<<total * tiles, 64>>>(
++              rx.data, sat.data, triangles.data, order.data, partial.data, n_sat, n_order, tiles,
++              normals.data, nullptr);
++        } else {
++          multipath_candidates_kernel<true, false><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
++              rx.data, sat.data, triangles.data, order.data, partial.data, n_sat, n_order, tiles,
++              normals.data, nullptr);
++        }
+       }
+       CUDA_CHECK_LAST();
+       multipath_finalize_kernel<<<(total + MULTIPATH_BLOCK_SIZE - 1) / MULTIPATH_BLOCK_SIZE,

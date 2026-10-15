@@ -15,7 +15,7 @@ Follow-up to `decisions.md` D-039. Question: does replacing the historical
   PF-only methods.
 - Noise reference: the default with PF seed 43 instead of 42.
 - Summary: [`resampler_ablation_ppc_2026_10_03.json`](resampler_ablation_ppc_2026_10_03.json).
-- GPU: GTX 1660 Ti (Turing, compute 7.5), Windows, all native modules built locally.
+- GPU: NVIDIA CUDA GPU (Turing, compute 7.5), Windows, all native modules built locally.
 
 ## Results (6-route mean, horizontal error in m)
 

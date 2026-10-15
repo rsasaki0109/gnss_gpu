@@ -1,0 +1,23 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -3616,6 +3616,20 @@
+         state->d_obs_scratch, state->d_log_weights,
+         N, n_sat, wavelength_m, sigma_mps,
+         velocity_update_gain, max_velocity_update_mps);
++    } else if (n_sat <= 24) {
++    pfd_weight_doppler_cached_kernel<24><<<(N + 127) / 128, 128, smem, state->stream>>>(
++        state->d_px, state->d_py, state->d_pz,
++        state->d_vx, state->d_vy, state->d_vz,
++        state->d_obs_scratch, state->d_log_weights,
++        N, n_sat, wavelength_m, sigma_mps,
++        velocity_update_gain, max_velocity_update_mps);
++    } else if (n_sat <= 32) {
++    pfd_weight_doppler_cached_kernel<32><<<(N + 127) / 128, 128, smem, state->stream>>>(
++        state->d_px, state->d_py, state->d_pz,
++        state->d_vx, state->d_vy, state->d_vz,
++        state->d_obs_scratch, state->d_log_weights,
++        N, n_sat, wavelength_m, sigma_mps,
++        velocity_update_gain, max_velocity_update_mps);
+     } else {
+     pfd_weight_doppler_kernel<<<grid, BLOCK_SIZE, smem, state->stream>>>(
+         state->d_px, state->d_py, state->d_pz,

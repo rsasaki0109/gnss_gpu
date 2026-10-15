@@ -1,0 +1,30 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -1,5 +1,6 @@
+ #include "gnss_gpu/cuda_check.h"
+ #include "gnss_gpu/pf_device.h"
++#include "pf_division.cuh"
+ #include <curand_kernel.h>
+ #include <thrust/device_ptr.h>
+ #include <thrust/scan.h>
+@@ -1027,7 +1028,10 @@
+         }
+         double pred = h[0] * mui[0] + h[1] * mui[1] + h[2] * mui[2];
+         double innov = y_centered - pred;
+-        double K[3] = {ph0 / S, ph1 / S, ph2 / S};
++        auto division = pfd_quotient_bounds(S);
++        double K[3] = {pfd_quotient_rn(ph0, division), pfd_quotient_rn(ph1, division),
++                       pfd_quotient_rn(ph2, division)};
++        double normalized_innovation = pfd_quotient_rn(__dmul_rn(innov, innov), division);
+         mui[0] += K[0] * innov;
+         mui[1] += K[1] * innov;
+         mui[2] += K[2] * innov;
+@@ -1049,7 +1053,7 @@
+         P[4] = (isfinite(P[4]) && P[4] > 1e-12) ? P[4] : 1e-12;
+         P[8] = (isfinite(P[8]) && P[8] > 1e-12) ? P[8] : 1e-12;
+ 
+-        log_w += -0.5 * (innov * innov / S + log(S));
++        log_w += -0.5 * (normalized_innovation + log(S));
+     }
+ 
+     vx[tid] = mui[0];

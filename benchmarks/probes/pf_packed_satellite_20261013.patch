@@ -1,0 +1,210 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -2378,9 +2378,9 @@
+ 
+     // Persistent device buffers for satellite data (pre-allocate for MAX_SATS)
+     state->pinned_capacity = MAX_SATS;
+-    CUDA_CHECK(cudaMalloc(&state->d_sat_ecef, MAX_SATS * 3 * sizeof(double)));
+-    CUDA_CHECK(cudaMalloc(&state->d_pseudoranges, MAX_SATS * sizeof(double)));
+-    CUDA_CHECK(cudaMalloc(&state->d_weights_sat, MAX_SATS * sizeof(double)));
++    CUDA_CHECK(cudaMalloc(&state->d_sat_ecef, MAX_SATS * 5 * sizeof(double)));
++    state->d_pseudoranges = state->d_sat_ecef + MAX_SATS * 3;
++    state->d_weights_sat = state->d_sat_ecef + MAX_SATS * 4;
+     state->obs_scratch_capacity = MAX_SATS * 11;
+     CUDA_CHECK(cudaMalloc(
+         &state->d_obs_scratch,
+@@ -2434,9 +2434,8 @@
+     cudaFree(state->d_vel);
+ 
+     // Free persistent satellite device buffers
++    // Observation/weight pointers alias the packed satellite allocation.
+     cudaFree(state->d_sat_ecef);
+-    cudaFree(state->d_pseudoranges);
+-    cudaFree(state->d_weights_sat);
+     cudaFree(state->d_obs_scratch);
+ 
+     // Free pinned host memory
+@@ -2579,6 +2578,36 @@
+     state->obs_scratch_capacity = required_doubles;
+ }
+ 
++// PR, GMM and undifferenced carrier updates share the same five-column
++// layout. Keep one owning allocation and refresh the current-length aliases.
++static void pfd_stage_satellite_observations(PFDeviceState* state,
++    const double* sat_ecef, const double* observations, const double* weights,
++    int n_sat) {
++    // Both the preceding kernel and pinned-source H2D must finish before the
++    // shared buffers are overwritten or grown, exactly as for the old staging.
++    CUDA_CHECK(cudaStreamSynchronize(state->stream));
++    if (n_sat > state->pinned_capacity) {
++        CUDA_CHECK(cudaFreeHost(state->h_sat_pinned));
++        state->h_sat_pinned = nullptr;
++        CUDA_CHECK(cudaFree(state->d_sat_ecef));
++        state->d_sat_ecef = nullptr;
++        state->d_pseudoranges = nullptr;
++        state->d_weights_sat = nullptr;
++        CUDA_CHECK(cudaMallocHost(&state->h_sat_pinned, (size_t)n_sat * 5 * sizeof(double)));
++        CUDA_CHECK(cudaMalloc(&state->d_sat_ecef, (size_t)n_sat * 5 * sizeof(double)));
++        state->pinned_capacity = n_sat;
++    }
++    size_t coordinates = (size_t)n_sat * 3;
++    size_t values = (size_t)n_sat;
++    memcpy(state->h_sat_pinned, sat_ecef, coordinates * sizeof(double));
++    memcpy(state->h_sat_pinned + coordinates, observations, values * sizeof(double));
++    memcpy(state->h_sat_pinned + coordinates + values, weights, values * sizeof(double));
++    state->d_pseudoranges = state->d_sat_ecef + coordinates;
++    state->d_weights_sat = state->d_pseudoranges + values;
++    CUDA_CHECK(cudaMemcpyAsync(state->d_sat_ecef, state->h_sat_pinned,
++        (coordinates + 2 * values) * sizeof(double), cudaMemcpyHostToDevice, state->stream));
++}
++
+ void pf_device_weight(PFDeviceState* state,
+     const double* sat_ecef, const double* pseudoranges,
+     const double* weights_sat,
+@@ -2590,42 +2619,7 @@
+     int N = state->n_particles;
+     int grid = state->grid_size;
+ 
+-    // Satellite data is small: n_sat * 5 doubles typically < 1KB
+-    // Use persistent device buffers and pinned host memory for async transfer
+-    size_t sz_sat = (size_t)n_sat * 3 * sizeof(double);
+-    size_t sz_obs = (size_t)n_sat * sizeof(double);
+-
+-    // If n_sat exceeds pinned_capacity, reallocate (rare path)
+-    if (n_sat > state->pinned_capacity) {
+-        CUDA_CHECK(cudaStreamSynchronize(state->stream));
+-        CUDA_CHECK(cudaFreeHost(state->h_sat_pinned));
+-        CUDA_CHECK(cudaFree(state->d_sat_ecef));
+-        CUDA_CHECK(cudaFree(state->d_pseudoranges));
+-        CUDA_CHECK(cudaFree(state->d_weights_sat));
+-
+-        state->pinned_capacity = n_sat;
+-        CUDA_CHECK(cudaMallocHost(&state->h_sat_pinned, n_sat * 5 * sizeof(double)));
+-        CUDA_CHECK(cudaMalloc(&state->d_sat_ecef, n_sat * 3 * sizeof(double)));
+-        CUDA_CHECK(cudaMalloc(&state->d_pseudoranges, n_sat * sizeof(double)));
+-        CUDA_CHECK(cudaMalloc(&state->d_weights_sat, n_sat * sizeof(double)));
+-    }
+-
+-    // Ensure previous async transfers from pinned buffer are complete before overwriting
+-    CUDA_CHECK(cudaStreamSynchronize(state->stream));
+-
+-    // Stage satellite data into contiguous pinned buffer: [sat_ecef | pseudoranges | weights]
+-    double* h_sat = state->h_sat_pinned;
+-    memcpy(h_sat, sat_ecef, sz_sat);
+-    memcpy(h_sat + n_sat * 3, pseudoranges, sz_obs);
+-    memcpy(h_sat + n_sat * 4, weights_sat, sz_obs);
+-
+-    // Async H2D transfer on the stream (overlaps with previous kernel if any)
+-    CUDA_CHECK(cudaMemcpyAsync(state->d_sat_ecef, h_sat,
+-                               sz_sat, cudaMemcpyHostToDevice, state->stream));
+-    CUDA_CHECK(cudaMemcpyAsync(state->d_pseudoranges, h_sat + n_sat * 3,
+-                               sz_obs, cudaMemcpyHostToDevice, state->stream));
+-    CUDA_CHECK(cudaMemcpyAsync(state->d_weights_sat, h_sat + n_sat * 4,
+-                               sz_obs, cudaMemcpyHostToDevice, state->stream));
++    pfd_stage_satellite_observations(state, sat_ecef, pseudoranges, weights_sat, n_sat);
+ 
+     // Launch weight kernel on the same stream (waits for async copies to complete)
+     // Dynamic shared memory: n_sat*3 (sat_ecef) + n_sat (pr) + n_sat (ws) = n_sat*5 doubles
+@@ -2786,42 +2780,7 @@
+     int N = state->n_particles;
+     int grid = state->grid_size;
+ 
+-    // Satellite data is small: n_sat * 5 doubles typically < 1KB
+-    // Use persistent device buffers and pinned host memory for async transfer
+-    size_t sz_sat = (size_t)n_sat * 3 * sizeof(double);
+-    size_t sz_obs = (size_t)n_sat * sizeof(double);
+-
+-    // If n_sat exceeds pinned_capacity, reallocate (rare path)
+-    if (n_sat > state->pinned_capacity) {
+-        CUDA_CHECK(cudaStreamSynchronize(state->stream));
+-        CUDA_CHECK(cudaFreeHost(state->h_sat_pinned));
+-        CUDA_CHECK(cudaFree(state->d_sat_ecef));
+-        CUDA_CHECK(cudaFree(state->d_pseudoranges));
+-        CUDA_CHECK(cudaFree(state->d_weights_sat));
+-
+-        state->pinned_capacity = n_sat;
+-        CUDA_CHECK(cudaMallocHost(&state->h_sat_pinned, n_sat * 5 * sizeof(double)));
+-        CUDA_CHECK(cudaMalloc(&state->d_sat_ecef, n_sat * 3 * sizeof(double)));
+-        CUDA_CHECK(cudaMalloc(&state->d_pseudoranges, n_sat * sizeof(double)));
+-        CUDA_CHECK(cudaMalloc(&state->d_weights_sat, n_sat * sizeof(double)));
+-    }
+-
+-    // Ensure previous async transfers from pinned buffer are complete before overwriting
+-    CUDA_CHECK(cudaStreamSynchronize(state->stream));
+-
+-    // Stage satellite data into contiguous pinned buffer: [sat_ecef | pseudoranges | weights]
+-    double* h_sat = state->h_sat_pinned;
+-    memcpy(h_sat, sat_ecef, sz_sat);
+-    memcpy(h_sat + n_sat * 3, pseudoranges, sz_obs);
+-    memcpy(h_sat + n_sat * 4, weights_sat, sz_obs);
+-
+-    // Async H2D transfer on the stream
+-    CUDA_CHECK(cudaMemcpyAsync(state->d_sat_ecef, h_sat,
+-                               sz_sat, cudaMemcpyHostToDevice, state->stream));
+-    CUDA_CHECK(cudaMemcpyAsync(state->d_pseudoranges, h_sat + n_sat * 3,
+-                               sz_obs, cudaMemcpyHostToDevice, state->stream));
+-    CUDA_CHECK(cudaMemcpyAsync(state->d_weights_sat, h_sat + n_sat * 4,
+-                               sz_obs, cudaMemcpyHostToDevice, state->stream));
++    pfd_stage_satellite_observations(state, sat_ecef, pseudoranges, weights_sat, n_sat);
+ 
+     // Launch GMM weight kernel on the same stream
+     size_t smem_weight = (size_t)n_sat * 5 * sizeof(double);
+@@ -3224,42 +3183,7 @@
+     int N = state->n_particles;
+     int grid = state->grid_size;
+ 
+-    // Satellite data is small: n_sat * 5 doubles typically < 1KB
+-    // Reuse persistent device buffers (d_pseudoranges holds carrier_phase here)
+-    size_t sz_sat = (size_t)n_sat * 3 * sizeof(double);
+-    size_t sz_obs = (size_t)n_sat * sizeof(double);
+-
+-    // If n_sat exceeds pinned_capacity, reallocate (rare path)
+-    if (n_sat > state->pinned_capacity) {
+-        CUDA_CHECK(cudaStreamSynchronize(state->stream));
+-        CUDA_CHECK(cudaFreeHost(state->h_sat_pinned));
+-        CUDA_CHECK(cudaFree(state->d_sat_ecef));
+-        CUDA_CHECK(cudaFree(state->d_pseudoranges));
+-        CUDA_CHECK(cudaFree(state->d_weights_sat));
+-
+-        state->pinned_capacity = n_sat;
+-        CUDA_CHECK(cudaMallocHost(&state->h_sat_pinned, n_sat * 5 * sizeof(double)));
+-        CUDA_CHECK(cudaMalloc(&state->d_sat_ecef, n_sat * 3 * sizeof(double)));
+-        CUDA_CHECK(cudaMalloc(&state->d_pseudoranges, n_sat * sizeof(double)));
+-        CUDA_CHECK(cudaMalloc(&state->d_weights_sat, n_sat * sizeof(double)));
+-    }
+-
+-    // Ensure previous async transfers from pinned buffer are complete before overwriting
+-    CUDA_CHECK(cudaStreamSynchronize(state->stream));
+-
+-    // Stage satellite data into contiguous pinned buffer: [sat_ecef | carrier_phase | weights]
+-    double* h_sat = state->h_sat_pinned;
+-    memcpy(h_sat, sat_ecef, sz_sat);
+-    memcpy(h_sat + n_sat * 3, carrier_phase, sz_obs);
+-    memcpy(h_sat + n_sat * 4, weights_sat, sz_obs);
+-
+-    // Async H2D transfer on the stream
+-    CUDA_CHECK(cudaMemcpyAsync(state->d_sat_ecef, h_sat,
+-                               sz_sat, cudaMemcpyHostToDevice, state->stream));
+-    CUDA_CHECK(cudaMemcpyAsync(state->d_pseudoranges, h_sat + n_sat * 3,
+-                               sz_obs, cudaMemcpyHostToDevice, state->stream));
+-    CUDA_CHECK(cudaMemcpyAsync(state->d_weights_sat, h_sat + n_sat * 4,
+-                               sz_obs, cudaMemcpyHostToDevice, state->stream));
++    pfd_stage_satellite_observations(state, sat_ecef, carrier_phase, weights_sat, n_sat);
+ 
+     // Launch AFV weight kernel on the same stream
+     // Dynamic shared memory: n_sat*3 (sat_ecef) + n_sat (cp) + n_sat (ws) = n_sat*5 doubles
+--- a/include/gnss_gpu/pf_device.h
++++ b/include/gnss_gpu/pf_device.h
+@@ -50,9 +50,9 @@
+     cudaStream_t stream;
+ 
+     // Persistent device buffers for satellite data (avoids per-call cudaMalloc)
+-    double* d_sat_ecef;     // [pinned_capacity * 3]
+-    double* d_pseudoranges; // [pinned_capacity]
+-    double* d_weights_sat;  // [pinned_capacity]
++    double* d_sat_ecef;     // Owning allocation: [pinned_capacity * 5].
++    double* d_pseudoranges; // Alias at current n_sat * 3; never freed separately.
++    double* d_weights_sat;  // Alias at current n_sat * 4; never freed separately.
+     // Reusable packed observation scratch for DD carrier/PR and Doppler.
+     // Capacity is measured in doubles and grows on demand.
+     double* d_obs_scratch;

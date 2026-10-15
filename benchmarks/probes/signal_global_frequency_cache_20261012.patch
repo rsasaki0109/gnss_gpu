@@ -1,0 +1,55 @@
+--- a/src/signal_sim/signal_sim.cu
++++ b/src/signal_sim/signal_sim.cu
+@@ -297,6 +297,7 @@
+ // A normal epoch fits within CUDA's 4 KiB kernel-parameter limit. Passing this
+ // batch by value avoids a separate descriptor allocation and host/device copy.
+ constexpr int kInlineChannels = 32;
++constexpr int kCachedGlobalChannels = 256;
+ struct InlineChannels {
+     DeviceChannel items[kInlineChannels];
+ 
+@@ -308,7 +309,8 @@
+ 
+ // Evaluate channels in input order, retaining the two rounding steps of the
+ // former channel-output store followed by the composite-kernel addition.
+-template <typename ChannelStorage, bool CACHE_FREQUENCY = false>
++template <typename ChannelStorage, bool CACHE_FREQUENCY = false,
++          int CACHE_CHANNELS = kInlineChannels>
+ __global__ void fused_signal_kernel(ChannelStorage channels,
+                                     const int* nav_bits,
+                                     float* iq_out,
+@@ -318,10 +320,11 @@
+                                     double intermediate_freq,
+                                     float noise_std,
+                                     unsigned long long seed) {
+-    __shared__ double angular_frequency[kInlineChannels];
++    static_assert(!CACHE_FREQUENCY || CACHE_CHANNELS <= kBlockSize);
++    __shared__ double angular_frequency[CACHE_CHANNELS];
+     if constexpr (CACHE_FREQUENCY) {
+-        // The inline batch has at most 32 channels. Use the original GPU FP64
+-        // addition/multiplication, then share the coefficient across samples.
++        // Both cached batches fit within one 256-thread block. Use the
++        // original GPU FP64 operations, then share across output samples.
+         if (threadIdx.x < n_channels)
+             angular_frequency[threadIdx.x] = kTwoPi * (
+                 intermediate_freq + channels[threadIdx.x].doppler_hz);
+@@ -554,9 +557,16 @@
+             DeviceChannel* d_channels = impl_->channels.data;
+             CUDA_CHECK(cudaMemcpy(d_channels, packed_channels.data(), channel_bytes,
+                                    cudaMemcpyHostToDevice));
+-            fused_signal_kernel<<<blocks, kBlockSize>>>(
+-                d_channels, d_nav_bits, d_output, n_samples, (int)packed_channels.size(),
+-                config.sampling_freq, config.intermediate_freq, noise_std, seed);
++            if (packed_channels.size() <= kCachedGlobalChannels) {
++                fused_signal_kernel<DeviceChannel*, true, kCachedGlobalChannels>
++                    <<<blocks, kBlockSize>>>(
++                    d_channels, d_nav_bits, d_output, n_samples, (int)packed_channels.size(),
++                    config.sampling_freq, config.intermediate_freq, noise_std, seed);
++            } else {
++                fused_signal_kernel<<<blocks, kBlockSize>>>(
++                    d_channels, d_nav_bits, d_output, n_samples, (int)packed_channels.size(),
++                    config.sampling_freq, config.intermediate_freq, noise_std, seed);
++            }
+         }
+     } else {
+         composite_kernel<<<blocks, kBlockSize>>>(

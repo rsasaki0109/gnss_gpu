@@ -1,0 +1,167 @@
+{
+  "schema_version": 1,
+  "build_configuration": "CUDA 12.8 / MSVC Release / compute 7.5 / C++20 / no fast math",
+  "baseline_report": "benchmarks/bvh_normal_gpu_20261012.json",
+  "measurement_report": "benchmarks/bvh_mirror_gpu_20261012.json",
+  "normalization": "cuobjdump function bodies; collapse whitespace only; keep offsets/encodings/attributes",
+  "unchanged_functions": {
+    "_ZN8gnss_gpu27multipath_candidates_kernelILb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalE": {
+      "candidate_function": "_ZN8gnss_gpu27multipath_candidates_kernelILb0ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE",
+      "baseline_normalized_sass_sha256": "408d155aa283c7943a1d1c2dcfd97a24121d8a93f8c261d368ed0e1072888645",
+      "candidate_normalized_sass_sha256": "408d155aa283c7943a1d1c2dcfd97a24121d8a93f8c261d368ed0e1072888645",
+      "identical": true
+    },
+    "_ZN8gnss_gpu27multipath_candidates_kernelILb1EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalE": {
+      "candidate_function": "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE",
+      "baseline_normalized_sass_sha256": "33ffeda1472ce61605d146684de9af42bbd8ad5af23e50777a8f97b84d13c370",
+      "candidate_normalized_sass_sha256": "33ffeda1472ce61605d146684de9af42bbd8ad5af23e50777a8f97b84d13c370",
+      "identical": true
+    },
+    "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii": {
+      "candidate_function": "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii",
+      "baseline_normalized_sass_sha256": "ac36c4fea909ca1b067b131ead0e807a54c106ebf0c461356758cc5b6d6ab915",
+      "candidate_normalized_sass_sha256": "ac36c4fea909ca1b067b131ead0e807a54c106ebf0c461356758cc5b6d6ab915",
+      "identical": true
+    },
+    "_ZN8gnss_gpu25reflection_normals_kernelEPKNS_8TriangleEPKiPNS_16ReflectionNormalEi": {
+      "candidate_function": "_ZN8gnss_gpu25reflection_normals_kernelEPKNS_8TriangleEPKiPNS_16ReflectionNormalEi",
+      "baseline_normalized_sass_sha256": "b9822fdcd81636a436a075c4a8fc87689a25aa676632d84065675e5beba93617",
+      "candidate_normalized_sass_sha256": "b9822fdcd81636a436a075c4a8fc87689a25aa676632d84065675e5beba93617",
+      "identical": true
+    },
+    "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii": {
+      "candidate_function": "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii",
+      "baseline_normalized_sass_sha256": "4e8ae452c1eba3d84027f7eb7600c65dfb6ae0fe2b67d9be0fc4dc54397c5f5a",
+      "candidate_normalized_sass_sha256": "4e8ae452c1eba3d84027f7eb7600c65dfb6ae0fe2b67d9be0fc4dc54397c5f5a",
+      "identical": true
+    },
+    "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii": {
+      "candidate_function": "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii",
+      "baseline_normalized_sass_sha256": "d12d67b93f6b9e8dad02078a0e2c703fae7520fee4c3d4a56a50d9dd0f6fed42",
+      "candidate_normalized_sass_sha256": "d12d67b93f6b9e8dad02078a0e2c703fae7520fee4c3d4a56a50d9dd0f6fed42",
+      "identical": true
+    },
+    "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii": {
+      "candidate_function": "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii",
+      "baseline_normalized_sass_sha256": "b0de8f220b77b975c30e402f1db956b9700d7cecd2f034ad234a83bf4e5e9087",
+      "candidate_normalized_sass_sha256": "b0de8f220b77b975c30e402f1db956b9700d7cecd2f034ad234a83bf4e5e9087",
+      "identical": true
+    }
+  },
+  "candidate_functions": {
+    "_ZN8gnss_gpu27multipath_candidates_kernelILb0ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+      "normalized_sass_sha256": "408d155aa283c7943a1d1c2dcfd97a24121d8a93f8c261d368ed0e1072888645"
+    },
+    "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+      "normalized_sass_sha256": "33ffeda1472ce61605d146684de9af42bbd8ad5af23e50777a8f97b84d13c370"
+    },
+    "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb1EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+      "normalized_sass_sha256": "549dd5440483debb80be07f4da9184aec7d4db17007ca082a38923421850eb4d"
+    },
+    "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii": {
+      "normalized_sass_sha256": "ac36c4fea909ca1b067b131ead0e807a54c106ebf0c461356758cc5b6d6ab915"
+    },
+    "_ZN8gnss_gpu25reflection_mirrors_kernelEPKdPKNS_8TriangleEPKiPKNS_16ReflectionNormalEPNS_16ReflectionMirrorEi": {
+      "normalized_sass_sha256": "091fbf16ae7589c15f53ae37e0aa0735fd200bfd5f1cffb484b457103b5e58a7"
+    },
+    "_ZN8gnss_gpu25reflection_normals_kernelEPKNS_8TriangleEPKiPNS_16ReflectionNormalEi": {
+      "normalized_sass_sha256": "b9822fdcd81636a436a075c4a8fc87689a25aa676632d84065675e5beba93617"
+    },
+    "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii": {
+      "normalized_sass_sha256": "4e8ae452c1eba3d84027f7eb7600c65dfb6ae0fe2b67d9be0fc4dc54397c5f5a"
+    },
+    "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii": {
+      "normalized_sass_sha256": "d12d67b93f6b9e8dad02078a0e2c703fae7520fee4c3d4a56a50d9dd0f6fed42"
+    },
+    "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii": {
+      "normalized_sass_sha256": "b0de8f220b77b975c30e402f1db956b9700d7cecd2f034ad234a83bf4e5e9087"
+    }
+  },
+  "resource_usage": {
+    "mirrored_candidates": {
+      "registers": 77,
+      "static_shared_bytes": 5120,
+      "stack_bytes": 0,
+      "local_bytes": 0
+    },
+    "preceding_cached_candidates": {
+      "registers": 78,
+      "static_shared_bytes": 5120,
+      "stack_bytes": 0,
+      "local_bytes": 0
+    },
+    "mirror_preparation": {
+      "registers": 30,
+      "static_shared_bytes": 0,
+      "stack_bytes": 0,
+      "local_bytes": 0
+    }
+  },
+  "memory": "24 bytes per visited triangle per epoch; lazy reusable scratch capped at 32 MiB; freed with scene",
+  "dispatch": {
+    "minimum_visited_triangles": 8192,
+    "minimum_satellites_per_epoch": 16,
+    "maximum_total_rays": 4096,
+    "maximum_reserved_mirror_bytes": 33554432
+  },
+  "semantics": "Mirror preparation repeats original FP64 receiver reflection expressions for every call; candidate direction/intersection/distance/tie expressions retained",
+  "measurement_report_sha256": "47e9b0e9c539ab32fe8a1b879c73459cc39466be4a8fe0c3363d1e777609af6e",
+  "patch": {
+    "path": "benchmarks/probes/bvh_receiver_mirror_sharing_20261012.patch",
+    "sha256": "0a1edb647cffe4be8fbe3269ade219a98ff1de9b19ce5113f55e981a1afca760",
+    "baseline_source_sha256": "2a479f38c1aaaf8e24c5f24d0d33d9bac171ed779a17f0f820a2781f6865b62a",
+    "candidate_source_sha256": "f67f578bbe04f3f68a9710a71ebb2b59b5cac1323272ea659d6a6f6309c3ff17",
+    "reconstructs_measured_crlf_source": true
+  },
+  "source_sha256": {
+    "baseline": {
+      "src/raytrace/bvh.cu": "2a479f38c1aaaf8e24c5f24d0d33d9bac171ed779a17f0f820a2781f6865b62a",
+      "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+      "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+      "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+      "python/gnss_gpu/urban_signal_sim.py": "5eb6613529364b336dded82d6458f08e2be090d15006ee97a1b3af937d23c516"
+    },
+    "candidate": {
+      "src/raytrace/bvh.cu": "f67f578bbe04f3f68a9710a71ebb2b59b5cac1323272ea659d6a6f6309c3ff17",
+      "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+      "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+      "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+      "python/gnss_gpu/urban_signal_sim.py": "5eb6613529364b336dded82d6458f08e2be090d15006ee97a1b3af937d23c516"
+    }
+  },
+  "extension_sha256": {
+    "baseline": "94220317bd615cc20ada48035ac2d28aeb8805b7d55c8b6933542bb1984e3830",
+    "candidate": "09cb17731ec7138fa8db57c647066df06268556e37e2ca4dc40670fdc83f1f2a"
+  },
+  "exploratory_probes": {
+    "geometry_cache": {
+      "report": "benchmarks/bvh_geometry_rejected_20261012.json",
+      "patch": {
+        "path": "benchmarks/probes/bvh_geometry_rejected_20261012.patch",
+        "sha256": "518a1c16244d4bf18dc5cbe83a6ebef329c468939f66eb8813e27080b1da810f",
+        "baseline_source_sha256": "2a479f38c1aaaf8e24c5f24d0d33d9bac171ed779a17f0f820a2781f6865b62a",
+        "candidate_source_sha256": "dec4721deace5da748a975e0079adee95811167c67ae0a331a1bf9e2eadef444",
+        "reconstructs_measured_crlf_source": true
+      },
+      "status": "rejected; 3 rounds x 10 exploratory calls",
+      "decision": "104-byte geometry records versus 32-byte normals; about 7% warm reflection gain, no stable whole urban gain and higher cold costs"
+    },
+    "small_satellite_group": {
+      "report": "benchmarks/bvh_mirror_dispatch_probe_20261012.json",
+      "patch": {
+        "path": "benchmarks/probes/bvh_mirror_small_group_probe_20261012.patch",
+        "sha256": "e9b2e73a8fb9cc726241ab318812dad45c8c38bcd3591e8ca11869a581e5fdeb",
+        "baseline_source_sha256": "2a479f38c1aaaf8e24c5f24d0d33d9bac171ed779a17f0f820a2781f6865b62a",
+        "candidate_source_sha256": "e813c6066b2ea1a5a039185c278f07f5965bbc13270e98353662346f43c9469c",
+        "reconstructs_measured_crlf_source": true
+      },
+      "status": "dispatch narrowed from 8 to 16 satellites",
+      "archived_runner": "benchmarks/probes/bench_bvh_mirror_small_group_probe_20261012.py",
+      "archived_runner_sha256": "462e5340c99e507b638c8162d929a207e8919c4f8c77e83ac4c89a3a2dfb03d8"
+    }
+  },
+  "retained_components": [
+    "preceding PF Student-t build",
+    "preceding signal global-frequency build"
+  ]
+}

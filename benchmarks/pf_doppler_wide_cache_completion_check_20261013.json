@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "verified": true,
+  "current_source_build_installed_match": true,
+  "comparison_cases": 15189,
+  "bit_identical_output_cases": 14757,
+  "matching_pr_input_rejections": 432,
+  "timed_conditions": 63,
+  "affected_large_timed_conditions_all_five_pairs_improve": 32,
+  "rounds": 5,
+  "repeats": 20,
+  "regression_tests": 2501,
+  "sanitizer_tests": 235,
+  "sanitizer_errors": 0,
+  "leaked_bytes": 0,
+  "unchanged_device_functions": 69,
+  "new_device_functions": 2,
+  "header_abi_unchanged": true,
+  "independent_retained_uncached_gpu_oracle": true,
+  "observation_owner_payload_and_shared_bytes_unchanged": true,
+  "bvh_parallel_mirror_chunks_retained": true,
+  "signal_batch_retained": true,
+  "rejected_wls_fusion_verified": true,
+  "quick_diagnostic_cases": 324,
+  "retained_artifacts": {
+    "benchmarks/bvh_parallel_mirror_chunks_gpu_20261013.json": "bcda1df440f75615bc2d869e031b039f3499d2318444243ef62b4e88d0215cd8",
+    "benchmarks/signal_batch_gpu_20261012.json": "b79f96628f8302018affd8ec4e6048a2f1aa82892cd35f459d94f5d9f9b30ccb"
+  },
+  "public_product_label_violations": 0,
+  "public_text_files_scanned": 2560,
+  "validation_log_sha256": {
+    "dist/pf_doppler_wide_cache_regression_20261013.log": "888745c9ecc78007f83b9bac2adc2c52d15b3d7d902193c2cd4b1eda6640df04",
+    "dist/pf_doppler_wide_cache_memcheck_console_20261013.log": "d20e0438fdccb8a28f7b43c3f63f9269b8c1718513192f3a1da9d013c3a95bb8",
+    "dist/pf_doppler_wide_cache_memcheck_20261013.log": "3ef41833580c07952672569330729d3a908130c68e7a514d721c5b0a3ddbd7d6",
+    "dist/pf_doppler_wide_cache_racecheck_console_20261013.log": "cb0202ea1a86c5940f158a30e757c0c9dcc3c1c7f6012cdc7c50b3b9d6cb4956",
+    "dist/pf_doppler_wide_cache_racecheck_20261013.log": "c69d09b31a66173faf98f267db57c7eb988035ce364fa0f0f184ffc933c541a7",
+    "dist/pf_doppler_wide_cache_synccheck_console_20261013.log": "824aa18b241efc90c5e0eedb6158a1a425477bd4ff4774c68b49501886ee8347",
+    "dist/pf_doppler_wide_cache_synccheck_20261013.log": "adba10db853bd67fe9009b776eefe7b61210d2cbe3eee029ba6fa188978b5832"
+  },
+  "artifacts": {
+    "benchmarks/RESULTS.md": "d78d1b1057bd00ccfc38849ee494164444846ee4afe689ed69caa1a5a67b7c7d",
+    "internal_docs/decisions.md": "a0c3e3c305a44a2ca5d83357ff484941dcf2e9c9631626ef07815853cec1e1a9",
+    "benchmarks/pf_doppler_wide_cache_gpu_20261013.json": "7bc37180e8d0192c2c3734dc49b8ee75c898466aabcf05af9919be57cf620c71",
+    "benchmarks/pf_doppler_wide_cache_device_code_20261013.json": "16142d5b96a038a707a4f9dd050af813be43ba7c988946f2f11c534edc184b00",
+    "benchmarks/bench_pf_doppler_wide_cache_compare.py": "ed241f36a6465d7f785d0abe2debc695f9fa6620e6f88ba019d81d2807d63432",
+    "tests/test_pf_doppler_wide_cache.py": "83d7da6f4115f7a052f4621452e83fea36dd16841a4925394bd8760943acc988",
+    "tests/test_pf_doppler_weight_cache.py": "03de0dc4c942c3856d7b9b39347486f4187188c3dd8f9f046b13a1f3a22c0238",
+    "tests/test_pf_doppler_large_cache.py": "532643487e936a42bc7e5e6bdc1ea5aa132f739caab218007a511c9179107a08",
+    "benchmarks/probes/pf_doppler_wide_cache_20261013.patch": "498a23aa1461e2d1612f2ae9279cc4a9fa5fb8b67bb93dd507ee288e55f39737",
+    "benchmarks/probes/pf_doppler_wide_cache_oracle_20261013.patch": "748b6ded8cc1e4e0513d8aa6b37848ede0f34325669d1db7335801aa6b099ab2",
+    "benchmarks/pf_doppler_wls_fusion_rejected_20261013.json": "76895edac6b43eefc275ed6811afe65fcc3cc912a8bc8f622ddfc8b83e17fbe6"
+  }
+}

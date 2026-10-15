@@ -1,0 +1,24 @@
+--- a/src/signal_sim/signal_sim.cu
++++ b/src/signal_sim/signal_sim.cu
+@@ -651,10 +651,17 @@
+             CUDA_CHECK(cudaMemcpy(d_channels, packed_channels.data(), channel_bytes,
+                                    cudaMemcpyHostToDevice));
+             if (packed_channels.size() <= kCachedGlobalChannels) {
+-                fused_signal_kernel<DeviceChannel*, true, kCachedGlobalChannels>
+-                    <<<blocks, kBlockSize>>>(
+-                    d_channels, d_nav_bits, d_output, n_samples, (int)packed_channels.size(),
+-                    config.sampling_freq, config.intermediate_freq, noise_std, seed);
++                if (packed_nav_bits.empty()) {
++                    fused_static_nav_signal_kernel<DeviceChannel*, true, kCachedGlobalChannels>
++                        <<<blocks, kBlockSize>>>(
++                        d_channels, d_nav_bits, d_output, n_samples, (int)packed_channels.size(),
++                        config.sampling_freq, config.intermediate_freq, noise_std, seed);
++                } else {
++                    fused_signal_kernel<DeviceChannel*, true, kCachedGlobalChannels>
++                        <<<blocks, kBlockSize>>>(
++                        d_channels, d_nav_bits, d_output, n_samples, (int)packed_channels.size(),
++                        config.sampling_freq, config.intermediate_freq, noise_std, seed);
++                }
+             } else {
+                 fused_signal_kernel<<<blocks, kBlockSize>>>(
+                     d_channels, d_nav_bits, d_output, n_samples, (int)packed_channels.size(),

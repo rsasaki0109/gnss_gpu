@@ -1,0 +1,116 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -477,6 +477,64 @@
+     }
+ 
+     log_weights[tid] = log_w;
++}
++
++// Individual Gaussian DD gates retain their original skip-if-greater
++// semantics (including NaNs) and their overwrite/add update distinction.
++template<bool Carrier>
++__global__ void pfd_weight_dd_single_gated_kernel(
++    const double* px, const double* py, const double* pz, const double* dd_data,
++    double* log_weights, int N, int n_dd, double sigma, double threshold) {
++    extern __shared__ double data[];
++    constexpr int columns = Carrier ? 11 : 10;
++    int total_shared = n_dd * columns;
++    for (int i = threadIdx.x; i < total_shared; i += blockDim.x) {
++        if constexpr (Carrier)
++            data[i] = i >= n_dd * 10 ? 1.0 / dd_data[i] : dd_data[i];
++        else
++            data[i] = dd_data[i];
++    }
++    if (threadIdx.x == 0) data[total_shared] = 1.0 / (sigma * sigma);
++    __syncthreads();
++    int tid = blockIdx.x * blockDim.x + threadIdx.x;
++    if (tid >= N) return;
++    double x = px[tid], y = py[tid], z = pz[tid];
++    double dx_ref = x - data[n_dd * 3];
++    double dy_ref = y - data[n_dd * 3 + 1];
++    double dz_ref = z - data[n_dd * 3 + 2];
++    double r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
++    double inv_sigma2 = data[total_shared];
++    double all = 0.0, filtered = 0.0;
++    int kept = 0;
++    for (int d = 0; d < n_dd; ++d) {
++        double dx = x - data[d * 3];
++        double dy = y - data[d * 3 + 1];
++        double dz = z - data[d * 3 + 2];
++        double range = sqrt(dx * dx + dy * dy + dz * dz) - r_ref
++            - data[n_dd * 7 + d] + data[n_dd * 8 + d];
++        double residual;
++        if constexpr (Carrier) {
++            double cycles = data[n_dd * 6 + d] - range * data[n_dd * 10 + d];
++            residual = cycles - rint(cycles);
++        } else {
++            residual = data[n_dd * 6 + d] - range;
++        }
++        if (fabs(residual) <= threshold) ++kept;
++        double term;
++        if constexpr (Carrier)
++            term = -0.5 * data[n_dd * 9 + d] * (residual * residual);
++        else
++            term = -0.5 * data[n_dd * 9 + d] * residual * residual;
++        all = __fma_rn(term, inv_sigma2, all);
++        if (!(fabs(residual) > threshold))
++            filtered = __fma_rn(term, inv_sigma2, filtered);
++    }
++    int minimum = n_dd < 3 ? n_dd : 3;
++    double value = kept >= minimum ? filtered : all;
++    if constexpr (Carrier)
++        log_weights[tid] = __dadd_rn(log_weights[tid], value);
++    else
++        log_weights[tid] = value;
+ }
+ 
+ // --- GMM weight kernel ---
+@@ -2321,11 +2379,23 @@
+ 
+     size_t smem = (size_t)total_doubles * sizeof(double);
+     if (pfd_has_common_dd_reference(ref_ecef, n_dd)) {
+-        pfd_weight_dd_pseudorange_kernel<true, true><<<grid, BLOCK_SIZE, smem + sizeof(double), state->stream>>>(
+-            state->d_px, state->d_py, state->d_pz,
+-            state->d_obs_scratch, state->d_log_weights,
+-            N, n_dd, sigma_pr, per_particle_nlos_threshold_m,
+-            per_particle_huber, per_particle_huber_k);
++        bool fused_gate = !per_particle_huber && per_particle_nlos_threshold_m > 0.0;
++        if (fused_gate) {
++            for (int i = 0; i < total_doubles; ++i) {
++                if (!std::isfinite(h_buf[i])) { fused_gate = false; break; }
++            }
++        }
++        if (fused_gate) {
++            pfd_weight_dd_single_gated_kernel<false><<<grid, BLOCK_SIZE, smem + sizeof(double), state->stream>>>(
++                state->d_px, state->d_py, state->d_pz, state->d_obs_scratch, state->d_log_weights,
++                N, n_dd, sigma_pr, per_particle_nlos_threshold_m);
++        } else {
++            pfd_weight_dd_pseudorange_kernel<true, true><<<grid, BLOCK_SIZE, smem + sizeof(double), state->stream>>>(
++                state->d_px, state->d_py, state->d_pz,
++                state->d_obs_scratch, state->d_log_weights,
++                N, n_dd, sigma_pr, per_particle_nlos_threshold_m,
++                per_particle_huber, per_particle_huber_k);
++        }
+     } else {
+         pfd_weight_dd_pseudorange_kernel<false><<<grid, BLOCK_SIZE, smem, state->stream>>>(
+             state->d_px, state->d_py, state->d_pz,
+@@ -2870,7 +2940,18 @@
+                 break;
+             }
+         }
+-        if (normal_wavelengths) {
++        bool fused_gate = normal_wavelengths && !per_particle_huber &&
++            per_particle_nlos_threshold_cycles > 0.0;
++        if (fused_gate) {
++            for (int i = 0; i < total_doubles; ++i) {
++                if (!std::isfinite(h_buf[i])) { fused_gate = false; break; }
++            }
++        }
++        if (fused_gate) {
++            pfd_weight_dd_single_gated_kernel<true><<<grid, BLOCK_SIZE, smem + sizeof(double), state->stream>>>(
++                state->d_px, state->d_py, state->d_pz, state->d_obs_scratch, state->d_log_weights,
++                N, n_dd, sigma_cycles, per_particle_nlos_threshold_cycles);
++        } else if (normal_wavelengths) {
+             pfd_weight_dd_carrier_afv_kernel<true, true><<<grid, BLOCK_SIZE, smem + sizeof(double), state->stream>>>(
+                 state->d_px, state->d_py, state->d_pz,
+                 state->d_obs_scratch, state->d_log_weights,

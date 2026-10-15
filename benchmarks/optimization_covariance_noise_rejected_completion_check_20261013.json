@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-13T09:41:08.989812+00:00",
+  "status": "verified",
+  "adopted": false,
+  "restored_exact_preceding_source_build_and_installed": true,
+  "retained": {
+    "benchmarks/pf_doppler_wide_cache_gpu_20261013.json": {
+      "reference_sha256": "7bc37180e8d0192c2c3734dc49b8ee75c898466aabcf05af9919be57cf620c71",
+      "source_sha256": {
+        "src/particle_filter/pf_device.cu": "74987794365e3249cbd7e5356a9f347a060b5c9ed955896ff9b2434a9978353b",
+        "include/gnss_gpu/pf_device.h": "a2739ef2861995b4d769415651dc6c8f0acf5da6e5caf94d29f977fd8e9b8bc5",
+        "python/gnss_gpu/_pf_device_bindings.cpp": "56fdb9e2568d263595aae3ab66e42d5df70e8ccd6c2b6d08c61d00d4b30edaf5",
+        "python/gnss_gpu/pf_device_runtime.py": "a24c892f58e39e4cde99737273cfe23b807df9cc971269f571249f03e9d93ad2",
+        "python/gnss_gpu/pf_device_config.py": "c6c17c4f926a2182ebe27dfd23a6e9c8b1f49c59c238a51feb6dd7b2814fce69"
+      },
+      "extension_sha256": "81727ab30439c190cb92c226100896bf3489425846a32c00f7bfaa019c5516fa"
+    },
+    "benchmarks/bvh_parallel_mirror_chunks_gpu_20261013.json": {
+      "reference_sha256": "bcda1df440f75615bc2d869e031b039f3499d2318444243ef62b4e88d0215cd8",
+      "source_sha256": {
+        "src/raytrace/bvh.cu": "7154bcaa5422872b3ed1422cd632eb36f40998660ce3ad108a07fb38cddedcc1",
+        "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+        "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+        "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+        "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+      },
+      "extension_sha256": "e99a8ddb576d98e00a2efe90fc40e67a2ca17452c7e0eec23293d46f3032ae1c"
+    },
+    "benchmarks/signal_batch_gpu_20261012.json": {
+      "reference_sha256": "b79f96628f8302018affd8ec4e6048a2f1aa82892cd35f459d94f5d9f9b30ccb",
+      "source_sha256": {
+        "src/signal_sim/signal_sim.cu": "15eb73c0272dad248ed072327a9f09b4fd11b72b1b8db3675d87a380e6a14acf",
+        "include/gnss_gpu/signal_sim.h": "2788f41ff6175da2d6c0db5212470ab3759f4e350d91f977a532e48fc70fa945",
+        "python/gnss_gpu/_signal_sim_bindings.cpp": "524f9460570f0b39f4165f8fb6526af927e6c2c8f39ff661c2731d34ee82bcff",
+        "python/gnss_gpu/signal_sim.py": "f316c47c4a9a9359498e6905f8d6afa8046f7b631f876e258074d44d527780d4",
+        "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+      },
+      "extension_sha256": "88c7bd9ea0c81beafccda555a7eaeb27d56c762287cc28a2897eb66b185a3ab5"
+    }
+  },
+  "rejected_trials": {
+    "benchmarks/pf_covariance_planes_rejected_20261013.json": "6b1cecd37339a3183c5027a654af63b09a0fbd0cd9f45372b5a78cac3fa5760e",
+    "benchmarks/signal_noise_pair_rejected_20261013.json": "e541a8737da5449c82c8364fdd404c6e34446d84c6f3f9870d859e261b9dfadb"
+  },
+  "validation": {
+    "comparison_cases": 18591,
+    "matching_old_new_records": true,
+    "quick_diagnostic_cases": 189,
+    "quick_all_bits_identical": true,
+    "all_timed_log_weights_and_returns_identical": true,
+    "all_round_final_states_identical": true
+  },
+  "covariance_gpu_functions": 71,
+  "covariance_unchanged_bodies": 62,
+  "signal_gpu_functions": 8,
+  "signal_unchanged_bodies": 8,
+  "patch_and_archive_hashes_verified": true,
+  "public_text_files_checked": 2560,
+  "public_device_label_clean": true,
+  "authored_crlf_verified": true,
+  "preserved_adoption_completion": {
+    "path": "benchmarks/pf_doppler_wide_cache_completion_check_20261013.json",
+    "sha256": "69e4a95e8763b3a19a2031cfe45349870176cb397dc4c4885c5f5df446f211a2"
+  },
+  "new_regression_and_sanitizer_runs": false,
+  "explanation": "Rejected trials; current production exactly matches the preceding verified adoption. Prior2501 regression and235 sanitizer results remain historical adoption evidence."
+}

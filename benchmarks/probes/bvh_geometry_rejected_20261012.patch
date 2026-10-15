@@ -1,0 +1,224 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -294,6 +294,29 @@
+   return t > EPSILON;
+ }
+ 
++// Same intersection arithmetic with GPU-prepared FP64 triangle edges.
++__device__ static bool mt_intersect_edges(const double origin[3], const double dir[3],
++                                    const double v0[3], const double e1[3],
++                                    const double e2[3], double& t) {
++  const double EPSILON = 1e-12;
++  double h[3] = {dir[1] * e2[2] - dir[2] * e2[1],
++                  dir[2] * e2[0] - dir[0] * e2[2],
++                  dir[0] * e2[1] - dir[1] * e2[0]};
++  double a = e1[0] * h[0] + e1[1] * h[1] + e1[2] * h[2];
++  if (fabs(a) < EPSILON) return false;
++  double f = 1.0 / a;
++  double s[3] = {origin[0] - v0[0], origin[1] - v0[1], origin[2] - v0[2]};
++  double u = f * (s[0] * h[0] + s[1] * h[1] + s[2] * h[2]);
++  if (u < 0.0 || u > 1.0) return false;
++  double q[3] = {s[1] * e1[2] - s[2] * e1[1],
++                  s[2] * e1[0] - s[0] * e1[2],
++                  s[0] * e1[1] - s[1] * e1[0]};
++  double v = f * (dir[0] * q[0] + dir[1] * q[1] + dir[2] * q[2]);
++  if (v < 0.0 || u + v > 1.0) return false;
++  t = f * (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]);
++  return t > EPSILON;
++}
++
+ // Ray-AABB intersection using slab method
+ // dir_inv = 1.0 / dir for each component
+ __device__ static bool ray_aabb_intersect(const double origin[3],
+@@ -552,15 +575,18 @@
+   reflection_points[tid * 3 + 2] = best_refl[2];
+ }
+ 
+-// The scene owns these GPU-computed normals in traversal order. Keeping the
+-// original FP64 operations on the device preserves reflection arithmetic.
+-struct ReflectionNormal {
+-  double value[3];
++// Prepared in original traversal order. Edges and normals use the same GPU
++// FP64 expressions as uncached intersection and reflection evaluation.
++struct ReflectionGeometry {
++  double normal[3];
++  double v0[3];
++  double e1[3];
++  double e2[3];
+   int valid;
+ };
+ 
+-__global__ void reflection_normals_kernel(const Triangle* tris, const int* order,
+-                                          ReflectionNormal* normals, int count) {
++__global__ void reflection_geometry_kernel(const Triangle* tris, const int* order,
++                                          ReflectionGeometry* geometry, int count) {
+   int ordinal = blockIdx.x * blockDim.x + threadIdx.x;
+   if (ordinal >= count) return;
+   const Triangle& tri = tris[order[ordinal]];
+@@ -570,13 +596,18 @@
+                   e1[2] * e2[0] - e1[0] * e2[2],
+                   e1[0] * e2[1] - e1[1] * e2[0]};
+   double nn = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+-  ReflectionNormal result = {};
++  ReflectionGeometry result = {};
+   if (!(nn < 1e-15)) {
+     n[0] /= nn; n[1] /= nn; n[2] /= nn;
+-    result.value[0] = n[0]; result.value[1] = n[1]; result.value[2] = n[2];
++    for (int axis = 0; axis < 3; ++axis) {
++      result.normal[axis] = n[axis];
++      result.v0[axis] = tri.v0[axis];
++      result.e1[axis] = e1[axis];
++      result.e2[axis] = e2[axis];
++    }
+     result.valid = 1;
+   }
+-  normals[ordinal] = result;
++  geometry[ordinal] = result;
+ }
+ 
+ struct MultipathCandidate {
+@@ -594,15 +625,16 @@
+ 
+ // Keep the arithmetic and intersection thresholds identical to the serial
+ // kernel above. Only independent candidate evaluation and selection are split.
+-template <bool CACHED_NORMALS>
++template <bool CACHED_GEOMETRY, typename Geometry>
+ __device__ static bool multipath_candidate(const double rx[3], const double sat[3],
+-                                           double d_rx_sat, const Triangle& tri,
+-                                           MultipathCandidate& result,
+-                                           const ReflectionNormal* normal) {
++                                           double d_rx_sat, const Geometry& tri,
++                                           MultipathCandidate& result) {
+   double n[3];
+-  if constexpr (CACHED_NORMALS) {
+-    if (!normal->valid) return false;
+-    n[0] = normal->value[0]; n[1] = normal->value[1]; n[2] = normal->value[2];
++  const double* v0;
++  if constexpr (CACHED_GEOMETRY) {
++    if (!tri.valid) return false;
++    n[0] = tri.normal[0]; n[1] = tri.normal[1]; n[2] = tri.normal[2];
++    v0 = tri.v0;
+   } else {
+     double e1[3] = {tri.v1[0] - tri.v0[0], tri.v1[1] - tri.v0[1], tri.v1[2] - tri.v0[2]};
+     double e2[3] = {tri.v2[0] - tri.v0[0], tri.v2[1] - tri.v0[1], tri.v2[2] - tri.v0[2]};
+@@ -612,9 +644,10 @@
+     double nn = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+     if (nn < 1e-15) return false;
+     n[0] /= nn; n[1] /= nn; n[2] /= nn;
+-  }
+-
+-  double dv[3] = {rx[0] - tri.v0[0], rx[1] - tri.v0[1], rx[2] - tri.v0[2]};
++    v0 = tri.v0;
++  }
++
++  double dv[3] = {rx[0] - v0[0], rx[1] - v0[1], rx[2] - v0[2]};
+   double d = dv[0] * n[0] + dv[1] * n[1] + dv[2] * n[2];
+   double mirror[3] = {rx[0] - 2.0 * d * n[0],
+                        rx[1] - 2.0 * d * n[1],
+@@ -626,7 +659,11 @@
+   dir[0] /= dir_len; dir[1] /= dir_len; dir[2] /= dir_len;
+ 
+   double t;
+-  if (!mt_intersect(mirror, dir, tri.v0, tri.v1, tri.v2, t)) return false;
++  if constexpr (CACHED_GEOMETRY) {
++    if (!mt_intersect_edges(mirror, dir, tri.v0, tri.e1, tri.e2, t)) return false;
++  } else {
++    if (!mt_intersect(mirror, dir, tri.v0, tri.v1, tri.v2, t)) return false;
++  }
+ 
+   double refl[3] = {mirror[0] + t * dir[0],
+                      mirror[1] + t * dir[1],
+@@ -646,14 +683,14 @@
+ 
+ static const int MULTIPATH_BLOCK_SIZE = 128;
+ 
+-template <bool CACHED_NORMALS>
++template <bool CACHED_GEOMETRY>
+ __global__ void multipath_candidates_kernel(const double* rx_ecef,
+                                             const double* sat_ecef,
+                                             const Triangle* tris,
+                                             const int* triangle_order,
+                                             MultipathCandidate* partial,
+                                             int n_sat, int n_tri, int tiles,
+-                                            const ReflectionNormal* normals) {
++                                            const ReflectionGeometry* geometry) {
+   int ray = blockIdx.x / tiles;
+   int tile = blockIdx.x % tiles;
+   int eid = ray / n_sat;
+@@ -673,11 +710,14 @@
+        ordinal < n_tri; ordinal += tiles * blockDim.x) {
+     MultipathCandidate candidate = {};
+     candidate.order = ordinal;
+-    const ReflectionNormal* normal = nullptr;
+-    if constexpr (CACHED_NORMALS) normal = normals + ordinal;
+-    if (multipath_candidate<CACHED_NORMALS>(
+-            rx, sat, d_rx_sat, tris[triangle_order[ordinal]], candidate, normal) &&
+-        better_multipath(candidate, best)) best = candidate;
++    bool found;
++    if constexpr (CACHED_GEOMETRY) {
++      found = multipath_candidate<true>(rx, sat, d_rx_sat, geometry[ordinal], candidate);
++    } else {
++      found = multipath_candidate<false>(
++          rx, sat, d_rx_sat, tris[triangle_order[ordinal]], candidate);
++    }
++    if (found && better_multipath(candidate, best)) best = candidate;
+   }
+   __shared__ MultipathCandidate winners[MULTIPATH_BLOCK_SIZE];
+   winners[threadIdx.x] = best;
+@@ -829,15 +869,15 @@
+   DeviceBuffer<int> order, los;
+   DeviceBuffer<double> rx, sat, points, delays;
+   DeviceBuffer<MultipathCandidate> partial;
+-  DeviceBuffer<ReflectionNormal> normals;
+-  bool normals_ready = false;
++  DeviceBuffer<ReflectionGeometry> geometry;
++  bool geometry_ready = false;
+ 
+   ~Impl() {
+     int previous = 0;
+     bool known = cudaGetDevice(&previous) == cudaSuccess;
+     if (!known || previous != device) cudaSetDevice(device);
+     nodes.reset(); triangles.reset(); order.reset(); los.reset();
+-    rx.reset(); sat.reset(); points.reset(); delays.reset(); partial.reset(); normals.reset();
++    rx.reset(); sat.reset(); points.reset(); delays.reset(); partial.reset(); geometry.reset();
+     if (known && previous != device) cudaSetDevice(previous);
+   }
+ 
+@@ -879,13 +919,13 @@
+         std::max(1, 256 / total)));
+     partial.reserve((size_t)total * tiles);
+     // Prepare only for the parallel reflection path. LOS-only, small meshes and
+-    // serial fallback batches do not allocate or launch normal preparation.
+-    if (!normals_ready) {
+-      normals.reserve((size_t)n_order);
+-      reflection_normals_kernel<<<(n_order + 255) / 256, 256>>>(
+-          triangles.data, order.data, normals.data, n_order);
++    // serial fallback batches do not allocate or launch geometry preparation.
++    if (!geometry_ready) {
++      geometry.reserve((size_t)n_order);
++      reflection_geometry_kernel<<<(n_order + 255) / 256, 256>>>(
++          triangles.data, order.data, geometry.data, n_order);
+       CUDA_CHECK_LAST();
+-      normals_ready = true;
++      geometry_ready = true;
+     }
+     return tiles;
+   }
+@@ -895,7 +935,7 @@
+     if (tiles) {
+       multipath_candidates_kernel<true><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
+           rx.data, sat.data, triangles.data, order.data, partial.data, n_sat, n_order, tiles,
+-          normals.data);
++          geometry.data);
+       CUDA_CHECK_LAST();
+       multipath_finalize_kernel<<<(total + MULTIPATH_BLOCK_SIZE - 1) / MULTIPATH_BLOCK_SIZE,
+                                   MULTIPATH_BLOCK_SIZE>>>(
+@@ -965,7 +1005,7 @@
+       (s.order.capacity + s.los.capacity) * sizeof(int) +
+       (s.rx.capacity + s.sat.capacity + s.points.capacity + s.delays.capacity) * sizeof(double) +
+       s.partial.capacity * sizeof(MultipathCandidate) +
+-      s.normals.capacity * sizeof(ReflectionNormal);
++      s.geometry.capacity * sizeof(ReflectionGeometry);
+ }
+ 
+ void DeviceBVH::check_los(const double* h_rx, const double* h_sat, int* h_los, int n_sat) {

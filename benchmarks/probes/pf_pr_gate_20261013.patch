@@ -1,0 +1,93 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -362,6 +362,63 @@
+     }
+ 
+     log_weights[tid] = log_w;
++}
++
++// Positive undifferenced PR gates retain the original observation order.
++// Mode 0: Gaussian; 1: Huber; 2: Student (which takes priority over Huber).
++template<int Mode>
++__global__ void pfd_weight_pr_gate_kernel(
++    const double* px, const double* py, const double* pz, const double* pcb,
++    const double* sat_ecef, const double* pseudoranges, const double* weights_sat,
++    double* log_weights, int N, int n_sat, double sigma_pr, double nu,
++    double threshold, double huber_k) {
++    extern __shared__ double s_data[];
++    double* s_sat = s_data;
++    double* s_pr = s_data + n_sat * 3;
++    double* s_ws = s_data + n_sat * 4;
++    for (int i = threadIdx.x; i < n_sat; i += blockDim.x) {
++        s_sat[i * 3 + 0] = sat_ecef[i * 3 + 0];
++        s_sat[i * 3 + 1] = sat_ecef[i * 3 + 1];
++        s_sat[i * 3 + 2] = sat_ecef[i * 3 + 2];
++        s_pr[i] = pseudoranges[i];
++        s_ws[i] = weights_sat[i];
++    }
++    __syncthreads();
++    int tid = blockIdx.x * blockDim.x + threadIdx.x;
++    if (tid >= N) return;
++    double x = px[tid], y = py[tid], z = pz[tid], cb = pcb[tid];
++    double inv_sigma2 = 1.0 / (sigma_pr * sigma_pr);
++    double half_nup1 = 0.5 * (nu + 1.0);
++    double inv_nu_sigma2 = 1.0 / (nu * sigma_pr * sigma_pr);
++    double all_log_w = 0.0, kept_log_w = 0.0;
++    int kept = 0;
++    for (int s = 0; s < n_sat; ++s) {
++        double dx = x - s_sat[s * 3 + 0];
++        double dy = y - s_sat[s * 3 + 1];
++        double dz = z - s_sat[s * 3 + 2];
++        double r = sqrt(dx * dx + dy * dy + dz * dz);
++        double residual = s_pr[s] - (r + cb);
++        double magnitude = fabs(residual);
++        kept += magnitude <= threshold;
++        // Counting excludes NaNs, but the original skip-if-greater filter
++        // retains them when enough other observations pass the gate.
++        bool adopt = !(magnitude > threshold);
++        if constexpr (Mode == 2) {
++            double value = log(1.0 + s_ws[s] * residual * residual * inv_nu_sigma2);
++            all_log_w = fma(-half_nup1, value, all_log_w);
++            if (adopt) kept_log_w = fma(-half_nup1, value, kept_log_w);
++        } else if constexpr (Mode == 1) {
++            double rho = pfd_weighted_huber_cost(residual, sigma_pr, 1.0, huber_k);
++            all_log_w = fma(-s_ws[s], rho, all_log_w);
++            if (adopt) kept_log_w = fma(-s_ws[s], rho, kept_log_w);
++        } else {
++            double term = -0.5 * s_ws[s] * residual * residual;
++            all_log_w = fma(term, inv_sigma2, all_log_w);
++            if (adopt) kept_log_w = fma(term, inv_sigma2, kept_log_w);
++        }
++    }
++    int min_kept = n_sat < 4 ? n_sat : 4;
++    log_weights[tid] = kept >= min_kept ? kept_log_w : all_log_w;
+ }
+ 
+ // --- DD pseudorange weight kernel ---
+@@ -2585,6 +2642,26 @@
+             state->d_px, state->d_py, state->d_pz, state->d_pcb,
+             state->d_sat_ecef, state->d_pseudoranges, state->d_weights_sat,
+             state->d_log_weights, N, n_sat, sigma_pr);
++    } else if (per_particle_nlos_threshold_m > 0.0) {
++        if (nu > 0.0) {
++            pfd_weight_pr_gate_kernel<2><<<grid, BLOCK_SIZE, smem_weight, state->stream>>>(
++                state->d_px, state->d_py, state->d_pz, state->d_pcb,
++                state->d_sat_ecef, state->d_pseudoranges, state->d_weights_sat,
++                state->d_log_weights, N, n_sat, sigma_pr, nu,
++                per_particle_nlos_threshold_m, per_particle_huber_k);
++        } else if (per_particle_huber && per_particle_huber_k > 0.0) {
++            pfd_weight_pr_gate_kernel<1><<<grid, BLOCK_SIZE, smem_weight, state->stream>>>(
++                state->d_px, state->d_py, state->d_pz, state->d_pcb,
++                state->d_sat_ecef, state->d_pseudoranges, state->d_weights_sat,
++                state->d_log_weights, N, n_sat, sigma_pr, nu,
++                per_particle_nlos_threshold_m, per_particle_huber_k);
++        } else {
++            pfd_weight_pr_gate_kernel<0><<<grid, BLOCK_SIZE, smem_weight, state->stream>>>(
++                state->d_px, state->d_py, state->d_pz, state->d_pcb,
++                state->d_sat_ecef, state->d_pseudoranges, state->d_weights_sat,
++                state->d_log_weights, N, n_sat, sigma_pr, nu,
++                per_particle_nlos_threshold_m, per_particle_huber_k);
++        }
+     } else {
+         pfd_weight_kernel<<<grid, BLOCK_SIZE, smem_weight, state->stream>>>(
+             state->d_px, state->d_py, state->d_pz, state->d_pcb,

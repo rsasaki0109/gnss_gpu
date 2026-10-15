@@ -1,9 +1,14 @@
 #include <atomic>
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <mutex>
+#include <limits>
+#include <stdexcept>
+#include <utility>
+#include <vector>
 
 #include <curand_kernel.h>
 
@@ -276,6 +281,190 @@ ChannelCodeParams resolve_code_params(const gnss_gpu::SatChannel& ch) {
     return p;
 }
 
+struct DeviceChannel {
+    const int* code_table;
+    double chip_rate;
+    double code_phase;
+    double carrier_phase;
+    double doppler_hz;
+    double nav_bit_rate;
+    size_t nav_offset;
+    int code_length;
+    int prn_index;
+    int static_nav_bit;
+    int nav_bit_count;
+    float amplitude;
+};
+
+struct EpochDescriptor {
+    size_t channel_offset;
+    int channel_count;
+    unsigned long long seed;
+};
+struct BatchChannels {
+    const DeviceChannel* data;
+    const EpochDescriptor* epochs;
+    __device__ const DeviceChannel& operator[](int index) const {
+        return data[epochs[blockIdx.y].channel_offset + (size_t)index];
+    }
+};
+
+// A normal epoch fits within CUDA's 4 KiB kernel-parameter limit. Passing this
+// batch by value avoids a separate descriptor allocation and host/device copy.
+constexpr int kInlineChannels = 32;
+constexpr int kCachedGlobalChannels = 256;
+struct InlineChannels {
+    DeviceChannel items[kInlineChannels];
+
+    __device__ const DeviceChannel& operator[](int index) const {
+        return items[index];
+    }
+};
+static_assert(sizeof(InlineChannels) + 128 <= 4096);
+
+// Evaluate channels in input order, retaining the two rounding steps of the
+// former channel-output store followed by the composite-kernel addition.
+template <typename ChannelStorage, bool CACHE_FREQUENCY = false,
+          int CACHE_CHANNELS = kInlineChannels, bool BATCHED = false>
+__global__ void fused_signal_kernel(ChannelStorage channels,
+                                    const int* nav_bits,
+                                    float* iq_out,
+                                    int n_samples,
+                                    int n_channels,
+                                    double sampling_freq,
+                                    double intermediate_freq,
+                                    float noise_std,
+                                    unsigned long long seed) {
+    if constexpr (BATCHED) {
+        int epoch = blockIdx.y;
+        n_channels = channels.epochs[epoch].channel_count;
+        seed = channels.epochs[epoch].seed;
+        iq_out += (size_t)epoch * (size_t)n_samples * 2;
+    }
+    static_assert(!CACHE_FREQUENCY || CACHE_CHANNELS <= kBlockSize);
+    __shared__ double angular_frequency[CACHE_CHANNELS];
+    if constexpr (CACHE_FREQUENCY) {
+        // Both cached batches fit within one 256-thread block. Use the
+        // original GPU FP64 operations, then share across output samples.
+        if (threadIdx.x < n_channels)
+            angular_frequency[threadIdx.x] = kTwoPi * (
+                intermediate_freq + channels[threadIdx.x].doppler_hz);
+        __syncthreads();
+    }
+    // Partial blocks must participate in the coefficient barrier first.
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= n_samples) return;
+
+    double t = (double)idx / sampling_freq;
+    float sum_i = 0.0f, sum_q = 0.0f;
+    for (int ch = 0; ch < n_channels; ++ch) {
+        const DeviceChannel& channel = channels[ch];
+        int chip_idx = ((int)(t * channel.chip_rate + channel.code_phase))
+                       % channel.code_length;
+        if (chip_idx < 0) chip_idx += channel.code_length;
+        float code_val = (float)channel.code_table[
+            channel.prn_index * channel.code_length + chip_idx];
+
+        int nav_bit = channel.static_nav_bit;
+        if (channel.nav_bit_count > 0) {
+            int bit_idx = (int)(t * channel.nav_bit_rate);
+            if (bit_idx < 0) bit_idx = 0;
+            if (bit_idx >= channel.nav_bit_count) bit_idx = channel.nav_bit_count - 1;
+            nav_bit = nav_bits[channel.nav_offset + (size_t)bit_idx];
+        }
+
+        double phase;
+        if constexpr (CACHE_FREQUENCY)
+            phase = angular_frequency[ch] * t + channel.carrier_phase;
+        else
+            phase = kTwoPi * (intermediate_freq + channel.doppler_hz) * t
+                    + channel.carrier_phase;
+        float cos_val, sin_val;
+        __sincosf((float)phase, &sin_val, &cos_val);
+        float signal = channel.amplitude * (float)nav_bit * code_val;
+        sum_i = __fadd_rn(sum_i, __fmul_rn(signal, cos_val));
+        sum_q = __fadd_rn(sum_q, __fmul_rn(signal, -sin_val));
+    }
+
+    if (noise_std > 0.0f) {
+        curandStatePhilox4_32_10_t state;
+        curand_init(seed, (unsigned long long)idx, 0, &state);
+        sum_i += curand_normal(&state) * noise_std;
+        sum_q += curand_normal(&state) * noise_std;
+    }
+    iq_out[2 * idx] = sum_i;
+    iq_out[2 * idx + 1] = sum_q;
+}
+
+// Host packing proves every valid channel has nav_bit_count==0 when the
+// packed NAV array is empty. Keep the original producer for all other cases;
+// this copy drops only the unreachable dynamic-NAV branch.
+template <typename ChannelStorage, bool CACHE_FREQUENCY = false,
+          int CACHE_CHANNELS = kInlineChannels, bool BATCHED = false>
+__global__ void fused_static_nav_signal_kernel(ChannelStorage channels,
+                                    const int* nav_bits,
+                                    float* iq_out,
+                                    int n_samples,
+                                    int n_channels,
+                                    double sampling_freq,
+                                    double intermediate_freq,
+                                    float noise_std,
+                                    unsigned long long seed) {
+    if constexpr (BATCHED) {
+        int epoch = blockIdx.y;
+        n_channels = channels.epochs[epoch].channel_count;
+        seed = channels.epochs[epoch].seed;
+        iq_out += (size_t)epoch * (size_t)n_samples * 2;
+    }
+    static_assert(!CACHE_FREQUENCY || CACHE_CHANNELS <= kBlockSize);
+    __shared__ double angular_frequency[CACHE_CHANNELS];
+    if constexpr (CACHE_FREQUENCY) {
+        // Both cached batches fit within one 256-thread block. Use the
+        // original GPU FP64 operations, then share across output samples.
+        if (threadIdx.x < n_channels)
+            angular_frequency[threadIdx.x] = kTwoPi * (
+                intermediate_freq + channels[threadIdx.x].doppler_hz);
+        __syncthreads();
+    }
+    // Partial blocks must participate in the coefficient barrier first.
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= n_samples) return;
+
+    double t = (double)idx / sampling_freq;
+    float sum_i = 0.0f, sum_q = 0.0f;
+    for (int ch = 0; ch < n_channels; ++ch) {
+        const DeviceChannel& channel = channels[ch];
+        int chip_idx = ((int)(t * channel.chip_rate + channel.code_phase))
+                       % channel.code_length;
+        if (chip_idx < 0) chip_idx += channel.code_length;
+        float code_val = (float)channel.code_table[
+            channel.prn_index * channel.code_length + chip_idx];
+
+        int nav_bit = channel.static_nav_bit;
+
+        double phase;
+        if constexpr (CACHE_FREQUENCY)
+            phase = angular_frequency[ch] * t + channel.carrier_phase;
+        else
+            phase = kTwoPi * (intermediate_freq + channel.doppler_hz) * t
+                    + channel.carrier_phase;
+        float cos_val, sin_val;
+        __sincosf((float)phase, &sin_val, &cos_val);
+        float signal = channel.amplitude * (float)nav_bit * code_val;
+        sum_i = __fadd_rn(sum_i, __fmul_rn(signal, cos_val));
+        sum_q = __fadd_rn(sum_q, __fmul_rn(signal, -sin_val));
+    }
+
+    if (noise_std > 0.0f) {
+        curandStatePhilox4_32_10_t state;
+        curand_init(seed, (unsigned long long)idx, 0, &state);
+        sum_i += curand_normal(&state) * noise_std;
+        sum_q += curand_normal(&state) * noise_std;
+    }
+    iq_out[2 * idx] = sum_i;
+    iq_out[2 * idx + 1] = sum_q;
+}
+
 __global__ void composite_kernel(const float* channel_iq,
                                  float* iq_out,
                                  int n_samples,
@@ -306,6 +495,40 @@ __global__ void composite_kernel(const float* channel_iq,
     iq_out[base + 1] = sum_q;
 }
 
+template <typename T>
+struct WorkBuffer {
+    T* data = nullptr;
+    size_t capacity = 0;
+
+    void reserve(size_t count) {
+        if (count <= capacity) return;
+        T* replacement = nullptr;
+        CUDA_CHECK(cudaMalloc(&replacement, count * sizeof(T)));
+        T* previous = data;
+        data = replacement;
+        capacity = count;
+        if (previous) CUDA_CHECK(cudaFree(previous));
+    }
+    void reset() noexcept {
+        if (data) cudaFree(data);
+        data = nullptr;
+        capacity = 0;
+    }
+};
+
+class SignalDeviceScope {
+ public:
+    explicit SignalDeviceScope(int device) {
+        CUDA_CHECK(cudaGetDevice(&previous_));
+        changed_ = previous_ != device;
+        if (changed_) CUDA_CHECK(cudaSetDevice(device));
+    }
+    ~SignalDeviceScope() { if (changed_) cudaSetDevice(previous_); }
+ private:
+    int previous_ = 0;
+    bool changed_ = false;
+};
+
 }  // namespace
 
 namespace gnss_gpu {
@@ -314,12 +537,59 @@ void init_ca_codes() {
     std::call_once(g_ca_init_flag, build_ca_codes_host);
 }
 
+struct DeviceSignalWorkspace::Impl {
+    int device = 0;
+    WorkBuffer<DeviceChannel> channels;
+    WorkBuffer<int> nav_bits;
+    WorkBuffer<float> output;
+    WorkBuffer<EpochDescriptor> epochs;
+    std::vector<EpochDescriptor> packed_epochs;
+    std::vector<DeviceChannel> packed_channels;
+    std::vector<int> packed_nav_bits;
+
+    ~Impl() {
+        int previous = 0;
+        bool known = cudaGetDevice(&previous) == cudaSuccess;
+        if ((!known || previous != device) && cudaSetDevice(device) != cudaSuccess)
+            return;
+        channels.reset(); nav_bits.reset(); output.reset(); epochs.reset();
+        if (known && previous != device) cudaSetDevice(previous);
+    }
+};
+
+DeviceSignalWorkspace::DeviceSignalWorkspace() : impl_(std::make_unique<Impl>()) {
+    CUDA_CHECK(cudaGetDevice(&impl_->device));
+}
+
+DeviceSignalWorkspace::~DeviceSignalWorkspace() = default;
+void DeviceSignalWorkspace::close() noexcept { impl_.reset(); }
+
+size_t DeviceSignalWorkspace::allocated_bytes() const noexcept {
+    if (!impl_) return 0;
+    return impl_->channels.capacity * sizeof(DeviceChannel)
+         + impl_->nav_bits.capacity * sizeof(int)
+         + impl_->output.capacity * sizeof(float)
+         + impl_->epochs.capacity * sizeof(EpochDescriptor);
+}
+
 void simulate_epoch(const SignalSimConfig& config,
                     const SatChannel* channels,
                     int n_channels,
                     float* iq_output,
                     int n_samples) {
     if (n_samples <= 0 || iq_output == nullptr) return;
+    DeviceSignalWorkspace workspace;
+    workspace.simulate_epoch(config, channels, n_channels, iq_output, n_samples);
+}
+
+void DeviceSignalWorkspace::simulate_epoch(const SignalSimConfig& config,
+                                          const SatChannel* channels,
+                                          int n_channels,
+                                          float* iq_output,
+                                          int n_samples) {
+    if (!impl_) throw std::runtime_error("DeviceSignalWorkspace is closed");
+    if (n_samples <= 0 || iq_output == nullptr) return;
+    SignalDeviceScope device(impl_->device);
 
     init_ca_codes();
 
@@ -327,62 +597,184 @@ void simulate_epoch(const SignalSimConfig& config,
     size_t num_floats = (size_t)n_samples * 2;
     size_t output_bytes = num_floats * sizeof(float);
 
-    float* d_channel = nullptr;
-    float* d_output = nullptr;
-    CUDA_CHECK(cudaMalloc(&d_output, output_bytes));
+    auto& packed_channels = impl_->packed_channels;
+    auto& packed_nav_bits = impl_->packed_nav_bits;
+    packed_channels.clear();
+    packed_nav_bits.clear();
+    int* d_nav_bits = nullptr;
 
-    // Count valid channels first (skip invalid system/PRN)
-    int valid_count = 0;
+    // Pack only valid channels, preserving input order and nav-bit clamping.
     if (n_channels > 0 && channels != nullptr) {
-        for (int ch = 0; ch < n_channels; ++ch)
-            if (resolve_code_params(channels[ch]).valid) valid_count++;
-    }
-
-    if (valid_count > 0 && channels != nullptr) {
-        CUDA_CHECK(cudaMalloc(&d_channel, output_bytes * (size_t)valid_count));
-        int slot = 0;
-
+        packed_channels.reserve((size_t)n_channels);
         for (int ch = 0; ch < n_channels; ++ch) {
             auto cp = resolve_code_params(channels[ch]);
             if (!cp.valid) continue;
-
-            // Copy nav bits to device if provided
-            int* d_nav_bits = nullptr;
+            size_t nav_offset = packed_nav_bits.size();
+            int nav_bit_count = 0;
             if (channels[ch].nav_bits != nullptr && channels[ch].nav_bit_count > 0) {
-                size_t nb_bytes = (size_t)channels[ch].nav_bit_count * sizeof(int);
-                CUDA_CHECK(cudaMalloc(&d_nav_bits, nb_bytes));
-                CUDA_CHECK(cudaMemcpy(d_nav_bits, channels[ch].nav_bits,
-                                       nb_bytes, cudaMemcpyHostToDevice));
+                nav_bit_count = channels[ch].nav_bit_count;
+                packed_nav_bits.insert(packed_nav_bits.end(), channels[ch].nav_bits,
+                                       channels[ch].nav_bits + nav_bit_count);
             }
-
-            float* ch_out = d_channel + (size_t)slot * num_floats;
-            generate_channel_kernel<<<blocks, kBlockSize>>>(
-                ch_out, cp.code_table, cp.code_length, cp.chip_rate,
-                cp.prn_index, channels[ch].code_phase,
+            packed_channels.push_back({
+                cp.code_table, cp.chip_rate, channels[ch].code_phase,
                 channels[ch].carrier_phase, channels[ch].doppler_hz,
-                channels[ch].amplitude, channels[ch].nav_bit,
-                d_nav_bits, channels[ch].nav_bit_count,
-                channels[ch].nav_bit_rate,
-                n_samples, config.sampling_freq, config.intermediate_freq);
-            CUDA_CHECK(cudaGetLastError());
-
-            if (d_nav_bits) CUDA_CHECK(cudaFree(d_nav_bits));
-            slot++;
+                channels[ch].nav_bit_rate, nav_offset, cp.code_length,
+                cp.prn_index, channels[ch].nav_bit, nav_bit_count,
+                channels[ch].amplitude});
         }
     }
 
+    impl_->output.reserve(num_floats);
+    float* d_output = impl_->output.data;
     float noise_std = std::pow(10.0f, (float)config.noise_floor_db / 20.0f);
-    composite_kernel<<<blocks, kBlockSize>>>(
-        d_channel, d_output, n_samples,
-        valid_count, noise_std,
-        resolve_noise_seed(config.noise_seed));
+    if (!packed_channels.empty()) {
+        if (!packed_nav_bits.empty()) {
+            size_t nav_bytes = packed_nav_bits.size() * sizeof(int);
+            impl_->nav_bits.reserve(packed_nav_bits.size());
+            d_nav_bits = impl_->nav_bits.data;
+            CUDA_CHECK(cudaMemcpy(d_nav_bits, packed_nav_bits.data(), nav_bytes,
+                                   cudaMemcpyHostToDevice));
+        }
+        auto seed = resolve_noise_seed(config.noise_seed);
+        if (packed_channels.size() <= kInlineChannels) {
+            InlineChannels batch{};
+            for (size_t ch = 0; ch < packed_channels.size(); ++ch)
+                batch.items[ch] = packed_channels[ch];
+            fused_signal_kernel<InlineChannels, true><<<blocks, kBlockSize>>>(
+                batch, d_nav_bits, d_output, n_samples, (int)packed_channels.size(),
+                config.sampling_freq, config.intermediate_freq, noise_std, seed);
+        } else {
+            size_t channel_bytes = packed_channels.size() * sizeof(DeviceChannel);
+            impl_->channels.reserve(packed_channels.size());
+            DeviceChannel* d_channels = impl_->channels.data;
+            CUDA_CHECK(cudaMemcpy(d_channels, packed_channels.data(), channel_bytes,
+                                   cudaMemcpyHostToDevice));
+            if (packed_channels.size() <= kCachedGlobalChannels) {
+                if (packed_nav_bits.empty()) {
+                    fused_static_nav_signal_kernel<DeviceChannel*, true, kCachedGlobalChannels>
+                        <<<blocks, kBlockSize>>>(
+                        d_channels, d_nav_bits, d_output, n_samples, (int)packed_channels.size(),
+                        config.sampling_freq, config.intermediate_freq, noise_std, seed);
+                } else {
+                    fused_signal_kernel<DeviceChannel*, true, kCachedGlobalChannels>
+                        <<<blocks, kBlockSize>>>(
+                        d_channels, d_nav_bits, d_output, n_samples, (int)packed_channels.size(),
+                        config.sampling_freq, config.intermediate_freq, noise_std, seed);
+                }
+            } else {
+                if (packed_nav_bits.empty()) {
+                    fused_static_nav_signal_kernel<DeviceChannel*, false><<<blocks, kBlockSize>>>(
+                        d_channels, d_nav_bits, d_output, n_samples, (int)packed_channels.size(),
+                        config.sampling_freq, config.intermediate_freq, noise_std, seed);
+                } else {
+                    fused_signal_kernel<<<blocks, kBlockSize>>>(
+                        d_channels, d_nav_bits, d_output, n_samples, (int)packed_channels.size(),
+                        config.sampling_freq, config.intermediate_freq, noise_std, seed);
+                }
+            }
+        }
+    } else {
+        composite_kernel<<<blocks, kBlockSize>>>(
+            nullptr, d_output, n_samples, 0, noise_std,
+            resolve_noise_seed(config.noise_seed));
+    }
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
 
     CUDA_CHECK(cudaMemcpy(iq_output, d_output, output_bytes, cudaMemcpyDeviceToHost));
 
-    if (d_channel) CUDA_CHECK(cudaFree(d_channel));
-    CUDA_CHECK(cudaFree(d_output));
+}
+
+void DeviceSignalWorkspace::simulate_epochs(
+    const SignalSimConfig& config, const SatChannel* const* epoch_channels,
+    const int* channel_counts, const unsigned long long* noise_seeds,
+    int n_epochs, float* iq_output, int n_samples) {
+    if (!impl_) throw std::runtime_error("DeviceSignalWorkspace is closed");
+    if (n_epochs < 0 || n_epochs > 65535 || n_samples < 1 || n_samples > std::numeric_limits<int>::max() / 2)
+        throw std::invalid_argument("Invalid signal epoch batch dimensions");
+    if (!n_epochs) return;
+    if (!epoch_channels || !channel_counts || !iq_output)
+        throw std::invalid_argument("Signal epoch batch buffers must not be null");
+    SignalDeviceScope device(impl_->device);
+    init_ca_codes();
+    auto& packed = impl_->packed_channels;
+    auto& nav = impl_->packed_nav_bits;
+    auto& epochs = impl_->packed_epochs;
+    packed.clear(); nav.clear(); epochs.clear();
+    epochs.reserve(n_epochs);
+    int max_channels = 0;
+    for (int e = 0; e < n_epochs; ++e) {
+        if (channel_counts[e] < 0 || (channel_counts[e] && !epoch_channels[e]))
+            throw std::invalid_argument("Invalid channels in signal epoch batch");
+        size_t begin = packed.size();
+        for (int i = 0; i < channel_counts[e]; ++i) {
+            const auto& channel = epoch_channels[e][i];
+            auto cp = resolve_code_params(channel);
+            if (!cp.valid) continue;
+            size_t nav_offset = nav.size();
+            int nav_count = 0;
+            if (channel.nav_bits && channel.nav_bit_count > 0) {
+                nav_count = channel.nav_bit_count;
+                nav.insert(nav.end(), channel.nav_bits, channel.nav_bits + nav_count);
+            }
+            packed.push_back({cp.code_table, cp.chip_rate, channel.code_phase,
+                channel.carrier_phase, channel.doppler_hz, channel.nav_bit_rate,
+                nav_offset, cp.code_length, cp.prn_index, channel.nav_bit, nav_count, channel.amplitude});
+        }
+        if (packed.size() - begin > (size_t)std::numeric_limits<int>::max())
+            throw std::overflow_error("Too many channels in an epoch");
+        int count = (int)(packed.size() - begin);
+        max_channels = std::max(max_channels, count);
+        epochs.push_back({begin, count, resolve_noise_seed(noise_seeds ? noise_seeds[e] : config.noise_seed)});
+    }
+    size_t floats = (size_t)n_epochs * (size_t)n_samples * 2;
+    if (floats > std::numeric_limits<size_t>::max() / sizeof(float))
+        throw std::overflow_error("Signal batch output size overflow");
+    impl_->output.reserve(floats);
+    impl_->channels.reserve(packed.size());
+    impl_->nav_bits.reserve(nav.size());
+    impl_->epochs.reserve(epochs.size());
+    if (!packed.empty()) CUDA_CHECK(cudaMemcpy(impl_->channels.data, packed.data(), packed.size() * sizeof(DeviceChannel), cudaMemcpyHostToDevice));
+    if (!nav.empty()) CUDA_CHECK(cudaMemcpy(impl_->nav_bits.data, nav.data(), nav.size() * sizeof(int), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(impl_->epochs.data, epochs.data(), epochs.size() * sizeof(EpochDescriptor), cudaMemcpyHostToDevice));
+    BatchChannels batch{impl_->channels.data, impl_->epochs.data};
+    dim3 blocks((n_samples + kBlockSize - 1) / kBlockSize, n_epochs);
+    float noise_std = std::pow(10.0f, (float)config.noise_floor_db / 20.0f);
+    if (max_channels <= kInlineChannels) {
+        if (nav.empty() && max_channels > 0) {
+            fused_static_nav_signal_kernel<BatchChannels, true, kInlineChannels, true><<<blocks, kBlockSize>>>(
+                batch, impl_->nav_bits.data, impl_->output.data, n_samples, max_channels,
+                config.sampling_freq, config.intermediate_freq, noise_std, 0ULL);
+        } else {
+            fused_signal_kernel<BatchChannels, true, kInlineChannels, true><<<blocks, kBlockSize>>>(
+                batch, impl_->nav_bits.data, impl_->output.data, n_samples, max_channels,
+                config.sampling_freq, config.intermediate_freq, noise_std, 0ULL);
+        }
+    } else if (max_channels <= kCachedGlobalChannels) {
+        if (nav.empty() && max_channels > 0) {
+            fused_static_nav_signal_kernel<BatchChannels, true, kCachedGlobalChannels, true><<<blocks, kBlockSize>>>(
+                batch, impl_->nav_bits.data, impl_->output.data, n_samples, max_channels,
+                config.sampling_freq, config.intermediate_freq, noise_std, 0ULL);
+        } else {
+            fused_signal_kernel<BatchChannels, true, kCachedGlobalChannels, true><<<blocks, kBlockSize>>>(
+                batch, impl_->nav_bits.data, impl_->output.data, n_samples, max_channels,
+                config.sampling_freq, config.intermediate_freq, noise_std, 0ULL);
+        }
+    } else {
+        if (nav.empty()) {
+            fused_static_nav_signal_kernel<BatchChannels, false, kInlineChannels, true><<<blocks, kBlockSize>>>(
+                batch, impl_->nav_bits.data, impl_->output.data, n_samples, max_channels,
+                config.sampling_freq, config.intermediate_freq, noise_std, 0ULL);
+        } else {
+            fused_signal_kernel<BatchChannels, false, kInlineChannels, true><<<blocks, kBlockSize>>>(
+                batch, impl_->nav_bits.data, impl_->output.data, n_samples, max_channels,
+                config.sampling_freq, config.intermediate_freq, noise_std, 0ULL);
+        }
+    }
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaMemcpy(iq_output, impl_->output.data, floats * sizeof(float), cudaMemcpyDeviceToHost));
 }
 
 void generate_single_channel(const SatChannel& ch,

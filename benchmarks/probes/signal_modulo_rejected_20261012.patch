@@ -1,0 +1,32 @@
+--- a/src/signal_sim/signal_sim.cu
++++ b/src/signal_sim/signal_sim.cu
+@@ -306,6 +306,18 @@
+ };
+ static_assert(sizeof(InlineChannels) + 128 <= 4096);
+ 
++// Valid channels use these four fixed lengths. Constant signed remainders
++// avoid a runtime integer division without changing negative-chip semantics.
++__device__ __forceinline__ int code_remainder(int chip, int code_length) {
++    switch (code_length) {
++    case kGpsCodeLen: return chip % kGpsCodeLen;
++    case kGloCodeLen: return chip % kGloCodeLen;
++    case kGalCodeLen: return chip % kGalCodeLen;
++    case kBdsCodeLen: return chip % kBdsCodeLen;
++    default: return chip % code_length;
++    }
++}
++
+ // Evaluate channels in input order, retaining the two rounding steps of the
+ // former channel-output store followed by the composite-kernel addition.
+ template <typename ChannelStorage>
+@@ -325,8 +337,8 @@
+     float sum_i = 0.0f, sum_q = 0.0f;
+     for (int ch = 0; ch < n_channels; ++ch) {
+         const DeviceChannel& channel = channels[ch];
+-        int chip_idx = ((int)(t * channel.chip_rate + channel.code_phase))
+-                       % channel.code_length;
++        int chip_idx = code_remainder(
++            (int)(t * channel.chip_rate + channel.code_phase), channel.code_length);
+         if (chip_idx < 0) chip_idx += channel.code_length;
+         float code_val = (float)channel.code_table[
+             channel.prn_index * channel.code_length + chip_idx];

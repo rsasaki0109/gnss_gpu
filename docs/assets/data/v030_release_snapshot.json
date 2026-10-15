@@ -222,7 +222,7 @@
   },
   "runtime": {
     "deadline_misses": 0,
-    "gpu": "NVIDIA GeForce GTX 1660 Ti",
+    "gpu": "NVIDIA CUDA GPU",
     "latency_p50_ms": 13.66179995238781,
     "latency_p95_ms": 75.82583510084078,
     "normal_latency_max_ms": 13.761000009253621,

@@ -1,0 +1,144 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -2899,6 +2899,21 @@
+     ancestors[i] = k;
+ }
+ 
++__global__ void pfd_pool_cdf_indices_kernel(const double* cdf, int source_count,
++                                             int* indices, int target_count) {
++    int tid = blockIdx.x * blockDim.x + threadIdx.x;
++    if (tid >= target_count) return;
++    // Match NumPy's separate FP64 addition and division, and side="left".
++    double threshold = __ddiv_rn(__dadd_rn((double)tid, 0.5), (double)target_count);
++    int low = 0, high = source_count;
++    while (low < high) {
++        int middle = low + (high - low) / 2;
++        if (cdf[middle] < threshold) low = middle + 1;
++        else high = middle;
++    }
++    indices[tid] = low < source_count ? low : source_count - 1;
++}
++
+ __global__ void pfd_megopolis_gather_kernel(const double* src_px, const double* src_py,
+                                            const double* src_pz,
+                                            const double* src_vx, const double* src_vy,
+@@ -3932,6 +3947,42 @@
+     pfd_reset_weights_kernel<<<target->grid_size, BLOCK_SIZE, 0, target->stream>>>(target->d_log_weights, N);
+     CUDA_CHECK_LAST();
+     // Input indices and both states can be reused as soon as this call returns.
++    CUDA_CHECK(cudaStreamSynchronize(target->stream));
++    return true;
++}
++
++bool pf_device_gather_from_cdf(PFDeviceState* target, const PFDeviceState* source,
++                               const double* cdf) {
++    if (target == source) return false;
++    cudaPointerAttributes src_attributes, dst_attributes;
++    CUDA_CHECK(cudaPointerGetAttributes(&src_attributes, source->d_px));
++    CUDA_CHECK(cudaPointerGetAttributes(&dst_attributes, target->d_px));
++    int current_device;
++    CUDA_CHECK(cudaGetDevice(&current_device));
++    if (src_attributes.device != dst_attributes.device ||
++        dst_attributes.device != current_device) return false;
++
++    // Source scratch is large enough even when the target has fewer particles.
++    // Finish its producers before borrowing d_cdf on the target's stream.
++    CUDA_CHECK(cudaStreamSynchronize(source->stream));
++    target->ess_cached = false;
++    target->covariance_uniform = false;
++    int N = target->n_particles;
++    CUDA_CHECK(cudaMemcpyAsync(source->d_cdf, cdf,
++        (size_t)source->n_particles * sizeof(double), cudaMemcpyHostToDevice, target->stream));
++    pfd_pool_cdf_indices_kernel<<<target->grid_size, BLOCK_SIZE, 0, target->stream>>>(
++        source->d_cdf, source->n_particles, target->d_megopolis_idx_a, N);
++    CUDA_CHECK_LAST();
++    pfd_megopolis_gather_kernel<<<target->grid_size, BLOCK_SIZE, 0, target->stream>>>(
++        source->d_px, source->d_py, source->d_pz,
++        source->d_vx, source->d_vy, source->d_vz, source->d_vcov, source->d_pcb,
++        target->d_px, target->d_py, target->d_pz,
++        target->d_vx, target->d_vy, target->d_vz, target->d_vcov, target->d_pcb,
++        target->d_megopolis_idx_a, N, true);
++    CUDA_CHECK_LAST();
++    pfd_reset_weights_kernel<<<target->grid_size, BLOCK_SIZE, 0, target->stream>>>(target->d_log_weights, N);
++    CUDA_CHECK_LAST();
++    // CDF input and both states, including source scratch, are reusable now.
+     CUDA_CHECK(cudaStreamSynchronize(target->stream));
+     return true;
+ }
+--- a/include/gnss_gpu/pf_device.h
++++ b/include/gnss_gpu/pf_device.h
+@@ -270,6 +270,12 @@
+ bool pf_device_gather_from(PFDeviceState* target, const PFDeviceState* source,
+                            const int* ancestors);
+ 
++// Select using a host-built finite monotone CDF and exact FP64 left search.
++// Borrows source CDF scratch; keep both states stable until synchronized return.
++// CDF must have source->n_particles elements. Same decline rules as gather_from.
++bool pf_device_gather_from_cdf(PFDeviceState* target, const PFDeviceState* source,
++                               const double* cdf);
++
+ // Upload full particle states from host:
+ // [x, y, z, cb, mu_vx, mu_vy, mu_vz, Sigma_v(3x3 row-major)].
+ // Resets log-weights to uniform after upload.
+--- a/python/gnss_gpu/_pf_device_bindings.cpp
++++ b/python/gnss_gpu/_pf_device_bindings.cpp
+@@ -586,6 +586,24 @@
+     }, "Gather full source states into a distinct resident target; reset weights; sync",
+        py::arg("target"), py::arg("source"), py::arg("ancestors"));
+ 
++    m.def("pf_device_gather_from_cdf", [](gnss_gpu::PFDeviceState* target,
++            const gnss_gpu::PFDeviceState* source,
++            py::array_t<double, py::array::c_style | py::array::forcecast> cdf) {
++        validate_device_state(target, "pf_device_gather_from_cdf target");
++        validate_device_state(source, "pf_device_gather_from_cdf source");
++        auto r = cdf.request();
++        if (r.ndim != 1 || r.size != source->n_particles) {
++            throw std::runtime_error("pf_device_gather_from_cdf: CDF length must match source");
++        }
++        const auto* input = static_cast<const double*>(r.ptr);
++        // Decline unsupported CDFs before any state or scratch mutation.
++        for (py::ssize_t i = 0; i < r.size; ++i) {
++            if (!std::isfinite(input[i]) || (i > 0 && input[i] < input[i - 1])) return false;
++        }
++        return gnss_gpu::pf_device_gather_from_cdf(target, source, input);
++    }, "Gather using exact left search on a finite monotone CPU CDF; reset weights; sync",
++       py::arg("target"), py::arg("source"), py::arg("cdf"));
++
+     m.def("pf_device_set_particle_states", [](gnss_gpu::PFDeviceState* state,
+                                               py::array_t<double, py::array::c_style | py::array::forcecast> input) {
+         int N = state->n_particles;
+--- a/python/gnss_gpu/pf_device_config.py
++++ b/python/gnss_gpu/pf_device_config.py
+@@ -84,6 +84,8 @@
+         pf_device_get_particles=pf_device_get_particles,
+         pf_device_get_particle_states=pf_device_get_particle_states,
+         pf_device_set_particle_states=pf_device_set_particle_states,
++        pf_device_gather_from_cdf=getattr(
++            import_module("gnss_gpu._gnss_gpu_pf_device"), "pf_device_gather_from_cdf", None),
+         pf_device_gather_from=getattr(
+             import_module("gnss_gpu._gnss_gpu_pf_device"), "pf_device_gather_from", None),
+         pf_device_set_velocity_covariance=getattr(
+@@ -136,6 +138,7 @@
+     for name in _BINDING_ATTRS:
+         setattr(pf, f"_{name}", getattr(bindings, name))
+     pf._pf_device_gather_from = getattr(bindings, "pf_device_gather_from", None)
++    pf._pf_device_gather_from_cdf = getattr(bindings, "pf_device_gather_from_cdf", None)
+     pf._pf_device_position_mixture_components = getattr(
+         bindings, "pf_device_position_mixture_components", None)
+     # Older native modules and injected backends retain the existing fallback.
+--- a/python/gnss_gpu/realtime_runtime.py
++++ b/python/gnss_gpu/realtime_runtime.py
+@@ -414,6 +414,13 @@
+             weights /= np.sum(weights)
+         cdf = np.cumsum(weights)
+         count = int(target.n_particles)
++        cdf_gather = getattr(target, "_pf_device_gather_from_cdf", None)
++        if (resident and cdf.size == source_count and max(source_count, count) >= 65536 and
++                count == getattr(target_state, "n_particles", 0) and callable(cdf_gather) and
++                cdf_gather is getattr(source, "_pf_device_gather_from_cdf", None)):
++            if cdf_gather(target_state, source_state, cdf):
++                target.set_log_weights(np.full(count, -math.log(count), dtype=np.float64))
++                return
+         indices = np.searchsorted(
+             cdf,
+             (np.arange(count, dtype=np.float64) + 0.5) / count,

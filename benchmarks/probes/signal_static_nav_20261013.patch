@@ -1,0 +1,110 @@
+--- a/src/signal_sim/signal_sim.cu
++++ b/src/signal_sim/signal_sim.cu
+@@ -372,6 +372,75 @@
+             if (bit_idx >= channel.nav_bit_count) bit_idx = channel.nav_bit_count - 1;
+             nav_bit = nav_bits[channel.nav_offset + (size_t)bit_idx];
+         }
++
++        double phase;
++        if constexpr (CACHE_FREQUENCY)
++            phase = angular_frequency[ch] * t + channel.carrier_phase;
++        else
++            phase = kTwoPi * (intermediate_freq + channel.doppler_hz) * t
++                    + channel.carrier_phase;
++        float cos_val, sin_val;
++        __sincosf((float)phase, &sin_val, &cos_val);
++        float signal = channel.amplitude * (float)nav_bit * code_val;
++        sum_i = __fadd_rn(sum_i, __fmul_rn(signal, cos_val));
++        sum_q = __fadd_rn(sum_q, __fmul_rn(signal, -sin_val));
++    }
++
++    if (noise_std > 0.0f) {
++        curandStatePhilox4_32_10_t state;
++        curand_init(seed, (unsigned long long)idx, 0, &state);
++        sum_i += curand_normal(&state) * noise_std;
++        sum_q += curand_normal(&state) * noise_std;
++    }
++    iq_out[2 * idx] = sum_i;
++    iq_out[2 * idx + 1] = sum_q;
++}
++
++// Host packing proves every valid channel has nav_bit_count==0 when the
++// packed NAV array is empty. Keep the original producer for all other cases;
++// this copy drops only the unreachable dynamic-NAV branch.
++template <typename ChannelStorage, bool CACHE_FREQUENCY = false,
++          int CACHE_CHANNELS = kInlineChannels, bool BATCHED = false>
++__global__ void fused_static_nav_signal_kernel(ChannelStorage channels,
++                                    const int* nav_bits,
++                                    float* iq_out,
++                                    int n_samples,
++                                    int n_channels,
++                                    double sampling_freq,
++                                    double intermediate_freq,
++                                    float noise_std,
++                                    unsigned long long seed) {
++    if constexpr (BATCHED) {
++        int epoch = blockIdx.y;
++        n_channels = channels.epochs[epoch].channel_count;
++        seed = channels.epochs[epoch].seed;
++        iq_out += (size_t)epoch * (size_t)n_samples * 2;
++    }
++    static_assert(!CACHE_FREQUENCY || CACHE_CHANNELS <= kBlockSize);
++    __shared__ double angular_frequency[CACHE_CHANNELS];
++    if constexpr (CACHE_FREQUENCY) {
++        // Both cached batches fit within one 256-thread block. Use the
++        // original GPU FP64 operations, then share across output samples.
++        if (threadIdx.x < n_channels)
++            angular_frequency[threadIdx.x] = kTwoPi * (
++                intermediate_freq + channels[threadIdx.x].doppler_hz);
++        __syncthreads();
++    }
++    // Partial blocks must participate in the coefficient barrier first.
++    int idx = blockIdx.x * blockDim.x + threadIdx.x;
++    if (idx >= n_samples) return;
++
++    double t = (double)idx / sampling_freq;
++    float sum_i = 0.0f, sum_q = 0.0f;
++    for (int ch = 0; ch < n_channels; ++ch) {
++        const DeviceChannel& channel = channels[ch];
++        int chip_idx = ((int)(t * channel.chip_rate + channel.code_phase))
++                       % channel.code_length;
++        if (chip_idx < 0) chip_idx += channel.code_length;
++        float code_val = (float)channel.code_table[
++            channel.prn_index * channel.code_length + chip_idx];
++
++        int nav_bit = channel.static_nav_bit;
+ 
+         double phase;
+         if constexpr (CACHE_FREQUENCY)
+@@ -660,13 +729,25 @@
+     dim3 blocks((n_samples + kBlockSize - 1) / kBlockSize, n_epochs);
+     float noise_std = std::pow(10.0f, (float)config.noise_floor_db / 20.0f);
+     if (max_channels <= kInlineChannels) {
+-        fused_signal_kernel<BatchChannels, true, kInlineChannels, true><<<blocks, kBlockSize>>>(
+-            batch, impl_->nav_bits.data, impl_->output.data, n_samples, max_channels,
+-            config.sampling_freq, config.intermediate_freq, noise_std, 0ULL);
++        if (nav.empty() && max_channels > 0) {
++            fused_static_nav_signal_kernel<BatchChannels, true, kInlineChannels, true><<<blocks, kBlockSize>>>(
++                batch, impl_->nav_bits.data, impl_->output.data, n_samples, max_channels,
++                config.sampling_freq, config.intermediate_freq, noise_std, 0ULL);
++        } else {
++            fused_signal_kernel<BatchChannels, true, kInlineChannels, true><<<blocks, kBlockSize>>>(
++                batch, impl_->nav_bits.data, impl_->output.data, n_samples, max_channels,
++                config.sampling_freq, config.intermediate_freq, noise_std, 0ULL);
++        }
+     } else if (max_channels <= kCachedGlobalChannels) {
+-        fused_signal_kernel<BatchChannels, true, kCachedGlobalChannels, true><<<blocks, kBlockSize>>>(
+-            batch, impl_->nav_bits.data, impl_->output.data, n_samples, max_channels,
+-            config.sampling_freq, config.intermediate_freq, noise_std, 0ULL);
++        if (nav.empty() && max_channels > 0) {
++            fused_static_nav_signal_kernel<BatchChannels, true, kCachedGlobalChannels, true><<<blocks, kBlockSize>>>(
++                batch, impl_->nav_bits.data, impl_->output.data, n_samples, max_channels,
++                config.sampling_freq, config.intermediate_freq, noise_std, 0ULL);
++        } else {
++            fused_signal_kernel<BatchChannels, true, kCachedGlobalChannels, true><<<blocks, kBlockSize>>>(
++                batch, impl_->nav_bits.data, impl_->output.data, n_samples, max_channels,
++                config.sampling_freq, config.intermediate_freq, noise_std, 0ULL);
++        }
+     } else {
+         fused_signal_kernel<BatchChannels, false, kInlineChannels, true><<<blocks, kBlockSize>>>(
+             batch, impl_->nav_bits.data, impl_->output.data, n_samples, max_channels,

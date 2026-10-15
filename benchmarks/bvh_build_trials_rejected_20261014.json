@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-13T15:10:08.250201+00:00",
+  "adopted": false,
+  "variants": {
+    "bvh_build_bins": {
+      "path": "benchmarks/bvh_build_bins_rejected_20261014.json",
+      "sha256": "8d99f0eb26deb5ade49eb8fdec09acf996785cc824804090aa77cedac95de389",
+      "device_code_report": {
+        "path": "benchmarks/bvh_build_bins_rejected_device_code_20261013.json",
+        "sha256": "d03a4202afdc0e146f301140d8a9ed43e912a3e9ee3ca8c49edb0497ec66d2da"
+      }
+    },
+    "bvh_build_bin_reciprocal": {
+      "path": "benchmarks/bvh_build_bin_reciprocal_rejected_20261014.json",
+      "sha256": "81ba34b7714882e00ae75a980a87fbf71bf83d6b2c6f5bcc30498e88ee705535",
+      "device_code_report": {
+        "path": "benchmarks/bvh_build_bin_reciprocal_rejected_device_code_20261013.json",
+        "sha256": "9a2cfeb0e4ece4bdf49c326e17f09cf62b7e8c858f1cfee9b83a348a471eeae3"
+      }
+    },
+    "bvh_build_left_bounds": {
+      "path": "benchmarks/bvh_build_left_bounds_rejected_20261014.json",
+      "sha256": "4b940cdfecaca107684b6ab694af7232089fc48af45cbd2eb92b75fa345acdc2",
+      "device_code_report": {
+        "path": "benchmarks/bvh_build_left_bounds_rejected_device_code_20261013.json",
+        "sha256": "b4d8b699486dec743e9a2e0580d9e1cdf81875683925a4af7607d4deae3c1615"
+      }
+    }
+  },
+  "shared_baseline_reference": {
+    "path": "benchmarks/bvh_parallel_mirror_chunks_gpu_20261013.json",
+    "sha256": "bcda1df440f75615bc2d869e031b039f3499d2318444243ef62b4e88d0215cd8"
+  },
+  "comparison_cases_per_variant": 97,
+  "timed_conditions_per_variant": 21,
+  "exploratory_rounds": 3,
+  "exploratory_repeats": 5,
+  "left_bounds_cpu_clock_conditions": 6,
+  "cpu_clock_rounds": 5,
+  "cpu_clock_repeats": 10,
+  "selection": "Reject all three changes. Restore exact preceding BVH source and build/installed binary; retain PF individual gather and signal epoch batch.",
+  "additional_regression_and_cuda_sanitizers_run": false
+}

@@ -96,6 +96,7 @@ class ParticleFilterDeviceRuntime:
     _pf_device_get_particles: Callable[..., Any]
     _pf_device_get_particle_states: Callable[..., Any]
     _pf_device_set_particle_states: Callable[..., Any]
+    _pf_device_set_velocity_covariance: Callable[..., Any] | None
     _pf_device_get_log_weights: Callable[..., Any]
     _pf_device_set_log_weights: Callable[..., Any]
     _pf_device_get_resample_ancestors: Callable[..., Any]
@@ -861,15 +862,10 @@ class ParticleFilterDeviceRuntime:
     def set_velocity_covariance(self, cov_3x3):
         """Overwrite every particle's velocity-KF covariance ``Sigma_v`` (WP21b).
 
-        Minimal Python-side setter built on the existing
-        ``get/set_particle_states`` + ``get/set_log_weights`` primitives --
-        no CUDA kernel changes. The native API has no dedicated "set just
-        Sigma_v" entry point, so this round-trips the full per-particle
-        state array, patches only the ``Sigma_v`` block (columns 7:16,
-        row-major 3x3), and restores the log-weights afterward (since
-        ``set_particle_states`` resets them to uniform), making the call
-        weight-neutral. The same covariance is broadcast to every particle:
-        callers such as an IMU-preintegration guide produce one covariance
+        Broadcast the nine row-major covariance values on the device,
+        preserving positions, clock bias, velocities and log-weights.
+        Older native modules retain the full-state upload fallback.
+        Callers such as an IMU-preintegration guide produce one covariance
         estimate per epoch (not per particle).
 
         Intended to be called just before ``predict(..., rbpf_velocity_kf=True)``
@@ -889,6 +885,10 @@ class ParticleFilterDeviceRuntime:
         cov = np.asarray(cov_3x3, dtype=np.float64).reshape(3, 3)
         if not np.all(np.isfinite(cov)):
             raise ValueError("cov_3x3 must be finite")
+        set_covariance = getattr(self, "_pf_device_set_velocity_covariance", None)
+        if set_covariance is not None:
+            set_covariance(self._state, np.ascontiguousarray(cov))
+            return
         log_weights = self.get_log_weights()
         states = self.get_particle_states()
         states[:, 7:16] = cov.reshape(9)[np.newaxis, :]
@@ -908,6 +908,9 @@ class ParticleFilterDeviceRuntime:
         self._pf_device_get_log_weights(self._state, out)
         return out
 
+    # Keep the getter identity across instance/class wrapper overrides.
+    _migration_weights_getter = get_log_weights
+
     def set_log_weights(self, log_weights):
         """Replace per-particle log-weights on the device."""
         if not self._initialized:
@@ -917,8 +920,29 @@ class ParticleFilterDeviceRuntime:
             raise ValueError(f"log_weights size {lw.size} != {self.n_particles}")
         self._pf_device_set_log_weights(self._state, np.ascontiguousarray(lw))
 
+    # Preserve original method identity across instance/class setter overrides.
+    _uniform_weights_array_setter = set_log_weights
+
+    def set_uniform_log_weights(self, log_weight):
+        """Set one exact FP64 value for every particle; synchronize completion."""
+        if not self._initialized:
+            raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+        value = float(log_weight)
+        fill = getattr(self, "_pf_device_fill_log_weights", None)
+        paired_setter = getattr(self, "_pf_device_fill_log_weights_setter", None)
+        setter = self.set_log_weights
+        if (self.n_particles >= 65536 and callable(fill) and paired_setter is not None and
+                getattr(self._state, "n_particles", 0) == self.n_particles and
+                getattr(setter, "__func__", None) is ParticleFilterDeviceRuntime._uniform_weights_array_setter and
+                self._pf_device_set_log_weights is paired_setter):
+            fill(self._state, value)
+            return
+        setter(np.full(int(self.n_particles), value, dtype=np.float64))
+
+    _uniform_weights_method = set_uniform_log_weights
+
     def position_mixture_update(self, refs_ecef, sigma_pos=1.0, mixture_weights=None):
-        """Apply a CPU-side Gaussian-mixture position likelihood to particles."""
+        """Apply a Gaussian-mixture likelihood with bounded CPU working arrays."""
         if not self._initialized:
             raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
         refs = np.asarray(refs_ecef, dtype=np.float64).reshape(-1, 3)
@@ -941,19 +965,90 @@ class ParticleFilterDeviceRuntime:
             else:
                 mix = mix / total
 
+        components_on_device = getattr(self, "_pf_device_position_mixture_components", None)
+        use_device = (components_on_device is not None and 2 <= refs.shape[0] <= 4
+                      and self.n_particles * refs.shape[0] > 65536
+                      and np.isfinite(sigma * sigma))
+        if use_device:
+            error_modes = np.geterr().values()
+            use_device = all(mode in ("warn", "ignore") for mode in error_modes)
+            if use_device and "warn" in error_modes:
+                import warnings
+                use_device = not any(
+                    action == "error" and issubclass(RuntimeWarning, category)
+                    for action, _, category, _, _ in warnings.filters
+                )
+        if use_device:
+            log_mix = np.log(mix[np.newaxis, :])
+            components = components_on_device(self._state, refs, log_mix.ravel(), sigma * sigma)  # pyright: ignore[reportOptionalCall]
+            if components is not None:
+                log_weights = np.asarray(self.get_log_weights(), dtype=np.float64)
+                increment = np.full(log_weights.shape, -np.inf, dtype=np.float64)
+                rows_per_chunk = max(1, 65536 // refs.shape[0])
+                for start in range(0, log_weights.size, rows_per_chunk):
+                    stop = min(start + rows_per_chunk, log_weights.size)
+                    log_components = components[start:stop]
+                    max_log = np.max(log_components, axis=1)
+                    finite = np.isfinite(max_log)
+                    selected = log_components[finite]
+                    np.subtract(selected, max_log[finite, np.newaxis], out=selected)
+                    np.exp(selected, out=selected)
+                    sum_exp = np.sum(selected, axis=1)
+                    np.log(sum_exp, out=sum_exp)
+                    increment[start:stop][finite] = max_log[finite] + sum_exp
+                self.set_log_weights(log_weights + increment)
+                return
+
         particles = np.asarray(self.get_particles(), dtype=np.float64)
         log_weights = np.asarray(self.get_log_weights(), dtype=np.float64)
-        diff = particles[:, np.newaxis, :3] - refs[np.newaxis, :, :]
-        log_components = (
-            np.log(mix[np.newaxis, :])
-            - 0.5 * np.sum(diff * diff, axis=2) / (sigma * sigma)
-        )
-        max_log = np.max(log_components, axis=1)
-        finite = np.isfinite(max_log)
-        increment = np.full(log_weights.shape, -np.inf, dtype=np.float64)
-        increment[finite] = max_log[finite] + np.log(
-            np.sum(np.exp(log_components[finite] - max_log[finite, np.newaxis]), axis=1)
-        )
+        use_chunks = particles.shape[0] * refs.shape[0] > 65536
+        if use_chunks:
+            # Preserve the eager operation/error order for strict NumPy modes
+            # and warning handlers that turn a RuntimeWarning into an error.
+            error_modes = np.geterr().values()
+            use_chunks = all(mode in ("warn", "ignore") for mode in error_modes)
+            if use_chunks and "warn" in error_modes:
+                import warnings
+                use_chunks = not any(
+                    action == "error" and issubclass(RuntimeWarning, category)
+                    for action, _, category, _, _ in warnings.filters
+                )
+        if not use_chunks:
+            diff = particles[:, np.newaxis, :3] - refs[np.newaxis, :, :]
+            log_components = (
+                np.log(mix[np.newaxis, :])
+                - 0.5 * np.sum(diff * diff, axis=2) / (sigma * sigma)
+            )
+            max_log = np.max(log_components, axis=1)
+            finite = np.isfinite(max_log)
+            increment = np.full(log_weights.shape, -np.inf, dtype=np.float64)
+            increment[finite] = max_log[finite] + np.log(
+                np.sum(np.exp(log_components[finite] - max_log[finite, np.newaxis]), axis=1)
+            )
+        else:
+            log_mix = np.log(mix[np.newaxis, :])
+            increment = np.full(log_weights.shape, -np.inf, dtype=np.float64)
+            rows_per_chunk = max(1, 65536 // refs.shape[0])
+            for start in range(0, particles.shape[0], rows_per_chunk):
+                stop = min(start + rows_per_chunk, particles.shape[0])
+                squared = np.empty((stop - start, refs.shape[0]), dtype=np.float64)
+                log_components = np.zeros_like(squared)
+                for coordinate in range(3):
+                    np.subtract(particles[start:stop, coordinate, np.newaxis],
+                                refs[np.newaxis, :, coordinate], out=squared)
+                    np.multiply(squared, squared, out=squared)
+                    np.add(log_components, squared, out=log_components)
+                np.multiply(log_components, 0.5, out=log_components)
+                np.divide(log_components, sigma * sigma, out=log_components)
+                np.subtract(log_mix, log_components, out=log_components)
+                max_log = np.max(log_components, axis=1)
+                finite = np.isfinite(max_log)
+                selected = log_components[finite]
+                np.subtract(selected, max_log[finite, np.newaxis], out=selected)
+                np.exp(selected, out=selected)
+                sum_exp = np.sum(selected, axis=1)
+                np.log(sum_exp, out=sum_exp)
+                increment[start:stop][finite] = max_log[finite] + sum_exp
         self.set_log_weights(log_weights + increment)
 
     def get_resample_ancestors(self):

@@ -1,4 +1,6 @@
 #pragma once
+#include <cstddef>
+#include <memory>
 
 namespace gnss_gpu {
 
@@ -35,6 +37,8 @@ struct SatChannel {
 
 void init_ca_codes();
 
+// Valid channels are summed in input order with float channel-output rounding.
+// Unknown systems/out-of-range PRNs are skipped. IQ output is interleaved I/Q.
 void simulate_epoch(const SignalSimConfig& config,
                     const SatChannel* channels,
                     int n_channels,
@@ -46,5 +50,30 @@ void generate_single_channel(const SatChannel& ch,
                              int n_samples,
                              double sampling_freq,
                              double intermediate_freq);
+
+// Synchronous IQ generation with reusable work buffers on the owning CUDA
+// device. Retains the largest requested buffers until close/destruction; no
+// channel or navigation-bit data are cached between calls. Not thread-safe.
+class DeviceSignalWorkspace {
+ public:
+    DeviceSignalWorkspace();
+    ~DeviceSignalWorkspace();
+    DeviceSignalWorkspace(const DeviceSignalWorkspace&) = delete;
+    DeviceSignalWorkspace& operator=(const DeviceSignalWorkspace&) = delete;
+
+    void simulate_epoch(const SignalSimConfig& config, const SatChannel* channels,
+                        int n_channels, float* iq_output, int n_samples);
+    // Generate equal-length epochs without changing sample indices or seeds.
+    // Channel arrays remain owned by the caller until this synchronous call returns.
+    void simulate_epochs(const SignalSimConfig& config, const SatChannel* const* channels,
+                         const int* channel_counts, const unsigned long long* noise_seeds,
+                         int n_epochs, float* iq_output, int n_samples);
+    void close() noexcept;
+    std::size_t allocated_bytes() const noexcept;
+
+ private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+};
 
 }  // namespace gnss_gpu

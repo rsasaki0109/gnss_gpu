@@ -1,0 +1,30 @@
+{
+  "fused": {
+    "weight_bits": [
+      18444492273895866368
+    ],
+    "weight_value": "nan"
+  },
+  "original": {
+    "weight_bits": [
+      0
+    ],
+    "weight_value": "0.0"
+  },
+  "baseline_reference": {
+    "path": "benchmarks/pf_dd_gate_gpu_20261012.json",
+    "sha256": "00043d6a46a44f55e54426c122259a88c9aabb5ac9a5fb48e25c9208e872b6d5"
+  },
+  "source_sha256": {
+    "src/particle_filter/pf_device.cu": "66655229ac6801de625d0c03ae68f47da9af56734818e1c703e01a389512fefb",
+    "include/gnss_gpu/pf_device.h": "0481eec6e53b955ab1db67ffeb27f26fd61e125ad7b6ae594275582f8e4d9f0e",
+    "python/gnss_gpu/_pf_device_bindings.cpp": "56fdb9e2568d263595aae3ab66e42d5df70e8ccd6c2b6d08c61d00d4b30edaf5",
+    "python/gnss_gpu/pf_device_runtime.py": "a24c892f58e39e4cde99737273cfe23b807df9cc971269f571249f03e9d93ad2",
+    "python/gnss_gpu/pf_device_config.py": "c6c17c4f926a2182ebe27dfd23a6e9c8b1f49c59c238a51feb6dd7b2814fce69"
+  },
+  "extension_sha256": "e8ecf42560f6c2997c556d4a3c90f24f679a51b54de8ac79c66921420b170971",
+  "fixture": {
+    "path": "tests/fixtures/pf_dd_gate_partial_nan.json",
+    "sha256": "25462e9477839aacf6f1463347f0c227e62f3628724446c4ee8d2033ab98227e"
+  }
+}

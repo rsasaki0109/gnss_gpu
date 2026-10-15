@@ -1,0 +1,36 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -1096,7 +1096,8 @@
+     int tiles = prepare_multipath(total, n_epoch, n_sat);
+     launch_los(n_epoch, n_sat, batch);
+     launch_multipath(n_epoch, n_sat, tiles);
+-    CUDA_CHECK(cudaDeviceSynchronize());
++    // Blocking D2H on the same default stream completes the kernels and copy
++    // before returning. A preceding device-wide wait would be redundant here.
+     CUDA_CHECK(cudaMemcpy(h_los, los.data, (size_t)total * sizeof(int), cudaMemcpyDeviceToHost));
+     copy_multipath(h_points, h_delays, total);
+   }
+@@ -1146,7 +1147,6 @@
+   int total = state.upload_rays(h_rx, h_sat, 1, n_sat);
+   state.los.reserve((size_t)total);
+   state.launch_los(1, n_sat, false);
+-  CUDA_CHECK(cudaDeviceSynchronize());
+   CUDA_CHECK(cudaMemcpy(h_los, state.los.data, (size_t)total * sizeof(int), cudaMemcpyDeviceToHost));
+ }
+ 
+@@ -1159,7 +1159,6 @@
+   int total = state.upload_rays(h_rx, h_sat, n_epoch, n_sat);
+   state.los.reserve((size_t)total);
+   state.launch_los(n_epoch, n_sat, true);
+-  CUDA_CHECK(cudaDeviceSynchronize());
+   CUDA_CHECK(cudaMemcpy(h_los, state.los.data, (size_t)total * sizeof(int), cudaMemcpyDeviceToHost));
+ }
+ 
+@@ -1172,7 +1171,6 @@
+   int total = state.upload_rays(h_rx, h_sat, n_epoch, n_sat);
+   int tiles = state.prepare_multipath(total, n_epoch, n_sat);
+   state.launch_multipath(n_epoch, n_sat, tiles);
+-  CUDA_CHECK(cudaDeviceSynchronize());
+   state.copy_multipath(h_points, h_delays, total);
+ }
+ 

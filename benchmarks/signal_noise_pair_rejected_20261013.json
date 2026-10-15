@@ -1,0 +1,200 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-13T09:25:49.974958+00:00",
+  "status": "rejected_no_device_change",
+  "candidate": "Replace two scalar Philox normal calls by one curand_normal2 at each of the two signal noise sites.",
+  "decision": "All8 GPU instruction bodies and resources are identical; no effective device acceleration. Restore exact production source and binary.",
+  "baseline_reference": {
+    "path": "benchmarks/signal_batch_gpu_20261012.json",
+    "sha256": "b79f96628f8302018affd8ec4e6048a2f1aa82892cd35f459d94f5d9f9b30ccb"
+  },
+  "source_sha256": {
+    "baseline": {
+      "src/signal_sim/signal_sim.cu": "15eb73c0272dad248ed072327a9f09b4fd11b72b1b8db3675d87a380e6a14acf",
+      "include/gnss_gpu/signal_sim.h": "2788f41ff6175da2d6c0db5212470ab3759f4e350d91f977a532e48fc70fa945",
+      "python/gnss_gpu/_signal_sim_bindings.cpp": "524f9460570f0b39f4165f8fb6526af927e6c2c8f39ff661c2731d34ee82bcff",
+      "python/gnss_gpu/signal_sim.py": "f316c47c4a9a9359498e6905f8d6afa8046f7b631f876e258074d44d527780d4",
+      "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+    },
+    "candidate": {
+      "src/signal_sim/signal_sim.cu": "0bb8f103fc46af5c22bb0b9889b05ef17c987a7de0b4db0f72c541a1fe4e93f2",
+      "include/gnss_gpu/signal_sim.h": "2788f41ff6175da2d6c0db5212470ab3759f4e350d91f977a532e48fc70fa945",
+      "python/gnss_gpu/_signal_sim_bindings.cpp": "524f9460570f0b39f4165f8fb6526af927e6c2c8f39ff661c2731d34ee82bcff",
+      "python/gnss_gpu/signal_sim.py": "f316c47c4a9a9359498e6905f8d6afa8046f7b631f876e258074d44d527780d4",
+      "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+    }
+  },
+  "extension_sha256": {
+    "baseline": "88c7bd9ea0c81beafccda555a7eaeb27d56c762287cc28a2897eb66b185a3ab5",
+    "candidate": "ee5538c549902ef77c608e9410d40c0188c323b7f83e15004481082e2c175162"
+  },
+  "device_code": {
+    "functions": 8,
+    "identical_bodies": 8,
+    "changed_bodies": [],
+    "identical_resources": true,
+    "baseline_resources": {
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb0ELi32ELb1EEEvT_PKiPfiiddfy": {
+        "registers": 54,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb1ELi256ELb1EEEvT_PKiPfiiddfy": {
+        "registers": 51,
+        "stack_bytes": 0,
+        "static_shared_bytes": 2048,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb1ELi32ELb1EEEvT_PKiPfiiddfy": {
+        "registers": 51,
+        "stack_bytes": 0,
+        "static_shared_bytes": 256,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelIPNS_13DeviceChannelELb0ELi32ELb0EEEvT_PKiPfiiddfy": {
+        "registers": 44,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelIPNS_13DeviceChannelELb1ELi256ELb0EEEvT_PKiPfiiddfy": {
+        "registers": 42,
+        "stack_bytes": 0,
+        "static_shared_bytes": 2048,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_14InlineChannelsELb1ELi32ELb0EEEvT_PKiPfiiddfy": {
+        "registers": 32,
+        "stack_bytes": 0,
+        "static_shared_bytes": 256,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a16composite_kernelEPKfPfiify": {
+        "registers": 50,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a23generate_channel_kernelEPfPKiididddfiS2_ididd": {
+        "registers": 26,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      }
+    },
+    "candidate_resources": {
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb0ELi32ELb1EEEvT_PKiPfiiddfy": {
+        "registers": 54,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb1ELi256ELb1EEEvT_PKiPfiiddfy": {
+        "registers": 51,
+        "stack_bytes": 0,
+        "static_shared_bytes": 2048,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb1ELi32ELb1EEEvT_PKiPfiiddfy": {
+        "registers": 51,
+        "stack_bytes": 0,
+        "static_shared_bytes": 256,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelIPNS_13DeviceChannelELb0ELi32ELb0EEEvT_PKiPfiiddfy": {
+        "registers": 44,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelIPNS_13DeviceChannelELb1ELi256ELb0EEEvT_PKiPfiiddfy": {
+        "registers": 42,
+        "stack_bytes": 0,
+        "static_shared_bytes": 2048,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_14InlineChannelsELb1ELi32ELb0EEEvT_PKiPfiiddfy": {
+        "registers": 32,
+        "stack_bytes": 0,
+        "static_shared_bytes": 256,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a16composite_kernelEPKfPfiify": {
+        "registers": 50,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a23generate_channel_kernelEPfPKiididddfiS2_ididd": {
+        "registers": 26,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      }
+    },
+    "normalized_body_sha256": {
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb0ELi32ELb1EEEvT_PKiPfiiddfy": {
+        "baseline": "073f728035cbc306e07d7d2dc47cd3279726e54ab55c0d5d71a4f21c97ce2eef",
+        "candidate": "073f728035cbc306e07d7d2dc47cd3279726e54ab55c0d5d71a4f21c97ce2eef"
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb1ELi256ELb1EEEvT_PKiPfiiddfy": {
+        "baseline": "ad0f8200be1f16ce39281a70245243395dbbc8453c61f63eccba24dabdbbdde0",
+        "candidate": "ad0f8200be1f16ce39281a70245243395dbbc8453c61f63eccba24dabdbbdde0"
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb1ELi32ELb1EEEvT_PKiPfiiddfy": {
+        "baseline": "ad0f8200be1f16ce39281a70245243395dbbc8453c61f63eccba24dabdbbdde0",
+        "candidate": "ad0f8200be1f16ce39281a70245243395dbbc8453c61f63eccba24dabdbbdde0"
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelIPNS_13DeviceChannelELb0ELi32ELb0EEEvT_PKiPfiiddfy": {
+        "baseline": "fc289d47934725156feb1c4fd95a47315860e889edcaceb065df9ed2f27550b1",
+        "candidate": "fc289d47934725156feb1c4fd95a47315860e889edcaceb065df9ed2f27550b1"
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelIPNS_13DeviceChannelELb1ELi256ELb0EEEvT_PKiPfiiddfy": {
+        "baseline": "1b5bb2f716d4660d30bc5fca1357222cc8a2351dfc70906bdac1804618ecdeb6",
+        "candidate": "1b5bb2f716d4660d30bc5fca1357222cc8a2351dfc70906bdac1804618ecdeb6"
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_14InlineChannelsELb1ELi32ELb0EEEvT_PKiPfiiddfy": {
+        "baseline": "f39d775ca0fafb3681c96f5091dc0daffaafb10a3c8dff9a2a3dd9c80b4f8f0f",
+        "candidate": "f39d775ca0fafb3681c96f5091dc0daffaafb10a3c8dff9a2a3dd9c80b4f8f0f"
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a16composite_kernelEPKfPfiify": {
+        "baseline": "2aea88f584f57130b5e76f0d5a71abc78e47ace0cc661ee9fb4c8298113d6344",
+        "candidate": "2aea88f584f57130b5e76f0d5a71abc78e47ace0cc661ee9fb4c8298113d6344"
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a23generate_channel_kernelEPfPKiididddfiS2_ididd": {
+        "baseline": "307e0097017a33d8a6841bb9812188ddae86a2a8be504cb369884bde0b1655ee",
+        "candidate": "307e0097017a33d8a6841bb9812188ddae86a2a8be504cb369884bde0b1655ee"
+      }
+    }
+  },
+  "patch": {
+    "path": "benchmarks/probes/signal_noise_pair_rejected_20261013.patch",
+    "sha256": "374f8090dc8bec6a513b15b89afb9cd91df1c4a813ef588310a44a322ba34d5a",
+    "files": {
+      "src/signal_sim/signal_sim.cu": {
+        "baseline_sha256": "15eb73c0272dad248ed072327a9f09b4fd11b72b1b8db3675d87a380e6a14acf",
+        "candidate_sha256": "0bb8f103fc46af5c22bb0b9889b05ef17c987a7de0b4db0f72c541a1fe4e93f2",
+        "reconstructs_crlf_bytes": true
+      }
+    }
+  },
+  "build_configuration": "CUDA 12.8 / MSVC Release / compute 7.5 / C++20 / no fast math",
+  "validation": "Static device comparison only; no timing, output comparison, regression tests or sanitizers run for this no-op trial.",
+  "archive": {
+    "path": "dist/signal_noise_pair_rejected",
+    "files": {
+      "signal_noise_pair_baseline_resources_20261013.log": "290ecba617cb3e33c20900c2be6d40e4f3a8603252a216ad30ce2a1fb495756c",
+      "signal_noise_pair_baseline_sass_20261013.log": "98adf520eea7ccf64d743ea040fa5b46ef8dc5efb4a049047eeacc15f574e6a2",
+      "signal_noise_pair_device_probe_20261013.json": "9f5d1c34b940013810360f5ed1f0f0eafbf1182f6a168b016edb307befb24d97",
+      "signal_noise_pair_resources_20261013.log": "290ecba617cb3e33c20900c2be6d40e4f3a8603252a216ad30ce2a1fb495756c",
+      "signal_noise_pair_sass_20261013.log": "98adf520eea7ccf64d743ea040fa5b46ef8dc5efb4a049047eeacc15f574e6a2",
+      "signal_sim.cu": "0bb8f103fc46af5c22bb0b9889b05ef17c987a7de0b4db0f72c541a1fe4e93f2",
+      "signal_sim.h": "2788f41ff6175da2d6c0db5212470ab3759f4e350d91f977a532e48fc70fa945",
+      "signal_sim.py": "f316c47c4a9a9359498e6905f8d6afa8046f7b631f876e258074d44d527780d4",
+      "urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7",
+      "_gnss_gpu_signal_sim.cp312-win_amd64.pyd": "ee5538c549902ef77c608e9410d40c0188c323b7f83e15004481082e2c175162",
+      "_signal_sim_bindings.cpp": "524f9460570f0b39f4165f8fb6526af927e6c2c8f39ff661c2731d34ee82bcff"
+    }
+  }
+}

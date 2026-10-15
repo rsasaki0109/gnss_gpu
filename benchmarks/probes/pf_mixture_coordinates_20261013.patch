@@ -1,0 +1,77 @@
+--- a/python/gnss_gpu/pf_device_runtime.py
++++ b/python/gnss_gpu/pf_device_runtime.py
+@@ -918,7 +918,7 @@
+         self._pf_device_set_log_weights(self._state, np.ascontiguousarray(lw))
+ 
+     def position_mixture_update(self, refs_ecef, sigma_pos=1.0, mixture_weights=None):
+-        """Apply a CPU-side Gaussian-mixture position likelihood to particles."""
++        """Apply a Gaussian-mixture likelihood with bounded CPU working arrays."""
+         if not self._initialized:
+             raise RuntimeError("ParticleFilterDevice not initialized. Call initialize() first.")
+         refs = np.asarray(refs_ecef, dtype=np.float64).reshape(-1, 3)
+@@ -943,17 +943,54 @@
+ 
+         particles = np.asarray(self.get_particles(), dtype=np.float64)
+         log_weights = np.asarray(self.get_log_weights(), dtype=np.float64)
+-        diff = particles[:, np.newaxis, :3] - refs[np.newaxis, :, :]
+-        log_components = (
+-            np.log(mix[np.newaxis, :])
+-            - 0.5 * np.sum(diff * diff, axis=2) / (sigma * sigma)
+-        )
+-        max_log = np.max(log_components, axis=1)
+-        finite = np.isfinite(max_log)
+-        increment = np.full(log_weights.shape, -np.inf, dtype=np.float64)
+-        increment[finite] = max_log[finite] + np.log(
+-            np.sum(np.exp(log_components[finite] - max_log[finite, np.newaxis]), axis=1)
+-        )
++        use_chunks = particles.shape[0] * refs.shape[0] > 65536
++        if use_chunks:
++            # Preserve the eager operation/error order for strict NumPy modes
++            # and warning handlers that turn a RuntimeWarning into an error.
++            error_modes = np.geterr().values()
++            use_chunks = all(mode in ("warn", "ignore") for mode in error_modes)
++            if use_chunks and "warn" in error_modes:
++                import warnings
++                use_chunks = not any(
++                    action == "error" and issubclass(RuntimeWarning, category)
++                    for action, _, category, _, _ in warnings.filters
++                )
++        if not use_chunks:
++            diff = particles[:, np.newaxis, :3] - refs[np.newaxis, :, :]
++            log_components = (
++                np.log(mix[np.newaxis, :])
++                - 0.5 * np.sum(diff * diff, axis=2) / (sigma * sigma)
++            )
++            max_log = np.max(log_components, axis=1)
++            finite = np.isfinite(max_log)
++            increment = np.full(log_weights.shape, -np.inf, dtype=np.float64)
++            increment[finite] = max_log[finite] + np.log(
++                np.sum(np.exp(log_components[finite] - max_log[finite, np.newaxis]), axis=1)
++            )
++        else:
++            log_mix = np.log(mix[np.newaxis, :])
++            increment = np.full(log_weights.shape, -np.inf, dtype=np.float64)
++            rows_per_chunk = max(1, 65536 // refs.shape[0])
++            for start in range(0, particles.shape[0], rows_per_chunk):
++                stop = min(start + rows_per_chunk, particles.shape[0])
++                squared = np.empty((stop - start, refs.shape[0]), dtype=np.float64)
++                log_components = np.zeros_like(squared)
++                for coordinate in range(3):
++                    np.subtract(particles[start:stop, coordinate, np.newaxis],
++                                refs[np.newaxis, :, coordinate], out=squared)
++                    np.multiply(squared, squared, out=squared)
++                    np.add(log_components, squared, out=log_components)
++                np.multiply(log_components, 0.5, out=log_components)
++                np.divide(log_components, sigma * sigma, out=log_components)
++                np.subtract(log_mix, log_components, out=log_components)
++                max_log = np.max(log_components, axis=1)
++                finite = np.isfinite(max_log)
++                selected = log_components[finite]
++                np.subtract(selected, max_log[finite, np.newaxis], out=selected)
++                np.exp(selected, out=selected)
++                sum_exp = np.sum(selected, axis=1)
++                np.log(sum_exp, out=sum_exp)
++                increment[start:stop][finite] = max_log[finite] + sum_exp
+         self.set_log_weights(log_weights + increment)
+ 
+     def get_resample_ancestors(self):

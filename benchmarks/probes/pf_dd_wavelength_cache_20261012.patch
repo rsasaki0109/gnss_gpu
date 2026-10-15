@@ -1,0 +1,72 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -609,11 +609,14 @@
+     double* s_br_k    = s_data + n_dd * 7;            // n_dd
+     double* s_br_ref  = s_data + n_dd * 8;            // n_dd
+     double* s_ws      = s_data + n_dd * 9;            // n_dd
+-    double* s_wl      = s_data + n_dd * 10;           // n_dd
++    double* s_inv_wl      = s_data + n_dd * 10;           // n_dd
+ 
+     int total_shared = n_dd * 11;
+     for (int i = threadIdx.x; i < total_shared; i += blockDim.x) {
+-        s_data[i] = dd_data[i];
++        // The final column is reused for exact GPU FP64 reciprocal wavelengths.
++        // Its original division is now evaluated once per observation/block,
++        // before the existing barrier, instead of once per particle/pair.
++        s_data[i] = i >= n_dd * 10 ? 1.0 / dd_data[i] : dd_data[i];
+     }
+     __syncthreads();
+ 
+@@ -641,7 +644,7 @@
+             double dz_ref = z - s_ref[d * 3 + 2];
+             double r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
+ 
+-            double inv_wl = 1.0 / s_wl[d];
++            double inv_wl = s_inv_wl[d];
+             double dd_expected = (r_k - r_ref - s_br_k[d] + s_br_ref[d]) * inv_wl;
+             double dd_residual = s_dd_cp[d] - dd_expected;
+             double afv = dd_residual - rint(dd_residual);
+@@ -667,7 +670,7 @@
+         double dz_ref = z - s_ref[d * 3 + 2];
+         double r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
+ 
+-        double inv_wl = 1.0 / s_wl[d];
++        double inv_wl = s_inv_wl[d];
+ 
+         // DD expected range in cycles (no clock bias!)
+         double dd_expected = (r_k - r_ref - s_br_k[d] + s_br_ref[d]) * inv_wl;
+@@ -710,11 +713,14 @@
+     double* s_br_k = s_data + n_dd * 8;
+     double* s_br_ref = s_data + n_dd * 9;
+     double* s_ws = s_data + n_dd * 10;
+-    double* s_wl = s_data + n_dd * 11;
++    double* s_inv_wl = s_data + n_dd * 11;
+ 
+     int total_shared = n_dd * 12;
+     for (int i = threadIdx.x; i < total_shared; i += blockDim.x) {
+-        s_data[i] = dd_data[i];
++        // The final column is reused for exact GPU FP64 reciprocal wavelengths.
++        // Its original division is now evaluated once per observation/block,
++        // before the existing barrier, instead of once per particle/pair.
++        s_data[i] = i >= n_dd * 11 ? 1.0 / dd_data[i] : dd_data[i];
+     }
+     __syncthreads();
+ 
+@@ -742,7 +748,7 @@
+             if (gate_pr && fabs(s_dd_pr[d] - dd_range) <= nlos_threshold_m) {
+                 kept_pr++;
+             }
+-            double inv_wl = 1.0 / s_wl[d];
++            double inv_wl = s_inv_wl[d];
+             double cp_residual = s_dd_cp[d] - dd_range * inv_wl;
+             double afv = cp_residual - rint(cp_residual);
+             if (gate_cp && fabs(afv) <= nlos_threshold_cycles) {
+@@ -776,7 +782,7 @@
+                 ? -pfd_weighted_huber_cost(pr_residual, sigma_pr, s_ws[d], huber_pr_k)
+                 : -0.5 * s_ws[d] * pr_residual * pr_residual * inv_pr_sigma2;
+         }
+-        double inv_wl = 1.0 / s_wl[d];
++        double inv_wl = s_inv_wl[d];
+         double cp_residual = s_dd_cp[d] - dd_range * inv_wl;
+         double afv = cp_residual - rint(cp_residual);
+         if (!gate_cp || fabs(afv) <= nlos_threshold_cycles) {

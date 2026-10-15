@@ -1,0 +1,52 @@
+--- a/src/signal_sim/signal_sim.cu
++++ b/src/signal_sim/signal_sim.cu
+@@ -308,7 +308,7 @@
+ 
+ // Evaluate channels in input order, retaining the two rounding steps of the
+ // former channel-output store followed by the composite-kernel addition.
+-template <typename ChannelStorage>
++template <typename ChannelStorage, bool CACHE_FREQUENCY = false>
+ __global__ void fused_signal_kernel(ChannelStorage channels,
+                                     const int* nav_bits,
+                                     float* iq_out,
+@@ -318,6 +318,16 @@
+                                     double intermediate_freq,
+                                     float noise_std,
+                                     unsigned long long seed) {
++    __shared__ double angular_frequency[kInlineChannels];
++    if constexpr (CACHE_FREQUENCY) {
++        // The inline batch has at most 32 channels. Use the original GPU FP64
++        // addition/multiplication, then share the coefficient across samples.
++        if (threadIdx.x < n_channels)
++            angular_frequency[threadIdx.x] = kTwoPi * (
++                intermediate_freq + channels[threadIdx.x].doppler_hz);
++        __syncthreads();
++    }
++    // Partial blocks must participate in the coefficient barrier first.
+     int idx = blockIdx.x * blockDim.x + threadIdx.x;
+     if (idx >= n_samples) return;
+ 
+@@ -339,8 +349,12 @@
+             nav_bit = nav_bits[channel.nav_offset + (size_t)bit_idx];
+         }
+ 
+-        double phase = kTwoPi * (intermediate_freq + channel.doppler_hz) * t
+-                       + channel.carrier_phase;
++        double phase;
++        if constexpr (CACHE_FREQUENCY)
++            phase = angular_frequency[ch] * t + channel.carrier_phase;
++        else
++            phase = kTwoPi * (intermediate_freq + channel.doppler_hz) * t
++                    + channel.carrier_phase;
+         float cos_val, sin_val;
+         __sincosf((float)phase, &sin_val, &cos_val);
+         float signal = channel.amplitude * (float)nav_bit * code_val;
+@@ -531,7 +545,7 @@
+             InlineChannels batch{};
+             for (size_t ch = 0; ch < packed_channels.size(); ++ch)
+                 batch.items[ch] = packed_channels[ch];
+-            fused_signal_kernel<<<blocks, kBlockSize>>>(
++            fused_signal_kernel<InlineChannels, true><<<blocks, kBlockSize>>>(
+                 batch, d_nav_bits, d_output, n_samples, (int)packed_channels.size(),
+                 config.sampling_freq, config.intermediate_freq, noise_std, seed);
+         } else {

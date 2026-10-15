@@ -175,7 +175,7 @@ Per-call, captured-input replay (in-process, CPU and GPU seconds apart
 At the pipeline's ACTUAL batch size (~15 combos/cascade) the picture is
 different: one launch costs 2.4-2.6 ms nearly independent of batch size
 (a 15-thread launch uses <1% of the GPU; per-problem latency is bound
-by single-thread fp64 on a GTX 1660 Ti) vs 2.2-3.0 ms for 15 sequential
+by single-thread fp64 on a NVIDIA CUDA GPU) vs 2.2-3.0 ms for 15 sequential
 numba CPU calls — **per-cascade the GPU is only at par with a
 well-clocked CPU; its win comes when the CPU is slow or contended.**
 
@@ -212,7 +212,7 @@ off otherwise (which the flag discipline mandates anyway).
 
 - Toolchain confirmed from the working `build/gnss_gpu_rtk.vcxproj`:
   VS 2022 (v143, MSVC 14.38), CUDA 12.8, `CMAKE_CUDA_ARCHITECTURES=native`
-  (GTX 1660 Ti, sm_75, 6 GB; driver 596.36 / CUDA 13.2 runtime OK).
+  (NVIDIA CUDA GPU, sm_75, 6 GB; driver 596.36 / CUDA 13.2 runtime OK).
 - `cmake -S . -B build` reconfigure + `cmake --build build --target
   _gnss_gpu_lambda_batch --config Release`; pyd copied to
   `python/gnss_gpu/` alongside the existing modules; added to the

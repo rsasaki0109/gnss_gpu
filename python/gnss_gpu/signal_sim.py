@@ -97,7 +97,12 @@ def _validate_channels(channels):
 
 
 class SignalSimulator:
-    """CUDA-accelerated GNSS IQ signal generator."""
+    """CUDA-accelerated GNSS IQ signal generator.
+
+    GPU work buffers are created lazily and retain their largest requested
+    capacity. ``release_gpu`` frees them; the next generation creates them again.
+    Returned IQ arrays own their storage. Instances are not thread-safe.
+    """
 
     def __init__(self, sampling_freq=2.6e6, intermediate_freq: float = 0,
                  noise_floor_db: float = -20, noise_seed=None):
@@ -108,6 +113,36 @@ class SignalSimulator:
         self.intermediate_freq = float(intermediate_freq)
         self.noise_floor_db = float(noise_floor_db)
         self.noise_seed = None if noise_seed is None else int(noise_seed)
+        self._workspace = None
+
+    def release_gpu(self):
+        """Release cached work buffers while retaining simulator settings."""
+        if self._workspace is not None:
+            self._workspace.close()
+            self._workspace = None
+
+    def _generate_signal(self, channels, n_samples, noise_floor_db):
+        from gnss_gpu import _gnss_gpu_signal_sim as native  # pyright: ignore[reportAttributeAccessIssue]
+
+        # Keep compatibility with older extensions that expose only the function.
+        if hasattr(native, "DeviceSignalWorkspace"):
+            if self._workspace is None:
+                self._workspace = native.DeviceSignalWorkspace()
+            generate = self._workspace.generate_signal
+        else:
+            generate = native.generate_signal
+        return generate(
+            self.sampling_freq, self.intermediate_freq, channels, int(n_samples),
+            noise_floor_db, 0 if self.noise_seed is None else self.noise_seed)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["_workspace"] = None
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._workspace = None
 
     def generate_epoch(self, channels, n_samples=None):
         """Generate composite IQ signal for one epoch.
@@ -126,12 +161,38 @@ class SignalSimulator:
         else:
             positive_int("n_samples", n_samples)
 
-        from gnss_gpu._gnss_gpu_signal_sim import generate_signal
+        return self._generate_signal(channels, n_samples, self.noise_floor_db)
 
-        return generate_signal(
-            self.sampling_freq, self.intermediate_freq,
-            channels, int(n_samples), self.noise_floor_db,
-            0 if self.noise_seed is None else self.noise_seed)
+    def generate_epochs(self, channels_per_epoch, n_samples=None, noise_seeds=None):
+        """Generate equal-length epochs as a float32 [epochs, 2*samples] array.
+
+        Input channel order and sample indices restart for each epoch. Fixed
+        simulator seeds repeat exactly; optional per-epoch seeds override them.
+        Zero seeds choose fresh noise independently for each epoch.
+        """
+        rows = [list(channels) for channels in channels_per_epoch]
+        for channels in rows:
+            _validate_channels(channels)
+        if n_samples is None:
+            n_samples = int(self.sampling_freq * 1e-3)
+        positive_int("n_samples", n_samples)
+        seeds = None if noise_seeds is None else [int(seed) for seed in noise_seeds]
+        if seeds is not None:
+            if len(seeds) != len(rows) or any(seed < 0 or seed >= 2**64 for seed in seeds):
+                raise ValueError("noise_seeds must have one uint64 value per epoch")
+        from gnss_gpu import _gnss_gpu_signal_sim as native  # pyright: ignore[reportAttributeAccessIssue]
+        if self._workspace is None and hasattr(native, "DeviceSignalWorkspace"):
+            self._workspace = native.DeviceSignalWorkspace()
+        generate = self._workspace if self._workspace is not None else native
+        seed = 0 if self.noise_seed is None else self.noise_seed
+        if hasattr(generate, "generate_epochs"):
+            return generate.generate_epochs(self.sampling_freq, self.intermediate_freq,
+                rows, int(n_samples), self.noise_floor_db, seed, seeds)
+        if not rows:
+            return np.empty((0, 2 * int(n_samples)), dtype=np.float32)
+        return np.stack([generate.generate_signal(self.sampling_freq, self.intermediate_freq,
+            channels, int(n_samples), self.noise_floor_db, seed if seeds is None else seeds[e])
+            for e, channels in enumerate(rows)])
 
     def generate_test_signal(self, prn, code_phase=0, doppler=0,
                              cn0_dbhz=45, duration_s=1e-3):
@@ -163,12 +224,7 @@ class SignalSimulator:
             "nav_bit": 1,
         }]
         _validate_channels(channels)
-        from gnss_gpu._gnss_gpu_signal_sim import generate_signal
-
-        return generate_signal(
-            self.sampling_freq, self.intermediate_freq,
-            channels, n_samples, -float(cn0_dbhz),
-            0 if self.noise_seed is None else self.noise_seed)
+        return self._generate_signal(channels, n_samples, -float(cn0_dbhz))
 
     @staticmethod
     def write_bin(iq_data, path, fmt="int8"):

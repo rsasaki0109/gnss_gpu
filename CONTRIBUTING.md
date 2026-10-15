@@ -96,6 +96,9 @@ These come from `internal_docs/decisions.md` and the README's development policy
   experiment logic in `experiments/` until it survives fixed evaluation.
 - **Do not promote a method because it wins one pilot split.** Prefer
   same-input, same-metric comparisons over new abstractions.
+- Use generic GPU labels for local benchmark hardware in public documentation
+  and generated artifacts. Keep relevant architecture, memory, driver, and CUDA
+  details without recording the local GPU product name.
 - Be honest about results: report failures and skipped steps, not just wins.
 - Record durable decisions in `internal_docs/decisions.md`.
 - **Do not vendor, link, or derive production code/config from GPL-3.0 reference

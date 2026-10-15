@@ -1,0 +1,123 @@
+--- a/python/gnss_gpu/_pf_device_bindings.cpp
++++ b/python/gnss_gpu/_pf_device_bindings.cpp
+@@ -1,6 +1,12 @@
+ #include <pybind11/pybind11.h>
+ #include <pybind11/numpy.h>
+ #include <cmath>
++#if defined(_M_X64) || defined(__x86_64__)
++#include <immintrin.h>
++#if defined(_MSC_VER)
++#include <intrin.h>
++#endif
++#endif
+ #include <cstdint>
+ #include <vector>
+ #include <stdexcept>
+@@ -108,6 +114,96 @@
+         }
+     }
+ };
++
++#if defined(_M_X64) || defined(__x86_64__)
++#if defined(_MSC_VER) || defined(__GNUC__) || defined(__clang__)
++static bool cdf_cpu_has_avx2() {
++#if defined(_MSC_VER)
++    int info[4];
++    __cpuid(info, 0);
++    if (info[0] < 7) return false;
++    __cpuidex(info, 1, 0);
++    const int avx_osxsave = (1 << 28) | (1 << 27);
++    if ((info[2] & avx_osxsave) != avx_osxsave) return false;
++    if ((_xgetbv(0) & 6) != 6) return false;
++    __cpuidex(info, 7, 0);
++    return (info[1] & (1 << 5)) != 0;
++#else
++    __builtin_cpu_init();
++    return __builtin_cpu_supports("avx2");
++#endif
++}
++
++// Keep AVX2 instructions inside a separately dispatched function. Do not
++// raise the translation unit's baseline ISA or require AVX2 on every host.
++#if defined(_MSC_VER)
++__declspec(noinline)
++#else
++__attribute__((target("avx2"), noinline))
++#endif
++static bool finite_monotone_cdf_avx2(const double* input, py::ssize_t size) {
++    if (!std::isfinite(input[0])) return false;
++    const __m256i exponent = _mm256_set1_epi64x(0x7ff0000000000000LL);
++    py::ssize_t i = 1;
++    for (; i + 7 < size; i += 8) {
++        const __m256d a = _mm256_loadu_pd(input + i);
++        const __m256d b = _mm256_loadu_pd(input + i + 4);
++        const __m256i bad_a = _mm256_cmpeq_epi64(
++            _mm256_and_si256(_mm256_castpd_si256(a), exponent), exponent);
++        const __m256i bad_b = _mm256_cmpeq_epi64(
++            _mm256_and_si256(_mm256_castpd_si256(b), exponent), exponent);
++        if (_mm256_movemask_pd(_mm256_castsi256_pd(_mm256_or_si256(bad_a, bad_b)))) return false;
++        const __m256d before_a = _mm256_loadu_pd(input + i - 1);
++        const __m256d before_b = _mm256_loadu_pd(input + i + 3);
++        if (_mm256_movemask_pd(_mm256_or_pd(_mm256_cmp_pd(a, before_a, _CMP_LT_OQ),
++                                          _mm256_cmp_pd(b, before_b, _CMP_LT_OQ)))) return false;
++    }
++    for (; i < size; ++i) {
++        if (!std::isfinite(input[i]) || input[i] < input[i - 1]) return false;
++    }
++    return true;
++}
++#endif
++#endif
++
++// Validate every element before any state/scratch mutation. x86-64 has SSE2
++// as its baseline ISA; other targets and small inputs retain the scalar path.
++static bool finite_monotone_cdf(const double* input, py::ssize_t size) {
++#if defined(_M_X64) || defined(__x86_64__)
++    if (size >= 65536) {
++#if defined(_MSC_VER) || defined(__GNUC__) || defined(__clang__)
++        static const bool has_avx2 = cdf_cpu_has_avx2();
++        if (has_avx2) return finite_monotone_cdf_avx2(input, size);
++#endif
++        if (!std::isfinite(input[0])) return false;
++        const __m128i exponent = _mm_set1_epi64x(0x7ff0000000000000LL);
++        py::ssize_t i = 1;
++        for (; i + 3 < size; i += 4) {
++            const __m128d a = _mm_loadu_pd(input + i);
++            const __m128d b = _mm_loadu_pd(input + i + 2);
++            // Integer exponent tests reject Inf and both NaN kinds without
++            // performing floating-point comparisons on signaling NaNs.
++            const __m128i bad_a = _mm_cmpeq_epi32(
++                _mm_and_si128(_mm_castpd_si128(a), exponent), exponent);
++            const __m128i bad_b = _mm_cmpeq_epi32(
++                _mm_and_si128(_mm_castpd_si128(b), exponent), exponent);
++            if (_mm_movemask_pd(_mm_castsi128_pd(_mm_or_si128(bad_a, bad_b)))) return false;
++            const __m128d before_a = _mm_loadu_pd(input + i - 1);
++            const __m128d before_b = _mm_loadu_pd(input + i + 1);
++            if (_mm_movemask_pd(_mm_or_pd(_mm_cmplt_pd(a, before_a),
++                                         _mm_cmplt_pd(b, before_b)))) return false;
++        }
++        for (; i < size; ++i) {
++            if (!std::isfinite(input[i]) || input[i] < input[i - 1]) return false;
++        }
++        return true;
++    }
++#endif
++    for (py::ssize_t i = 0; i < size; ++i) {
++        if (!std::isfinite(input[i]) || (i > 0 && input[i] < input[i - 1])) return false;
++    }
++    return true;
++}
+ 
+ PYBIND11_MODULE(_gnss_gpu_pf_device, m) {
+     m.doc() = "GPU-accelerated Particle Filter with persistent device memory";
+@@ -597,9 +693,7 @@
+         }
+         const auto* input = static_cast<const double*>(r.ptr);
+         // Decline unsupported CDFs before any state or scratch mutation.
+-        for (py::ssize_t i = 0; i < r.size; ++i) {
+-            if (!std::isfinite(input[i]) || (i > 0 && input[i] < input[i - 1])) return false;
+-        }
++        if (!finite_monotone_cdf(input, r.size)) return false;
+         return gnss_gpu::pf_device_gather_from_cdf(target, source, input);
+     }, "Gather using exact left search on a finite monotone CPU CDF; reset weights; sync",
+        py::arg("target"), py::arg("source"), py::arg("cdf"));

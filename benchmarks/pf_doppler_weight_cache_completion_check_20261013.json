@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "verified": true,
+  "current_source_build_installed_match": true,
+  "comparison_cases": 13215,
+  "bit_identical_output_cases": 12783,
+  "matching_pr_input_rejections": 432,
+  "timed_conditions": 57,
+  "affected_large_timed_conditions_all_five_pairs_improve": 28,
+  "rounds": 5,
+  "repeats": 20,
+  "regression_tests": 2351,
+  "sanitizer_tests": 85,
+  "sanitizer_errors": 0,
+  "leaked_bytes": 0,
+  "unchanged_device_functions": 65,
+  "new_device_functions": 2,
+  "header_abi_unchanged": true,
+  "independent_retained_uncached_gpu_oracle": true,
+  "observation_owner_payload_and_shared_bytes_unchanged": true,
+  "bvh_parallel_mirror_chunks_retained": true,
+  "signal_batch_retained": true,
+  "retained_artifacts": {
+    "benchmarks/bvh_parallel_mirror_chunks_gpu_20261013.json": "bcda1df440f75615bc2d869e031b039f3499d2318444243ef62b4e88d0215cd8",
+    "benchmarks/signal_batch_gpu_20261012.json": "b79f96628f8302018affd8ec4e6048a2f1aa82892cd35f459d94f5d9f9b30ccb"
+  },
+  "public_product_label_violations": 0,
+  "public_text_files_scanned": 2537,
+  "validation_log_sha256": {
+    "dist/pf_doppler_weight_cache_regression_20261013.log": "757450787fff4e8a8c9a2f3dd67a0d5d38051b80c10661ac5a3e04045c8ff385",
+    "dist/pf_doppler_weight_cache_memcheck_console_20261013.log": "8ed8aef7f8bdfcad69844a01e84785063dc9ce6928ff33267d24453fbcab52b5",
+    "dist/pf_doppler_weight_cache_memcheck_20261013.log": "3ef41833580c07952672569330729d3a908130c68e7a514d721c5b0a3ddbd7d6",
+    "dist/pf_doppler_weight_cache_racecheck_console_20261013.log": "2b4287b9c5bcb502e2ad5e5849dedbe1ab7ed382468f0f502082b1f2ac2b0823",
+    "dist/pf_doppler_weight_cache_racecheck_20261013.log": "c69d09b31a66173faf98f267db57c7eb988035ce364fa0f0f184ffc933c541a7",
+    "dist/pf_doppler_weight_cache_synccheck_console_20261013.log": "b123237064c2dc50a8c42710a81a8a5f245ce4e0ed59437028cf3efddfcad712",
+    "dist/pf_doppler_weight_cache_synccheck_20261013.log": "adba10db853bd67fe9009b776eefe7b61210d2cbe3eee029ba6fa188978b5832"
+  },
+  "artifacts": {
+    "benchmarks/RESULTS.md": "d674e6679cd01d488941fcfec81c4abb2a808be88dc4f2ddd4836bedbb43c93c",
+    "internal_docs/decisions.md": "c740f5a13a6f348927002ed35a418e8629a72269c38d76801ecc7c782e736c95",
+    "benchmarks/pf_doppler_weight_cache_gpu_20261013.json": "0a6c5d6a9609d6a2a7c231904e8c04e4350776eead25da35afe29237704dd40a",
+    "benchmarks/pf_doppler_weight_cache_device_code_20261013.json": "f3d20b54b92db0a519c19d4f97244b92f7cba6680da3c4ea6ef892a489da0093",
+    "benchmarks/bench_pf_doppler_weight_cache_compare.py": "d0eb69e802f4cc909e845502204733c4b38c595f7a69bcc87e4412af06389541",
+    "tests/test_pf_doppler_weight_cache.py": "63e6fb24d37b16cc8e52642653615774e37ab14a0ec7526d9eb0e5e014ceb675",
+    "benchmarks/probes/pf_doppler_weight_cache_20261013.patch": "cd0560336d21972108b87a398ef24585849fd230fdcdcfc2ea8cb71ef4b5e0c6"
+  }
+}

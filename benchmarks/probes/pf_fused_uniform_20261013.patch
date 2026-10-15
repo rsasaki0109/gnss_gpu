@@ -1,0 +1,116 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -4125,6 +4125,69 @@
+     indices[tid] = selected;
+ }
+ 
++// Keep the exact uniform-CDF inverse, then copy the same seven scalar
++// fields and nine covariance components and reset weights in one launch.
++// Every lane initializes its ancestor and reaches the block barrier, including
++// the tail. Covariance keeps the original contiguous component/lane mapping.
++__global__ void pfd_uniform_cdf_gather_reset_kernel(
++    const double* src_px, const double* src_py, const double* src_pz,
++    const double* src_vx, const double* src_vy, const double* src_vz,
++    const double* src_vcov, const double* src_pcb,
++    double* dst_px, double* dst_py, double* dst_pz,
++    double* dst_vx, double* dst_vy, double* dst_vz,
++    double* dst_vcov, double* dst_pcb, double* log_weights,
++    int target_count, int source_count, const pfd_uniform_cdf_segment* segments,
++    const std::uint64_t* reciprocals, int count) {
++    __shared__ int ancestors[BLOCK_SIZE];
++    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
++    int selected = 0;
++    if (tid < target_count) {
++        const double threshold = __ddiv_rn(__dadd_rn((double)tid, 0.5), (double)target_count);
++        const std::uint64_t threshold_bits = static_cast<std::uint64_t>(__double_as_longlong(threshold));
++        int low = 0;
++        int high = count;
++        while (low < high) {
++            const int mid = low + (high - low) / 2;
++            const pfd_uniform_cdf_segment span = segments[mid];
++            const std::uint64_t end = span.base + span.stride *
++                static_cast<std::uint64_t>(span.last - span.first);
++            if (end < threshold_bits) low = mid + 1;
++            else high = mid;
++        }
++        selected = source_count - 1;
++        if (low != count) {
++            const pfd_uniform_cdf_segment span = segments[low];
++            selected = span.first;
++            if (threshold_bits > span.base && span.stride != 0) {
++                const std::uint64_t distance = threshold_bits - span.base;
++                std::uint64_t offset = span.stride == 1 ? distance :
++                    __umul64hi(distance, reciprocals[low]);
++                if (offset * span.stride < distance) ++offset;
++                selected += static_cast<int>(offset);
++            }
++        }
++    }
++    ancestors[threadIdx.x] = selected;
++    __syncthreads();
++    if (tid < target_count) {
++        dst_px[tid] = src_px[selected];
++        dst_py[tid] = src_py[selected];
++        dst_pz[tid] = src_pz[selected];
++        dst_vx[tid] = src_vx[selected];
++        dst_vy[tid] = src_vy[selected];
++        dst_vz[tid] = src_vz[selected];
++        dst_pcb[tid] = src_pcb[selected];
++        log_weights[tid] = 0.0;
++    }
++    const int first = blockIdx.x * blockDim.x;
++    const int valid = min((int)blockDim.x, target_count - first);
++    for (int local = threadIdx.x; local < valid * 9; local += blockDim.x) {
++        const int component = local % 9;
++        dst_vcov[(size_t)first * 9 + local] =
++            src_vcov[(size_t)ancestors[local / 9] * 9 + component];
++    }
++}
++
+ static bool pfd_gather_from_uniform_cdf_inverse(PFDeviceState* target, const PFDeviceState* source,
+                                       double* cdf_output) {
+     if (target == source || source->n_particles < 65536) return false;
+@@ -4167,25 +4230,30 @@
+     }
+     const int N = target->n_particles;
+     if (direct) {
+-        pfd_uniform_cdf_indices_kernel<<<target->grid_size, BLOCK_SIZE, 0, target->stream>>>(
+-            target->d_megopolis_idx_a, N, source->n_particles,
++        pfd_uniform_cdf_gather_reset_kernel<<<target->grid_size, BLOCK_SIZE, 0, target->stream>>>(
++            source->d_px, source->d_py, source->d_pz,
++            source->d_vx, source->d_vy, source->d_vz, source->d_vcov, source->d_pcb,
++            target->d_px, target->d_py, target->d_pz,
++            target->d_vx, target->d_vy, target->d_vz, target->d_vcov, target->d_pcb,
++            target->d_log_weights, N, source->n_particles,
+             reinterpret_cast<const pfd_uniform_cdf_segment*>(target->d_megopolis_idx_b),
+             reinterpret_cast<const std::uint64_t*>(
+                 reinterpret_cast<const char*>(target->d_megopolis_idx_b) + segment_bytes), count);
++        CUDA_CHECK_LAST();
+     } else {
+         pfd_pool_cdf_indices_kernel<<<target->grid_size, BLOCK_SIZE, 0, target->stream>>>(
+             source->d_cdf, source->n_particles, target->d_megopolis_idx_a, N);
+-    }
+-    CUDA_CHECK_LAST();
+-    pfd_megopolis_gather_kernel<<<target->grid_size, BLOCK_SIZE, 0, target->stream>>>(
+-        source->d_px, source->d_py, source->d_pz,
+-        source->d_vx, source->d_vy, source->d_vz, source->d_vcov, source->d_pcb,
+-        target->d_px, target->d_py, target->d_pz,
+-        target->d_vx, target->d_vy, target->d_vz, target->d_vcov, target->d_pcb,
+-        target->d_megopolis_idx_a, N, true);
+-    CUDA_CHECK_LAST();
+-    pfd_reset_weights_kernel<<<target->grid_size, BLOCK_SIZE, 0, target->stream>>>(target->d_log_weights, N);
+-    CUDA_CHECK_LAST();
++        CUDA_CHECK_LAST();
++        pfd_megopolis_gather_kernel<<<target->grid_size, BLOCK_SIZE, 0, target->stream>>>(
++            source->d_px, source->d_py, source->d_pz,
++            source->d_vx, source->d_vy, source->d_vz, source->d_vcov, source->d_pcb,
++            target->d_px, target->d_py, target->d_pz,
++            target->d_vx, target->d_vy, target->d_vz, target->d_vcov, target->d_pcb,
++            target->d_megopolis_idx_a, N, true);
++        CUDA_CHECK_LAST();
++        pfd_reset_weights_kernel<<<target->grid_size, BLOCK_SIZE, 0, target->stream>>>(target->d_log_weights, N);
++        CUDA_CHECK_LAST();
++    }
+     if (cdf_output != nullptr) {
+         CUDA_CHECK(cudaMemcpyAsync(cdf_output, source->d_cdf,
+             static_cast<size_t>(source->n_particles) * sizeof(double),

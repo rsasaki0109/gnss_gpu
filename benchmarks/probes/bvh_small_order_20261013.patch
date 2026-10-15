@@ -1,0 +1,20 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -1011,7 +1011,7 @@
+     }
+     // Substantial meshes amortize one winner reduction per ray. Keep the
+     // candidate scratch bounded to 16,384 winners (640 KiB).
+-    bool large_parallel = n_order >= 512 && total <= 16384;
++    bool large_parallel = n_order >= 128 && total <= 16384;
+     if (total > 4096 && !large_parallel) {
+       if (!normals_ready) {
+         normals.reserve((size_t)n_order);
+@@ -1113,7 +1113,7 @@
+   state->n_nodes = n_nodes;
+   state->nodes.upload(h_nodes, (size_t)n_nodes);
+   state->triangles.upload(h_tri, (size_t)referenced);
+-  if (referenced >= 512) {
++  if (referenced >= 128) {
+     state->ordered = multipath_triangle_order(h_nodes, n_nodes, referenced, state->host_order);
+     if (state->ordered) {
+       state->n_order = (int)state->host_order.size();

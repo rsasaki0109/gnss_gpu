@@ -1,0 +1,107 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -2770,6 +2770,61 @@
+     }
+ }
+ 
++// The unused destination covariance has9*N doubles when covariance is
++// invariant. Use8*N of them as temporary aligned rows of the seven changing
++// state components; no allocation or persistent representation is added.
++__global__ void pfd_pack_common_resample_kernel(
++    const double* px, const double* py, const double* pz,
++    const double* vx, const double* vy, const double* vz, const double* pcb,
++    double* packed, int N) {
++    // Pad each shared column to avoid transpose bank conflicts.
++    __shared__ double tile[8 * (BLOCK_SIZE + 1)];
++    int lane = threadIdx.x;
++    int first = blockIdx.x * blockDim.x;
++    int tid = first + lane;
++    if (tid < N) {
++        tile[0 * (BLOCK_SIZE + 1) + lane] = px[tid];
++        tile[1 * (BLOCK_SIZE + 1) + lane] = py[tid];
++        tile[2 * (BLOCK_SIZE + 1) + lane] = pz[tid];
++        tile[3 * (BLOCK_SIZE + 1) + lane] = vx[tid];
++        tile[4 * (BLOCK_SIZE + 1) + lane] = vy[tid];
++        tile[5 * (BLOCK_SIZE + 1) + lane] = vz[tid];
++        tile[6 * (BLOCK_SIZE + 1) + lane] = pcb[tid];
++        tile[7 * (BLOCK_SIZE + 1) + lane] = 0.0;
++    }
++    __syncthreads();
++    int count = min((int)blockDim.x, N - first);
++    for (int local = lane; local < count * 8; local += blockDim.x) {
++        packed[(size_t)first * 8 + local] =
++            tile[(local % 8) * (BLOCK_SIZE + 1) + local / 8];
++    }
++}
++
++__global__ void pfd_gather_common_packed_kernel(
++    const double* packed, const int* indices,
++    double* px, double* py, double* pz,
++    double* vx, double* vy, double* vz, double* pcb,
++    double* log_weights, int N) {
++    int tid = blockIdx.x * blockDim.x + threadIdx.x;
++    if (tid >= N) return;
++    const double2* rows = reinterpret_cast<const double2*>(packed);
++    size_t row = (size_t)indices[tid] * 4;
++    double2 xy = rows[row + 0];
++    double2 zvx = rows[row + 1];
++    double2 vyvz = rows[row + 2];
++    double2 cbpad = rows[row + 3];
++    px[tid] = xy.x;
++    py[tid] = xy.y;
++    pz[tid] = zvx.x;
++    vx[tid] = zvx.y;
++    vy[tid] = vyvz.x;
++    vz[tid] = vyvz.y;
++    pcb[tid] = cbpad.x;
++    // Ancestor selection finished earlier on this stream; it can no longer
++    // read these weights. Preserve the original positive-zero reset.
++    log_weights[tid] = 0.0;
++}
++
+ // CUDA_CHECK macro is provided by gnss_gpu/cuda_check.h (included above)
+ 
+ // ============================================================
+@@ -3479,9 +3534,23 @@
+                                            unsigned long long seed) {
+     int N = state->n_particles;
+     int grid = state->grid_size;
++    const bool packed_gather = state->covariance_uniform && n_iterations > 0;
+ 
+     pfd_megopolis_coalesced_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
+         state->d_log_weights, state->d_megopolis_idx_a, N, seed, n_iterations);
++    if (packed_gather) {
++        pfd_pack_common_resample_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
++            state->d_px, state->d_py, state->d_pz,
++            state->d_vx, state->d_vy, state->d_vz, state->d_pcb,
++            state->d_vcov_tmp, N);
++        CUDA_CHECK_LAST();
++        pfd_gather_common_packed_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
++            state->d_vcov_tmp, state->d_megopolis_idx_a,
++            state->d_px_tmp, state->d_py_tmp, state->d_pz_tmp,
++            state->d_vx_tmp, state->d_vy_tmp, state->d_vz_tmp, state->d_pcb_tmp,
++            state->d_log_weights, N);
++        CUDA_CHECK_LAST();
++    } else {
+     pfd_megopolis_gather_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(
+         state->d_px, state->d_py, state->d_pz,
+         state->d_vx, state->d_vy, state->d_vz, state->d_vcov, state->d_pcb,
+@@ -3489,6 +3558,7 @@
+         state->d_vx_tmp, state->d_vy_tmp, state->d_vz_tmp, state->d_vcov_tmp, state->d_pcb_tmp,
+         state->d_megopolis_idx_a, N, !state->covariance_uniform);
+     CUDA_CHECK_LAST();
++    }
+ 
+     std::swap(state->d_px, state->d_px_tmp);
+     std::swap(state->d_py, state->d_py_tmp);
+@@ -3501,8 +3571,10 @@
+     if (!state->covariance_uniform) std::swap(state->d_vcov, state->d_vcov_tmp);
+     std::swap(state->d_pcb, state->d_pcb_tmp);
+ 
++    if (!packed_gather) {
+     pfd_reset_weights_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(state->d_log_weights, N);
+     CUDA_CHECK_LAST();
++    }
+ }
+ 
+ // ============================================================

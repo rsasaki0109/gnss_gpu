@@ -1,0 +1,39 @@
+--- a/tests/test_pf_doppler_weight_cache.py
++++ b/tests/test_pf_doppler_weight_cache.py
+@@ -40,14 +40,14 @@
+ 
+ 
+ def _uncached(observations, center):
+-    """33 observations force the retained kernel; padding is always range<1.
++    """65 observations force the retained kernel; padding is always range<1.
+ 
+     The synthetic particles stay within .18m of center. The added satellites
+     coincide with center and are skipped before any observation or ordered sum.
+     Thus the oracle keeps the original observation count and sum order in effect.
+     """
+     sat, vel, doppler, weights = observations
+-    missing = 33 - len(weights)
++    missing = 65 - len(weights)
+     assert missing > 0
+     return (np.vstack((sat, np.repeat(np.asarray(center)[None], missing, axis=0))),
+             np.vstack((vel, np.zeros((missing, 3)))),
+@@ -139,7 +139,7 @@
+             for owner in owners:
+                 native.pf_device_shift_position(owner, .125, -.0625, .03125)
+             arrays = [a.copy() for a in observations]
+-            padded = _uncached(arrays, center) if satellites <= 32 else [a.copy() for a in arrays]
++            padded = _uncached(arrays, center) if satellites <= 64 else [a.copy() for a in arrays]
+             gain = 0. if satellites < 4 else .25
+             _update(owners[0], arrays, gain)
+             _update(owners[1], padded, gain)
+--- a/tests/test_pf_doppler_large_cache.py
++++ b/tests/test_pf_doppler_large_cache.py
+@@ -82,7 +82,7 @@
+             _, _, observations = _scenario(33, satellites, seed=237 + epoch)
+             arrays = [a.copy() for a in observations]
+             center = epoch * np.array([.1, .2, .3])
+-            oracle = _uncached(arrays, center) if satellites <= 32 else [a.copy() for a in arrays]
++            oracle = _uncached(arrays, center) if satellites <= 64 else [a.copy() for a in arrays]
+             gain = .25 if epoch % 2 else 0.
+             _update(owners[0], arrays, gain)
+             _update(owners[1], oracle, gain)

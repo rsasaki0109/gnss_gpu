@@ -20,30 +20,31 @@ N = 2048
 REPS = 200
 
 
-def _filter():
-    pf = ParticleFilterDevice(n_particles=N, seed=1)
+def _filter(count=N):
+    pf = ParticleFilterDevice(n_particles=count, seed=1)
     pf.initialize([0.0, 0.0, 0.0], clock_bias=0.0, spread_pos=1.0, spread_cb=1.0)
     return pf
 
 
-def _log_weights(sigma):
-    return np.random.default_rng(0).normal(0.0, sigma, N)
+def _log_weights(sigma, count=N):
+    return np.random.default_rng(0).normal(0.0, sigma, count)
 
 
 def _mean_offspring_share(pf, log_weights, resample):
     """Average offspring count / N per original particle over REPS seeds."""
-    states = np.zeros((N, 16))
-    states[:, 0] = np.arange(N)  # tag each particle with its index
+    count = pf.n_particles
+    states = np.zeros((count, 16))
+    states[:, 0] = np.arange(count)  # tag each particle with its index
     seeds = np.random.default_rng(12345).integers(0, 2**31, REPS)
-    counts = np.zeros(N)
+    counts = np.zeros(count)
     for seed in seeds:
         pf.set_particle_states(states)
         pf.set_log_weights(log_weights)
         resample(pf, int(seed))
         ancestors = pf.get_particle_states()[:, 0]
         assert np.array_equal(ancestors, np.rint(ancestors))
-        counts += np.bincount(ancestors.astype(int), minlength=N)
-    return counts / REPS / N
+        counts += np.bincount(ancestors.astype(int), minlength=count)
+    return counts / REPS / count
 
 
 def _normalized(log_weights):
@@ -51,9 +52,10 @@ def _normalized(log_weights):
     return w / w.sum()
 
 
-def test_coalesced_megopolis_converges_to_weights():
-    pf = _filter()
-    lw = _log_weights(1.5)
+@pytest.mark.parametrize("count", [2048, 8192])
+def test_coalesced_megopolis_converges_to_weights(count):
+    pf = _filter(count)
+    lw = _log_weights(1.5, count)
     w = _normalized(lw)
     share = _mean_offspring_share(
         pf, lw, lambda f, s: native.pf_device_resample_megopolis_coalesced(f._state, 240, s)
@@ -114,3 +116,44 @@ def test_rejects_unknown_resampling_and_bad_iterations():
         ParticleFilterDevice(n_particles=16, resampling="invalid")
     with pytest.raises(ValueError, match="megopolis_iterations"):
         ParticleFilterDevice(n_particles=16, megopolis_iterations=0)
+
+
+@pytest.mark.parametrize("count, iterations", [
+    (1, 60), (2, 60), (31, 60), (33, 60), (255, 60), (256, 60),
+    (257, 60), (2048, 240), (8193, 60), (10000, 240),
+])
+def test_coalesced_covariance_gather_tails(count, iterations):
+    """Partial warps/blocks keep every field and repeatable ancestors."""
+    pf = _filter(count)
+    before = np.random.default_rng(9).normal(size=(count, 16))
+    before[:, 0] = np.arange(count)
+    weights = _log_weights(1.5, count)
+    results = []
+    for _ in range(2):
+        pf.set_particle_states(before)
+        pf.set_log_weights(weights)
+        native.pf_device_resample_megopolis_coalesced(pf._state, iterations, 42)
+        after = pf.get_particle_states()
+        indices = after[:, 0].astype(int)
+        np.testing.assert_array_equal(after, before[indices])
+        np.testing.assert_array_equal(pf.get_log_weights(), np.zeros(count))
+        results.append(after)
+    np.testing.assert_array_equal(*results)
+
+
+def test_megopolis_gather_can_alternate_with_other_resamplers():
+    pf = _filter(8193)
+    before = np.random.default_rng(9).normal(size=(8193, 16))
+    before[:, 0] = np.arange(8193)
+    pf.set_particle_states(before)
+    for resample in (
+        lambda: native.pf_device_resample_megopolis_coalesced(pf._state, 60, 42),
+        lambda: native.pf_device_resample_megopolis(pf._state, 15, 42),
+        lambda: native.pf_device_resample_systematic(pf._state, 42),
+        lambda: native.pf_device_resample_megopolis_coalesced(pf._state, 60, 42),
+    ):
+        pf.set_log_weights(_log_weights(1.5, 8193))
+        resample()
+        after = pf.get_particle_states()
+        np.testing.assert_array_equal(after, before[after[:, 0].astype(int)])
+        np.testing.assert_array_equal(pf.get_log_weights(), np.zeros(8193))

@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "verified": true,
+  "current_source_build_installed_match": true,
+  "bit_identical_cases": 162,
+  "nonzero_output_validation_cases": 122,
+  "timed_conditions": 48,
+  "memory_conditions": 12,
+  "rounds": 5,
+  "repeats": 20,
+  "regression_tests": 2029,
+  "sanitizer_tests": 31,
+  "sanitizer_errors": 0,
+  "leaked_bytes": 0,
+  "unchanged_device_functions": 9,
+  "independent_stateless_oracle": true,
+  "deep_stack_and_tie_and_unordered_fallback_verified": true,
+  "pf_latest_pr_gate_retained": true,
+  "signal_batch_retained": true,
+  "public_product_label_violations": 0,
+  "public_text_files_scanned": 2439,
+  "artifacts": {
+    "benchmarks/RESULTS.md": "c4ff87e0e75f731e89a4b558dd621397a6010e1c6233583b262626037516eaaa",
+    "internal_docs/decisions.md": "9e5007628a57196dc08a078f116b706fc6546ff3e53e932ec6813643d6c08bee",
+    "benchmarks/bvh_serial_cache_gpu_20261013.json": "2b1867236ce29d897d78bc216c50b5e108c10a5ded7503e61e087e206ef2debf",
+    "benchmarks/bvh_serial_cache_device_code_20261013.json": "aa3e9902a4429eccf8d27b6e4659cfeb265c7131ff420aa48572277bd26f8c24",
+    "benchmarks/bench_bvh_serial_cache_compare.py": "497619a17bf0ccab99f2fdadd0fe6f88ea6a4b01791438c7679f49a728ab83df",
+    "tests/test_bvh_serial_cache.py": "5817eb0e237563b2c500f55a514d6f6a44725cd3249eb85d3627ced4f14d539c",
+    "tests/test_bvh_normal_cache.py": "fac8e56cf0fb3b1ad52a4c20cacc48e41addba2a0c2dd46082b2a43cb7b15510"
+  }
+}

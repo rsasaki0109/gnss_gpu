@@ -1,0 +1,40 @@
+--- a/src/signal_sim/signal_sim.cu
++++ b/src/signal_sim/signal_sim.cu
+@@ -663,9 +663,15 @@
+                         config.sampling_freq, config.intermediate_freq, noise_std, seed);
+                 }
+             } else {
+-                fused_signal_kernel<<<blocks, kBlockSize>>>(
+-                    d_channels, d_nav_bits, d_output, n_samples, (int)packed_channels.size(),
+-                    config.sampling_freq, config.intermediate_freq, noise_std, seed);
++                if (packed_nav_bits.empty()) {
++                    fused_static_nav_signal_kernel<DeviceChannel*, false><<<blocks, kBlockSize>>>(
++                        d_channels, d_nav_bits, d_output, n_samples, (int)packed_channels.size(),
++                        config.sampling_freq, config.intermediate_freq, noise_std, seed);
++                } else {
++                    fused_signal_kernel<<<blocks, kBlockSize>>>(
++                        d_channels, d_nav_bits, d_output, n_samples, (int)packed_channels.size(),
++                        config.sampling_freq, config.intermediate_freq, noise_std, seed);
++                }
+             }
+         }
+     } else {
+@@ -756,9 +762,15 @@
+                 config.sampling_freq, config.intermediate_freq, noise_std, 0ULL);
+         }
+     } else {
+-        fused_signal_kernel<BatchChannels, false, kInlineChannels, true><<<blocks, kBlockSize>>>(
+-            batch, impl_->nav_bits.data, impl_->output.data, n_samples, max_channels,
+-            config.sampling_freq, config.intermediate_freq, noise_std, 0ULL);
++        if (nav.empty()) {
++            fused_static_nav_signal_kernel<BatchChannels, false, kInlineChannels, true><<<blocks, kBlockSize>>>(
++                batch, impl_->nav_bits.data, impl_->output.data, n_samples, max_channels,
++                config.sampling_freq, config.intermediate_freq, noise_std, 0ULL);
++        } else {
++            fused_signal_kernel<BatchChannels, false, kInlineChannels, true><<<blocks, kBlockSize>>>(
++                batch, impl_->nav_bits.data, impl_->output.data, n_samples, max_channels,
++                config.sampling_freq, config.intermediate_freq, noise_std, 0ULL);
++        }
+     }
+     CUDA_CHECK(cudaGetLastError());
+     CUDA_CHECK(cudaDeviceSynchronize());

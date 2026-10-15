@@ -392,27 +392,129 @@ class PersistentParticleRuntimePool:
         return target
 
     @staticmethod
+    def _set_migration_log_weights(target: _ParticleRuntime, count: int) -> None:
+        value = -math.log(count)
+        uniform = getattr(target, "set_uniform_log_weights", None)
+        if callable(uniform):
+            from gnss_gpu.pf_device_runtime import ParticleFilterDeviceRuntime
+            expected = getattr(ParticleFilterDeviceRuntime, "_uniform_weights_method", None)
+            if expected is not None and getattr(uniform, "__func__", None) is expected:
+                uniform(value)
+                return
+        target.set_log_weights(np.full(count, value, dtype=np.float64))
+
+    @staticmethod
+    def _migration_numpy_reuse_allowed() -> bool:
+        error_modes = np.geterr().values()
+        reuse = all(mode in ("warn", "ignore") for mode in error_modes)
+        if reuse and "warn" in error_modes:
+            import warnings
+            reuse = not any(
+                action == "error" and issubclass(RuntimeWarning, category)
+                for action, _, category, _, _ in warnings.filters
+            )
+        return reuse
+
+    @staticmethod
     def _migrate(source: _ParticleRuntime, target: _ParticleRuntime) -> None:
         if not source._initialized:
             raise RuntimeError("cannot migrate an uninitialized particle runtime")
-        states = np.asarray(source.get_particle_states(), dtype=np.float64)
+        gather = getattr(target, "_pf_device_gather_from", None)
+        source_state = getattr(source, "_state", None)
+        target_state = getattr(target, "_state", None)
+        source_count = getattr(source_state, "n_particles", 0)
+        resident = (target._initialized and callable(gather) and
+                    gather is getattr(source, "_pf_device_gather_from", None) and
+                    source_state is not None and target_state is not None and source_count > 0)
+        states = None if resident else np.asarray(source.get_particle_states(), dtype=np.float64)
+        reuse_allowed = None
+        uniform_try = getattr(target, "_pf_device_try_gather_uniform_weights", None)
+        state_type = getattr(source, "_pf_device_uniform_scan_state_type", None)
+        getter = getattr(source, "_pf_device_uniform_scan_getter", None)
+        uniform_cdf = getattr(source, "_pf_device_uniform_scan_cdf", None)
+        checked = getattr(source, "_pf_device_uniform_cdf_checked_gather", None)
+        if (resident and source_count >= 65536 and callable(uniform_try) and
+                uniform_try is getattr(source, "_pf_device_try_gather_uniform_weights", None) and
+                state_type is not None and type(source_state) is state_type and type(target_state) is state_type and
+                state_type is getattr(target, "_pf_device_uniform_scan_state_type", None) and
+                getter is not None and getter is getattr(source, "_pf_device_get_log_weights", None) and
+                uniform_cdf is not None and uniform_cdf is getattr(target, "_pf_device_uniform_scan_cdf", None) and
+                uniform_cdf is getattr(source, "_pf_device_gather_from_uniform_cdf", None) and
+                uniform_cdf is getattr(target, "_pf_device_gather_from_uniform_cdf", None) and
+                checked is not None and checked is getattr(target, "_pf_device_uniform_cdf_checked_gather", None) and
+                checked is getattr(source, "_pf_device_gather_from_cdf", None) and
+                checked is getattr(target, "_pf_device_gather_from_cdf", None) and
+                type(source.n_particles) is int and source.n_particles == source_count and
+                type(target.n_particles) is int and target.n_particles == getattr(target_state, "n_particles", 0)):
+            from gnss_gpu.pf_device_runtime import ParticleFilterDeviceRuntime
+            expected = getattr(ParticleFilterDeviceRuntime, "_migration_weights_getter", None)
+            if expected is not None and getattr(source.get_log_weights, "__func__", None) is expected:
+                reuse_allowed = PersistentParticleRuntimePool._migration_numpy_reuse_allowed()
+                if reuse_allowed and uniform_try(target_state, source_state):
+                    PersistentParticleRuntimePool._set_migration_log_weights(target, target.n_particles)
+                    return
         log_weights = np.asarray(source.get_log_weights(), dtype=np.float64)
         finite = np.isfinite(log_weights)
-        if not np.any(finite):
-            weights = np.full(log_weights.size, 1.0 / log_weights.size)
+        reuse = log_weights.ndim == 1 and log_weights.size >= 65536
+        if reuse:
+            if reuse_allowed is None:
+                reuse_allowed = PersistentParticleRuntimePool._migration_numpy_reuse_allowed()
+            reuse = reuse_allowed
+        if reuse and np.all(finite):
+            # A private copy preserves caller-owned weights, including views.
+            # All-finite input makes the original floor/where work redundant.
+            weights = log_weights.copy()
+            maximum = float(np.max(weights))
+            if (weights[0] == maximum and weights[weights.size // 2] == maximum and
+                    weights[-1] == maximum and float(np.min(weights)) == maximum):
+                # Equal finite values subtract to zero, exp to one, and sum
+                # exactly to this array's size. Keep the sequential CDF.
+                uniform = getattr(target, "_pf_device_gather_from_uniform_cdf", None)
+                checked = getattr(target, "_pf_device_uniform_cdf_checked_gather", None)
+                if (resident and callable(uniform) and checked is not None and
+                        uniform is getattr(source, "_pf_device_gather_from_uniform_cdf", None) and
+                        checked is getattr(source, "_pf_device_uniform_cdf_checked_gather", None) and
+                        checked is getattr(target, "_pf_device_gather_from_cdf", None) and
+                        checked is getattr(source, "_pf_device_gather_from_cdf", None) and
+                        weights.size == source_count and type(target.n_particles) is int and
+                        target.n_particles == getattr(target_state, "n_particles", 0)):
+                    if uniform(target_state, source_state):
+                        PersistentParticleRuntimePool._set_migration_log_weights(target, target.n_particles)
+                        return
+                weights.fill(1.0 / weights.size)
+            else:
+                np.subtract(weights, maximum, out=weights)
+                np.exp(weights, out=weights)
+                weights /= np.sum(weights)
+            cdf = np.cumsum(weights, out=weights)
         else:
-            floor = float(np.min(log_weights[finite])) - 100.0
-            shifted = np.where(finite, log_weights, floor)
-            weights = np.exp(shifted - float(np.max(shifted)))
-            weights /= np.sum(weights)
-        cdf = np.cumsum(weights)
+            if not np.any(finite):
+                weights = np.full(log_weights.size, 1.0 / log_weights.size)
+            else:
+                floor = float(np.min(log_weights[finite])) - 100.0
+                shifted = np.where(finite, log_weights, floor)
+                weights = np.exp(shifted - float(np.max(shifted)))
+                weights /= np.sum(weights)
+            cdf = np.cumsum(weights)
         count = int(target.n_particles)
+        cdf_gather = getattr(target, "_pf_device_gather_from_cdf", None)
+        if (resident and cdf.size == source_count and max(source_count, count) >= 65536 and
+                count == getattr(target_state, "n_particles", 0) and callable(cdf_gather) and
+                cdf_gather is getattr(source, "_pf_device_gather_from_cdf", None)):
+            if cdf_gather(target_state, source_state, cdf):
+                PersistentParticleRuntimePool._set_migration_log_weights(target, count)
+                return
         indices = np.searchsorted(
             cdf,
             (np.arange(count, dtype=np.float64) + 0.5) / count,
             side="left",
         )
-        selected = states[np.minimum(indices, states.shape[0] - 1)]
+        if resident:
+            if gather(target_state, source_state, np.minimum(indices, source_count - 1)):  # pyright: ignore[reportOptionalCall]
+                PersistentParticleRuntimePool._set_migration_log_weights(target, count)
+                return
+            states = np.asarray(source.get_particle_states(), dtype=np.float64)
+        selected = states[np.minimum(indices, states.shape[0] - 1)]  # pyright: ignore[reportOptionalSubscript, reportOptionalMemberAccess]
         if not target._initialized:
             target.initialize(
                 position_ecef=np.mean(selected[:, :3], axis=0),
@@ -421,4 +523,4 @@ class PersistentParticleRuntimePool:
                 spread_cb=1.0,
             )
         target.set_particle_states(selected)
-        target.set_log_weights(np.full(count, -math.log(count), dtype=np.float64))
+        PersistentParticleRuntimePool._set_migration_log_weights(target, count)

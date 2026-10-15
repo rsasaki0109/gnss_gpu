@@ -1,0 +1,39 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -990,6 +990,10 @@
+     y_mean /= weight_sum;
+ 
+     double log_w = 0.0;
++    // Imported covariance can be nonsymmetric. After the first accepted scalar
++    // update, the existing symmetrization/clamps make all mirrored entries
++    // identical and finite, so the following h*P equals the already computed P*h.
++    bool symmetric_covariance = false;
+     for (int s = 0; s < n_sat; s++) {
+         double obs_weight = fmax(s_weights[s], 0.0);
+         if (obs_weight <= 0.0) continue;
+@@ -1032,9 +1036,14 @@
+         mui[1] += K[1] * innov;
+         mui[2] += K[2] * innov;
+ 
+-        double hp0 = h[0] * P[0] + h[1] * P[3] + h[2] * P[6];
+-        double hp1 = h[0] * P[1] + h[1] * P[4] + h[2] * P[7];
+-        double hp2 = h[0] * P[2] + h[1] * P[5] + h[2] * P[8];
++        double hp0 = ph0;
++        double hp1 = ph1;
++        double hp2 = ph2;
++        if (!symmetric_covariance) {
++            hp0 = h[0] * P[0] + h[1] * P[3] + h[2] * P[6];
++            hp1 = h[0] * P[1] + h[1] * P[4] + h[2] * P[7];
++            hp2 = h[0] * P[2] + h[1] * P[5] + h[2] * P[8];
++        }
+         P[0] -= K[0] * hp0; P[1] -= K[0] * hp1; P[2] -= K[0] * hp2;
+         P[3] -= K[1] * hp0; P[4] -= K[1] * hp1; P[5] -= K[1] * hp2;
+         P[6] -= K[2] * hp0; P[7] -= K[2] * hp1; P[8] -= K[2] * hp2;
+@@ -1048,6 +1057,7 @@
+         P[0] = (isfinite(P[0]) && P[0] > 1e-12) ? P[0] : 1e-12;
+         P[4] = (isfinite(P[4]) && P[4] > 1e-12) ? P[4] : 1e-12;
+         P[8] = (isfinite(P[8]) && P[8] > 1e-12) ? P[8] : 1e-12;
++        symmetric_covariance = true;
+ 
+         log_w += -0.5 * (innov * innov / S + log(S));
+     }

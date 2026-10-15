@@ -1,0 +1,63 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -683,6 +683,28 @@
+ }
+ 
+ static const int MULTIPATH_BLOCK_SIZE = 128;
++static_assert(MULTIPATH_BLOCK_SIZE % 32 == 0, "Reflection reduction needs full warps");
++
++// Compare only the selection key. Every valid ordinal belongs to exactly one
++// thread, so its original point/delay payload can be written by that winner.
++// No floating-point sum or approximation is introduced by changing the tree.
++__device__ static int warp_multipath_order(const MultipathCandidate& candidate) {
++  double delay = candidate.delay;
++  int order = candidate.order;
++  int lane = threadIdx.x % 32;
++  for (int offset = 16; offset > 0; offset /= 2) {
++    double other_delay = __shfl_down_sync(0xffffffffu, delay, offset);
++    int other_order = __shfl_down_sync(0xffffffffu, order, offset);
++    if (lane < offset && other_order >= 0 &&
++        (order < 0 || other_delay < delay ||
++         (other_delay == delay && other_order < order))) {
++      delay = other_delay;
++      order = other_order;
++    }
++  }
++  return __shfl_sync(0xffffffffu, order, 0);
++}
++
+ 
+ template <bool CACHED_NORMALS, bool SHARED_MIRRORS>
+ __global__ void multipath_candidates_kernel(const double* rx_ecef,
+@@ -720,17 +742,21 @@
+             rx, sat, d_rx_sat, tris[triangle_order[ordinal]], candidate, normal, mirror) &&
+         better_multipath(candidate, best)) best = candidate;
+   }
+-  __shared__ MultipathCandidate winners[MULTIPATH_BLOCK_SIZE];
+-  winners[threadIdx.x] = best;
++  __shared__ MultipathCandidate winners[MULTIPATH_BLOCK_SIZE / 32];
++  int winner_order = warp_multipath_order(best);
++  // Empty warps still need exactly one writer, avoiding identical-write races.
++  if ((winner_order >= 0 && best.order == winner_order) ||
++      (winner_order < 0 && threadIdx.x % 32 == 0)) {
++    winners[threadIdx.x / 32] = best;
++  }
+   __syncthreads();
+-  for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
+-    if (threadIdx.x < stride &&
+-        better_multipath(winners[threadIdx.x + stride], winners[threadIdx.x])) {
+-      winners[threadIdx.x] = winners[threadIdx.x + stride];
+-    }
+-    __syncthreads();
+-  }
+-  if (threadIdx.x == 0) partial[blockIdx.x] = winners[0];
++  if (threadIdx.x == 0) {
++    MultipathCandidate winner = winners[0];
++    for (int warp = 1; warp < MULTIPATH_BLOCK_SIZE / 32; ++warp) {
++      if (better_multipath(winners[warp], winner)) winner = winners[warp];
++    }
++    partial[blockIdx.x] = winner;
++  }
+ }
+ 
+ __global__ void multipath_finalize_kernel(const MultipathCandidate* partial,

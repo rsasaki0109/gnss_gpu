@@ -1,0 +1,147 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -368,7 +368,7 @@
+ // Double-differenced pseudorange eliminates receiver clock bias from both rover
+ // and base. The expected DD range is:
+ //   dd_expected = range_to_k - range_to_ref - base_range_k + base_range_ref
+-template<bool CommonReference>
++template<bool CommonReference, bool CachedSigma = false>
+ __global__ void pfd_weight_dd_pseudorange_kernel(
+     const double* px, const double* py,
+     const double* pz,
+@@ -392,6 +392,11 @@
+     for (int i = threadIdx.x; i < total_shared; i += blockDim.x) {
+         s_data[i] = dd_data[i];
+     }
++    if constexpr (CachedSigma) {
++        if (threadIdx.x == 0) {
++            s_data[total_shared + 0] = 1.0 / (sigma_pr * sigma_pr);
++        }
++    }
+     __syncthreads();
+ 
+     int tid = blockIdx.x * blockDim.x + threadIdx.x;
+@@ -412,7 +417,7 @@
+         common_ref_range = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
+     }
+ 
+-    double inv_sigma2 = 1.0 / (sigma_pr * sigma_pr);
++    double inv_sigma2 = CachedSigma ? s_data[total_shared + 0] : 1.0 / (sigma_pr * sigma_pr);
+     double log_w = 0.0;
+     bool use_huber = huber_enabled && huber_k > 0.0;
+     bool use_per_particle_gate = per_particle_nlos_threshold_m > 0.0;
+@@ -606,7 +611,7 @@
+ //   dd_expected = (range_to_k - range_to_ref - base_range_k + base_range_ref) / wavelength
+ //   dd_residual = dd_carrier[k] - dd_expected
+ //   afv = dd_residual - round(dd_residual)
+-template<bool CommonReference>
++template<bool CommonReference, bool CachedSigma = false>
+ __global__ void pfd_weight_dd_carrier_afv_kernel(
+     const double* px, const double* py,
+     const double* pz,
+@@ -637,6 +642,11 @@
+         // before the existing barrier, instead of once per particle/pair.
+         s_data[i] = i >= n_dd * 10 ? 1.0 / dd_data[i] : dd_data[i];
+     }
++    if constexpr (CachedSigma) {
++        if (threadIdx.x == 0) {
++            s_data[total_shared + 0] = 1.0 / (sigma_cycles * sigma_cycles);
++        }
++    }
+     __syncthreads();
+ 
+     int tid = blockIdx.x * blockDim.x + threadIdx.x;
+@@ -657,7 +667,7 @@
+         common_ref_range = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
+     }
+ 
+-    double inv_sigma2 = 1.0 / (sigma_cycles * sigma_cycles);
++    double inv_sigma2 = CachedSigma ? s_data[total_shared + 0] : 1.0 / (sigma_cycles * sigma_cycles);
+     double log_w = 0.0;
+     bool use_huber = huber_enabled && huber_k > 0.0;
+     bool use_per_particle_gate = per_particle_nlos_threshold_cycles > 0.0;
+@@ -733,7 +743,7 @@
+ 
+ // Joint DD pseudorange + carrier update. Sharing the range geometry avoids a
+ // second kernel launch and the duplicate square roots in the common path.
+-template<bool CommonReference>
++template<bool CommonReference, bool CachedSigma = false>
+ __global__ void pfd_weight_dd_joint_kernel(
+     const double* px, const double* py, const double* pz,
+     const double* dd_data,
+@@ -758,6 +768,12 @@
+         // Its original division is now evaluated once per observation/block,
+         // before the existing barrier, instead of once per particle/pair.
+         s_data[i] = i >= n_dd * 11 ? 1.0 / dd_data[i] : dd_data[i];
++    }
++    if constexpr (CachedSigma) {
++        if (threadIdx.x == 0) {
++            s_data[total_shared + 0] = 1.0 / (sigma_pr * sigma_pr);
++            s_data[total_shared + 1] = 1.0 / (sigma_cycles * sigma_cycles);
++        }
+     }
+     __syncthreads();
+ 
+@@ -808,8 +824,8 @@
+ 
+     double pr_log_w = 0.0;
+     double cp_log_w = 0.0;
+-    double inv_pr_sigma2 = 1.0 / (sigma_pr * sigma_pr);
+-    double inv_cp_sigma2 = 1.0 / (sigma_cycles * sigma_cycles);
++    double inv_pr_sigma2 = CachedSigma ? s_data[total_shared + 0] : 1.0 / (sigma_pr * sigma_pr);
++    double inv_cp_sigma2 = CachedSigma ? s_data[total_shared + 1] : 1.0 / (sigma_cycles * sigma_cycles);
+     bool huber_pr = huber_enabled && huber_pr_k > 0.0;
+     bool huber_cp = huber_enabled && huber_carrier_k > 0.0;
+     for (int d = 0; d < n_dd; d++) {
+@@ -2198,7 +2214,7 @@
+ 
+     size_t smem = (size_t)total_doubles * sizeof(double);
+     if (pfd_has_common_dd_reference(ref_ecef, n_dd)) {
+-        pfd_weight_dd_pseudorange_kernel<true><<<grid, BLOCK_SIZE, smem, state->stream>>>(
++        pfd_weight_dd_pseudorange_kernel<true, true><<<grid, BLOCK_SIZE, smem + sizeof(double), state->stream>>>(
+             state->d_px, state->d_py, state->d_pz,
+             state->d_obs_scratch, state->d_log_weights,
+             N, n_dd, sigma_pr, per_particle_nlos_threshold_m,
+@@ -2740,7 +2756,7 @@
+     // Launch DD-AFV kernel
+     size_t smem = (size_t)total_doubles * sizeof(double);
+     if (pfd_has_common_dd_reference(ref_ecef, n_dd)) {
+-        pfd_weight_dd_carrier_afv_kernel<true><<<grid, BLOCK_SIZE, smem, state->stream>>>(
++        pfd_weight_dd_carrier_afv_kernel<true, true><<<grid, BLOCK_SIZE, smem + sizeof(double), state->stream>>>(
+             state->d_px, state->d_py, state->d_pz,
+             state->d_obs_scratch, state->d_log_weights,
+             N, n_dd, sigma_cycles, per_particle_nlos_threshold_cycles,
+@@ -2795,14 +2811,25 @@
+     bool carrier_only_huber = per_particle_huber &&
+         !(per_particle_huber_dd_pr_k > 0.0) && per_particle_huber_dd_carrier_k > 0.0;
+     if (!carrier_only_huber && pfd_has_common_dd_reference(ref_ecef, n_dd)) {
+-        pfd_weight_dd_joint_kernel<true><<<
+-            grid, BLOCK_SIZE, (size_t)total_doubles * sizeof(double), state->stream>>>(
+-            state->d_px, state->d_py, state->d_pz,
+-            state->d_obs_scratch, state->d_log_weights,
+-            N, n_dd, sigma_pr, sigma_cycles,
+-            per_particle_nlos_threshold_m, per_particle_nlos_threshold_cycles,
+-            per_particle_huber, per_particle_huber_dd_pr_k,
+-            per_particle_huber_dd_carrier_k);
++        if (n_dd < 512) {
++            pfd_weight_dd_joint_kernel<true, true><<<
++                grid, BLOCK_SIZE, ((size_t)total_doubles + 2) * sizeof(double), state->stream>>>(
++                state->d_px, state->d_py, state->d_pz,
++                state->d_obs_scratch, state->d_log_weights,
++                N, n_dd, sigma_pr, sigma_cycles,
++                per_particle_nlos_threshold_m, per_particle_nlos_threshold_cycles,
++                per_particle_huber, per_particle_huber_dd_pr_k,
++                per_particle_huber_dd_carrier_k);
++        } else {
++            pfd_weight_dd_joint_kernel<true><<<
++                grid, BLOCK_SIZE, (size_t)total_doubles * sizeof(double), state->stream>>>(
++                state->d_px, state->d_py, state->d_pz,
++                state->d_obs_scratch, state->d_log_weights,
++                N, n_dd, sigma_pr, sigma_cycles,
++                per_particle_nlos_threshold_m, per_particle_nlos_threshold_cycles,
++                per_particle_huber, per_particle_huber_dd_pr_k,
++                per_particle_huber_dd_carrier_k);
++        }
+     } else {
+         pfd_weight_dd_joint_kernel<false><<<
+             grid, BLOCK_SIZE, (size_t)total_doubles * sizeof(double), state->stream>>>(

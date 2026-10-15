@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-14T09:07:33.879474+00:00",
+  "verified": true,
+  "adopted": true,
+  "source_build_installed_and_archive_match": true,
+  "measurement_report": {
+    "path": "benchmarks/pf_pool_gather_gpu_20261014.json",
+    "sha256": "39f484d8b9e6b26ed2a0f574daa38f4e426922d94e37c3bed322f3cf5ae15936"
+  },
+  "device_code_report": {
+    "path": "benchmarks/pf_pool_gather_device_code_20261013.json",
+    "sha256": "991767a349201701e005e40a6161684874137db2a81e538da057954d28c6a03e"
+  },
+  "bit_identical_cases": 1567,
+  "output_cases": 1531,
+  "matched_rejections": 36,
+  "new_all16_native_gather_cases": 288,
+  "new_queued_source_target_histories": 9,
+  "new_original_CDF_cases": 72,
+  "new_fallback_cases": 18,
+  "stage_batch_conditions": 18,
+  "stage_rounds": 3,
+  "stage_repeats": 3,
+  "per_sample_conditions": 6,
+  "paired_rounds": 5,
+  "paired_repeats": 5,
+  "per_sample_pairs": 150,
+  "paired_full_state_snapshots": 30,
+  "traced_host_peak_cases": 6,
+  "baseline_targeted_tests_passed": 1587,
+  "new_API_baseline_tests_skipped": 15,
+  "candidate_targeted_tests_passed": 1602,
+  "regression_passed": 5998,
+  "memcheck_errors": 0,
+  "leaked_bytes": 0,
+  "racecheck_hazards": 0,
+  "synccheck_errors": 0,
+  "native_state_layout_unchanged": true,
+  "retained_gpu_bodies_and_resources": 81,
+  "new_gpu_kernels": 0,
+  "no_new_gpu_owner_buffers_or_allocation": true,
+  "original_CPU_selection_cold_and_old_backend_fallback_retained": true,
+  "source_preserved_target_cache_cert_invalidated_and_both_streams_completed": true,
+  "retained_bvh_and_signal": {
+    "benchmarks/bvh_parallel_mirror_chunks_gpu_20261013.json": {
+      "sha256": "bcda1df440f75615bc2d869e031b039f3499d2318444243ef62b4e88d0215cd8",
+      "source_build_installed_match": true
+    },
+    "benchmarks/signal_wide_static_gpu_20261014.json": {
+      "sha256": "086e17293f916911ae63de639b76adf6371b15c514b535e9668fcb43b360d222",
+      "source_build_installed_match": true
+    }
+  },
+  "public_text_files_checked": 2713,
+  "public_device_model_names_absent": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  },
+  "long_real_data_position_error_curve_newly_evaluated": false
+}

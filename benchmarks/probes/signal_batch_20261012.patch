@@ -1,0 +1,471 @@
+--- a/src/signal_sim/signal_sim.cu
++++ b/src/signal_sim/signal_sim.cu
+@@ -1,9 +1,11 @@
+ #include <atomic>
++#include <algorithm>
+ #include <array>
+ #include <chrono>
+ #include <cmath>
+ #include <cstddef>
+ #include <mutex>
++#include <limits>
+ #include <stdexcept>
+ #include <utility>
+ #include <vector>
+@@ -294,6 +296,19 @@
+     float amplitude;
+ };
+ 
++struct EpochDescriptor {
++    size_t channel_offset;
++    int channel_count;
++    unsigned long long seed;
++};
++struct BatchChannels {
++    const DeviceChannel* data;
++    const EpochDescriptor* epochs;
++    __device__ const DeviceChannel& operator[](int index) const {
++        return data[epochs[blockIdx.y].channel_offset + (size_t)index];
++    }
++};
++
+ // A normal epoch fits within CUDA's 4 KiB kernel-parameter limit. Passing this
+ // batch by value avoids a separate descriptor allocation and host/device copy.
+ constexpr int kInlineChannels = 32;
+@@ -310,7 +325,7 @@
+ // Evaluate channels in input order, retaining the two rounding steps of the
+ // former channel-output store followed by the composite-kernel addition.
+ template <typename ChannelStorage, bool CACHE_FREQUENCY = false,
+-          int CACHE_CHANNELS = kInlineChannels>
++          int CACHE_CHANNELS = kInlineChannels, bool BATCHED = false>
+ __global__ void fused_signal_kernel(ChannelStorage channels,
+                                     const int* nav_bits,
+                                     float* iq_out,
+@@ -320,6 +335,12 @@
+                                     double intermediate_freq,
+                                     float noise_std,
+                                     unsigned long long seed) {
++    if constexpr (BATCHED) {
++        int epoch = blockIdx.y;
++        n_channels = channels.epochs[epoch].channel_count;
++        seed = channels.epochs[epoch].seed;
++        iq_out += (size_t)epoch * (size_t)n_samples * 2;
++    }
+     static_assert(!CACHE_FREQUENCY || CACHE_CHANNELS <= kBlockSize);
+     __shared__ double angular_frequency[CACHE_CHANNELS];
+     if constexpr (CACHE_FREQUENCY) {
+@@ -452,6 +473,8 @@
+     WorkBuffer<DeviceChannel> channels;
+     WorkBuffer<int> nav_bits;
+     WorkBuffer<float> output;
++    WorkBuffer<EpochDescriptor> epochs;
++    std::vector<EpochDescriptor> packed_epochs;
+     std::vector<DeviceChannel> packed_channels;
+     std::vector<int> packed_nav_bits;
+ 
+@@ -460,7 +483,7 @@
+         bool known = cudaGetDevice(&previous) == cudaSuccess;
+         if ((!known || previous != device) && cudaSetDevice(device) != cudaSuccess)
+             return;
+-        channels.reset(); nav_bits.reset(); output.reset();
++        channels.reset(); nav_bits.reset(); output.reset(); epochs.reset();
+         if (known && previous != device) cudaSetDevice(previous);
+     }
+ };
+@@ -476,7 +499,8 @@
+     if (!impl_) return 0;
+     return impl_->channels.capacity * sizeof(DeviceChannel)
+          + impl_->nav_bits.capacity * sizeof(int)
+-         + impl_->output.capacity * sizeof(float);
++         + impl_->output.capacity * sizeof(float)
++         + impl_->epochs.capacity * sizeof(EpochDescriptor);
+ }
+ 
+ void simulate_epoch(const SignalSimConfig& config,
+@@ -580,6 +604,79 @@
+ 
+ }
+ 
++void DeviceSignalWorkspace::simulate_epochs(
++    const SignalSimConfig& config, const SatChannel* const* epoch_channels,
++    const int* channel_counts, const unsigned long long* noise_seeds,
++    int n_epochs, float* iq_output, int n_samples) {
++    if (!impl_) throw std::runtime_error("DeviceSignalWorkspace is closed");
++    if (n_epochs < 0 || n_epochs > 65535 || n_samples < 1 || n_samples > std::numeric_limits<int>::max() / 2)
++        throw std::invalid_argument("Invalid signal epoch batch dimensions");
++    if (!n_epochs) return;
++    if (!epoch_channels || !channel_counts || !iq_output)
++        throw std::invalid_argument("Signal epoch batch buffers must not be null");
++    SignalDeviceScope device(impl_->device);
++    init_ca_codes();
++    auto& packed = impl_->packed_channels;
++    auto& nav = impl_->packed_nav_bits;
++    auto& epochs = impl_->packed_epochs;
++    packed.clear(); nav.clear(); epochs.clear();
++    epochs.reserve(n_epochs);
++    int max_channels = 0;
++    for (int e = 0; e < n_epochs; ++e) {
++        if (channel_counts[e] < 0 || (channel_counts[e] && !epoch_channels[e]))
++            throw std::invalid_argument("Invalid channels in signal epoch batch");
++        size_t begin = packed.size();
++        for (int i = 0; i < channel_counts[e]; ++i) {
++            const auto& channel = epoch_channels[e][i];
++            auto cp = resolve_code_params(channel);
++            if (!cp.valid) continue;
++            size_t nav_offset = nav.size();
++            int nav_count = 0;
++            if (channel.nav_bits && channel.nav_bit_count > 0) {
++                nav_count = channel.nav_bit_count;
++                nav.insert(nav.end(), channel.nav_bits, channel.nav_bits + nav_count);
++            }
++            packed.push_back({cp.code_table, cp.chip_rate, channel.code_phase,
++                channel.carrier_phase, channel.doppler_hz, channel.nav_bit_rate,
++                nav_offset, cp.code_length, cp.prn_index, channel.nav_bit, nav_count, channel.amplitude});
++        }
++        if (packed.size() - begin > (size_t)std::numeric_limits<int>::max())
++            throw std::overflow_error("Too many channels in an epoch");
++        int count = (int)(packed.size() - begin);
++        max_channels = std::max(max_channels, count);
++        epochs.push_back({begin, count, resolve_noise_seed(noise_seeds ? noise_seeds[e] : config.noise_seed)});
++    }
++    size_t floats = (size_t)n_epochs * (size_t)n_samples * 2;
++    if (floats > std::numeric_limits<size_t>::max() / sizeof(float))
++        throw std::overflow_error("Signal batch output size overflow");
++    impl_->output.reserve(floats);
++    impl_->channels.reserve(packed.size());
++    impl_->nav_bits.reserve(nav.size());
++    impl_->epochs.reserve(epochs.size());
++    if (!packed.empty()) CUDA_CHECK(cudaMemcpy(impl_->channels.data, packed.data(), packed.size() * sizeof(DeviceChannel), cudaMemcpyHostToDevice));
++    if (!nav.empty()) CUDA_CHECK(cudaMemcpy(impl_->nav_bits.data, nav.data(), nav.size() * sizeof(int), cudaMemcpyHostToDevice));
++    CUDA_CHECK(cudaMemcpy(impl_->epochs.data, epochs.data(), epochs.size() * sizeof(EpochDescriptor), cudaMemcpyHostToDevice));
++    BatchChannels batch{impl_->channels.data, impl_->epochs.data};
++    dim3 blocks((n_samples + kBlockSize - 1) / kBlockSize, n_epochs);
++    float noise_std = std::pow(10.0f, (float)config.noise_floor_db / 20.0f);
++    if (max_channels <= kInlineChannels) {
++        fused_signal_kernel<BatchChannels, true, kInlineChannels, true><<<blocks, kBlockSize>>>(
++            batch, impl_->nav_bits.data, impl_->output.data, n_samples, max_channels,
++            config.sampling_freq, config.intermediate_freq, noise_std, 0ULL);
++    } else if (max_channels <= kCachedGlobalChannels) {
++        fused_signal_kernel<BatchChannels, true, kCachedGlobalChannels, true><<<blocks, kBlockSize>>>(
++            batch, impl_->nav_bits.data, impl_->output.data, n_samples, max_channels,
++            config.sampling_freq, config.intermediate_freq, noise_std, 0ULL);
++    } else {
++        fused_signal_kernel<BatchChannels, false, kInlineChannels, true><<<blocks, kBlockSize>>>(
++            batch, impl_->nav_bits.data, impl_->output.data, n_samples, max_channels,
++            config.sampling_freq, config.intermediate_freq, noise_std, 0ULL);
++    }
++    CUDA_CHECK(cudaGetLastError());
++    CUDA_CHECK(cudaDeviceSynchronize());
++    CUDA_CHECK(cudaMemcpy(iq_output, impl_->output.data, floats * sizeof(float), cudaMemcpyDeviceToHost));
++}
++
+ void generate_single_channel(const SatChannel& ch,
+                              float* iq_out,
+                              int n_samples,
+--- a/include/gnss_gpu/signal_sim.h
++++ b/include/gnss_gpu/signal_sim.h
+@@ -63,6 +63,11 @@
+ 
+     void simulate_epoch(const SignalSimConfig& config, const SatChannel* channels,
+                         int n_channels, float* iq_output, int n_samples);
++    // Generate equal-length epochs without changing sample indices or seeds.
++    // Channel arrays remain owned by the caller until this synchronous call returns.
++    void simulate_epochs(const SignalSimConfig& config, const SatChannel* const* channels,
++                         const int* channel_counts, const unsigned long long* noise_seeds,
++                         int n_epochs, float* iq_output, int n_samples);
+     void close() noexcept;
+     std::size_t allocated_bytes() const noexcept;
+ 
+--- a/python/gnss_gpu/_signal_sim_bindings.cpp
++++ b/python/gnss_gpu/_signal_sim_bindings.cpp
+@@ -3,6 +3,7 @@
+ #include <pybind11/stl.h>
+ #include <cstdint>
+ #include <vector>
++#include <limits>
+ #include "gnss_gpu/pybind_validation.h"
+ #include "gnss_gpu/signal_sim.h"
+ 
+@@ -68,22 +69,12 @@
+   }
+ }
+ 
+-py::array_t<float> generate_signal_impl(
+-    double sampling_freq, double intermediate_freq, py::list channels_list,
+-    int n_samples, double noise_floor_db, std::uint64_t noise_seed,
+-    gnss_gpu::DeviceSignalWorkspace* workspace) {
+-    pv::validate_positive_finite(sampling_freq, "sampling_freq");
+-    pv::validate_finite(intermediate_freq, "intermediate_freq");
+-    pv::validate_finite(noise_floor_db, "noise_floor_db");
+-    if (n_samples < 1) {
+-        throw std::runtime_error("n_samples must be >= 1");
+-    }
+-    validate_channels_list(channels_list);
+-
++void parse_channels(const py::list& channels_list, std::vector<gnss_gpu::SatChannel>& channels,
++                    std::vector<py::array_t<int>>& nav_bits_refs) {
+     size_t n_ch = channels_list.size();
+-    std::vector<gnss_gpu::SatChannel> channels(n_ch);
++    channels.resize(n_ch);
+     // Keep nav_bits numpy arrays alive until simulate_epoch returns
+-    std::vector<py::array_t<int>> nav_bits_refs(n_ch);
++    nav_bits_refs.resize(n_ch);
+ 
+     for (size_t i = 0; i < n_ch; ++i) {
+         py::dict d = channels_list[i].cast<py::dict>();
+@@ -103,6 +94,24 @@
+         }
+     }
+ 
++}
++
++py::array_t<float> generate_signal_impl(
++    double sampling_freq, double intermediate_freq, py::list channels_list,
++    int n_samples, double noise_floor_db, std::uint64_t noise_seed,
++    gnss_gpu::DeviceSignalWorkspace* workspace) {
++    pv::validate_positive_finite(sampling_freq, "sampling_freq");
++    pv::validate_finite(intermediate_freq, "intermediate_freq");
++    pv::validate_finite(noise_floor_db, "noise_floor_db");
++    if (n_samples < 1) {
++        throw std::runtime_error("n_samples must be >= 1");
++    }
++    validate_channels_list(channels_list);
++
++    std::vector<gnss_gpu::SatChannel> channels;
++    std::vector<py::array_t<int>> nav_bits_refs;
++    parse_channels(channels_list, channels, nav_bits_refs);
++
+     gnss_gpu::SignalSimConfig config{};
+     config.sampling_freq = sampling_freq;
+     config.intermediate_freq = intermediate_freq;
+@@ -116,6 +125,50 @@
+     } else {
+         gnss_gpu::simulate_epoch(config, channels.data(), (int)channels.size(),
+                                  static_cast<float*>(out.mutable_data()), n_samples);
++    }
++    return out;
++}
++
++py::array_t<float> generate_epochs_impl(
++    double sampling_freq, double intermediate_freq, py::list epoch_channels,
++    int n_samples, double noise_floor_db, std::uint64_t noise_seed,
++    py::object noise_seeds, gnss_gpu::DeviceSignalWorkspace* workspace) {
++    pv::validate_positive_finite(sampling_freq, "sampling_freq");
++    pv::validate_finite(intermediate_freq, "intermediate_freq");
++    pv::validate_finite(noise_floor_db, "noise_floor_db");
++    if (n_samples < 1 || n_samples > std::numeric_limits<int>::max() / 2)
++        throw std::runtime_error("n_samples out of batch range");
++    if (epoch_channels.size() > 65535) throw std::runtime_error("at most 65535 epochs per batch");
++    size_t count = epoch_channels.size();
++    std::vector<unsigned long long> seeds;
++    if (!noise_seeds.is_none()) {
++        seeds = noise_seeds.cast<std::vector<unsigned long long>>();
++        if (seeds.size() != count) throw std::runtime_error("noise_seeds must match epoch count");
++    }
++    std::vector<std::vector<gnss_gpu::SatChannel>> channels(count);
++    std::vector<std::vector<py::array_t<int>>> nav_refs(count);
++    std::vector<const gnss_gpu::SatChannel*> pointers(count);
++    std::vector<int> sizes(count);
++    for (size_t e = 0; e < count; ++e) {
++        if (!py::isinstance<py::list>(epoch_channels[e])) throw std::runtime_error("epoch channels must be lists");
++        auto row = epoch_channels[e].cast<py::list>();
++        validate_channels_list(row);
++        parse_channels(row, channels[e], nav_refs[e]);
++        if (channels[e].size() > (size_t)std::numeric_limits<int>::max()) throw std::runtime_error("too many channels");
++        pointers[e] = channels[e].data();
++        sizes[e] = (int)channels[e].size();
++    }
++    gnss_gpu::SignalSimConfig config{};
++    config.sampling_freq = sampling_freq; config.intermediate_freq = intermediate_freq;
++    config.noise_floor_db = noise_floor_db; config.noise_seed = noise_seed;
++    py::array_t<float> out({(py::ssize_t)count, (py::ssize_t)n_samples * 2});
++    if (workspace) {
++        workspace->simulate_epochs(config, pointers.data(), sizes.data(), seeds.empty() ? nullptr : seeds.data(),
++                                   (int)count, out.mutable_data(), n_samples);
++    } else {
++        gnss_gpu::DeviceSignalWorkspace local;
++        local.simulate_epochs(config, pointers.data(), sizes.data(), seeds.empty() ? nullptr : seeds.data(),
++                              (int)count, out.mutable_data(), n_samples);
+     }
+     return out;
+ }
+@@ -138,6 +191,12 @@
+        py::arg("channels"), py::arg("n_samples"),
+        py::arg("noise_floor_db"),
+        py::arg("noise_seed") = 0);
++
++    m.def("generate_epochs", [](double sf, double intermediate, py::list epochs,
++                                   int samples, double noise, std::uint64_t seed, py::object seeds) {
++        return generate_epochs_impl(sf, intermediate, epochs, samples, noise, seed, seeds, nullptr);
++    }, py::arg("sampling_freq"), py::arg("intermediate_freq"), py::arg("channels"),
++       py::arg("n_samples"), py::arg("noise_floor_db"), py::arg("noise_seed") = 0, py::arg("noise_seeds") = py::none());
+ 
+     py::class_<gnss_gpu::DeviceSignalWorkspace>(m, "DeviceSignalWorkspace")
+         .def(py::init<>())
+@@ -150,6 +209,12 @@
+         }, py::arg("sampling_freq"), py::arg("intermediate_freq"),
+            py::arg("channels"), py::arg("n_samples"), py::arg("noise_floor_db"),
+            py::arg("noise_seed") = 0)
++        .def("generate_epochs", [](gnss_gpu::DeviceSignalWorkspace& workspace,
++                                    double sf, double intermediate, py::list epochs,
++                                    int samples, double noise, std::uint64_t seed, py::object seeds) {
++            return generate_epochs_impl(sf, intermediate, epochs, samples, noise, seed, seeds, &workspace);
++        }, py::arg("sampling_freq"), py::arg("intermediate_freq"), py::arg("channels"),
++           py::arg("n_samples"), py::arg("noise_floor_db"), py::arg("noise_seed") = 0, py::arg("noise_seeds") = py::none())
+         .def("close", &gnss_gpu::DeviceSignalWorkspace::close)
+         .def_property_readonly("allocated_bytes",
+                               &gnss_gpu::DeviceSignalWorkspace::allocated_bytes);
+--- a/python/gnss_gpu/signal_sim.py
++++ b/python/gnss_gpu/signal_sim.py
+@@ -163,6 +163,37 @@
+ 
+         return self._generate_signal(channels, n_samples, self.noise_floor_db)
+ 
++    def generate_epochs(self, channels_per_epoch, n_samples=None, noise_seeds=None):
++        """Generate equal-length epochs as a float32 [epochs, 2*samples] array.
++
++        Input channel order and sample indices restart for each epoch. Fixed
++        simulator seeds repeat exactly; optional per-epoch seeds override them.
++        Zero seeds choose fresh noise independently for each epoch.
++        """
++        rows = [list(channels) for channels in channels_per_epoch]
++        for channels in rows:
++            _validate_channels(channels)
++        if n_samples is None:
++            n_samples = int(self.sampling_freq * 1e-3)
++        positive_int("n_samples", n_samples)
++        seeds = None if noise_seeds is None else [int(seed) for seed in noise_seeds]
++        if seeds is not None:
++            if len(seeds) != len(rows) or any(seed < 0 or seed >= 2**64 for seed in seeds):
++                raise ValueError("noise_seeds must have one uint64 value per epoch")
++        from gnss_gpu import _gnss_gpu_signal_sim as native
++        if self._workspace is None and hasattr(native, "DeviceSignalWorkspace"):
++            self._workspace = native.DeviceSignalWorkspace()
++        generate = self._workspace if self._workspace is not None else native
++        seed = 0 if self.noise_seed is None else self.noise_seed
++        if hasattr(generate, "generate_epochs"):
++            return generate.generate_epochs(self.sampling_freq, self.intermediate_freq,
++                rows, int(n_samples), self.noise_floor_db, seed, seeds)
++        if not rows:
++            return np.empty((0, 2 * int(n_samples)), dtype=np.float32)
++        return np.stack([generate.generate_signal(self.sampling_freq, self.intermediate_freq,
++            channels, int(n_samples), self.noise_floor_db, seed if seeds is None else seeds[e])
++            for e, channels in enumerate(rows)])
++
+     def generate_test_signal(self, prn, code_phase=0, doppler=0,
+                              cn0_dbhz=45, duration_s=1e-3):
+         """Generate single-satellite test signal with noise.
+--- a/python/gnss_gpu/urban_signal_sim.py
++++ b/python/gnss_gpu/urban_signal_sim.py
+@@ -250,6 +250,41 @@
+                 'excess_delays': float array [m]
+                 'elevations': float array [rad]
+         """
++        if n_samples is None:
++            n_samples = int(self.sim.sampling_freq * 1e-3)
++        result = self._prepare_epoch(rx_ecef, sat_ecef, sat_clk, sat_vel, rx_vel,
++            rx_clock_bias, prn_list, gps_time, atmo_correction, iono_params, n_samples)
++        result["iq"] = self.sim.generate_epoch(result["channels"], n_samples=n_samples)
++        return result
++
++    def _prepare_epoch(self, rx_ecef, sat_ecef, sat_clk=None, sat_vel=None,
++                      rx_vel=None, rx_clock_bias=0.0,
++                      prn_list=None, gps_time=0.0,
++                      atmo_correction=None, iono_params=None,
++                      n_samples=None):
++        """Generate IQ signal for one epoch with urban environment effects.
++
++        Args:
++            rx_ecef: [3] receiver ECEF position [m].
++            sat_ecef: [n_sat, 3] satellite ECEF positions [m].
++            sat_clk: [n_sat] satellite clock corrections [s].
++            sat_vel: [n_sat, 3] satellite ECEF velocities [m/s] (for Doppler).
++            rx_vel: [3] receiver velocity [m/s] (for Doppler).
++            rx_clock_bias: Receiver clock bias [m].
++            prn_list: List of PRN numbers (1-32). Defaults to range(1, n_sat+1).
++            gps_time: GPS time of week [s] (for ionosphere model).
++            atmo_correction: AtmosphereCorrection instance (optional).
++            iono_params: dict with 'alpha' and 'beta' arrays (Klobuchar).
++            n_samples: Number of IQ samples (default: 1ms).
++
++        Returns:
++            dict with:
++                'iq': float32 array [2*n_samples] interleaved I/Q
++                'channels': list of per-satellite parameter dicts
++                'is_los': boolean array
++                'excess_delays': float array [m]
++                'elevations': float array [rad]
++        """
+         rx = np.asarray(rx_ecef, dtype=np.float64).ravel()
+         sats = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
+         n_sat = sats.shape[0]
+@@ -624,7 +659,7 @@
+                     n_reflection_diffraction_paths += 1
+ 
+         # --- Generate IQ signal ---
+-        iq = self.sim.generate_epoch(channels, n_samples=n_samples)
++        iq = None
+ 
+         return {
+             "iq": iq,
+@@ -651,7 +686,7 @@
+                             prn_list=None, sat_clk_per_epoch=None, sat_vel_per_epoch=None,
+                             rx_vel_per_epoch=None, gps_times=None,
+                             atmo_correction=None, iono_params=None,
+-                            n_samples=None):
++                            n_samples=None, batch_size=1):
+         """Generate IQ signal for a trajectory of epochs.
+ 
+         Args:
+@@ -665,6 +700,9 @@
+             atmo_correction: AtmosphereCorrection instance.
+             iono_params: dict with 'alpha'/'beta'.
+             n_samples: Samples per epoch.
++            batch_size: Epochs per IQ batch. Default 1 preserves lazy evaluation.
++                Larger batches evaluate scene callbacks ahead of each yield;
++                output chunks are bounded to 32 MiB.
+ 
+         Yields:
+             (epoch_idx, result_dict) for each epoch.
+@@ -672,6 +710,13 @@
+         rx_pos = np.asarray(rx_positions, dtype=np.float64)
+         n_epoch = rx_pos.shape[0]
+ 
++        if isinstance(batch_size, bool) or int(batch_size) != batch_size or batch_size < 1:
++            raise ValueError("batch_size must be a positive integer")
++        samples = int(self.sim.sampling_freq * 1e-3) if n_samples is None else n_samples
++        from gnss_gpu.input_validation import positive_int
++        positive_int("n_samples", samples)
++        effective_batch = min(int(batch_size), 65535, max(1, (32 * 1024 * 1024) // (int(samples) * 8)))
++        pending = []
+         for i in range(n_epoch):
+             if callable(sat_ecef_per_epoch):
+                 sat_ecef = sat_ecef_per_epoch(i)
+@@ -692,7 +737,8 @@
+ 
+             gps_time = gps_times[i] if gps_times is not None else 0.0
+ 
+-            result = self.compute_epoch(
++            operation = self.compute_epoch if effective_batch == 1 else self._prepare_epoch
++            result = operation(
+                 rx_ecef=rx_pos[i],
+                 sat_ecef=sat_ecef,
+                 sat_clk=sat_clk,
+@@ -702,6 +748,15 @@
+                 gps_time=gps_time,
+                 atmo_correction=atmo_correction,
+                 iono_params=iono_params,
+-                n_samples=n_samples,
++                n_samples=samples,
+             )
+-            yield i, result
++            if effective_batch == 1:
++                yield i, result
++            else:
++                pending.append((i, result))
++                if len(pending) == effective_batch or i + 1 == n_epoch:
++                    iq = self.sim.generate_epochs([item[1]["channels"] for item in pending], n_samples=samples)
++                    for row, (epoch, item) in enumerate(pending):
++                        item["iq"] = iq[row]
++                        yield epoch, item
++                    pending.clear()

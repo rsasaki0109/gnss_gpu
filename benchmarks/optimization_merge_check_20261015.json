@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "typecheck_comments_only": {
+    "python/gnss_gpu/pf_device_runtime.py": {
+      "measured_source_sha256": "7a3ada45383ad7cc2377b43f6bf92b6ac75be101a5f319337819ab0dc8cd1361",
+      "merge_source_sha256": "50c2bf0cbb8f83325ef800bed037cd94eabc26139f133dac97595095e5eaafd2",
+      "compiled_module_recursive_marshal_identical": true
+    },
+    "python/gnss_gpu/realtime_runtime.py": {
+      "measured_source_sha256": "143efce522df61877f02dee7f4ff6eea0158add40405f6f1aade51c3bea426a9",
+      "merge_source_sha256": "2cb618e4f63ca590c8ff6314f9b45234d537a7cf4688f5eaa43f710f07c153f7",
+      "compiled_module_recursive_marshal_identical": true
+    },
+    "python/gnss_gpu/signal_sim.py": {
+      "measured_source_sha256": "f316c47c4a9a9359498e6905f8d6afa8046f7b631f876e258074d44d527780d4",
+      "merge_source_sha256": "476ad734612e6869e1691b0979450e5f84da5286c430789d23c7d2a73fda72ba",
+      "compiled_module_recursive_marshal_identical": true
+    }
+  },
+  "reason": "Existing callable/resident guards establish non-None values; optional compiled extension has no generated Python type stubs.",
+  "runtime_or_CUDA_changes_after_measurement": false,
+  "unrelated_research_branch_commits_excluded": true,
+  "artifact_line_endings": {
+    "json_and_reconstruction_patch_bytes_preserved": true,
+    "json_CRLF_terminators_recognized_by_whitespace_check": true,
+    "patch_context_whitespace_preserved": true,
+    "production_code_whitespace_rules_unchanged": true
+  }
+}

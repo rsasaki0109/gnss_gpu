@@ -1,0 +1,195 @@
+{
+  "schema_version": 1,
+  "source_sha256": {
+    "baseline": {
+      "src/signal_sim/signal_sim.cu": "14f99c48fc1d6558ad34436f98c071b807556d6203f2a0362724717f0e99443a",
+      "include/gnss_gpu/signal_sim.h": "f8a4b39d9f6ccbdf3ab7d5dcc9ed4f8a6e0a1450833faea1cba67e6994f93a6b",
+      "python/gnss_gpu/_signal_sim_bindings.cpp": "ab3751ea92145105f94a9b1899dceaa84f724a1911cfada631b8f7a0b7fcf4e7",
+      "python/gnss_gpu/signal_sim.py": "6dd8228712bd81647b252742b9289fff5354a40d8e2bd8c3ccbebd24fe21e40b",
+      "python/gnss_gpu/urban_signal_sim.py": "5eb6613529364b336dded82d6458f08e2be090d15006ee97a1b3af937d23c516"
+    },
+    "candidate": {
+      "src/signal_sim/signal_sim.cu": "15eb73c0272dad248ed072327a9f09b4fd11b72b1b8db3675d87a380e6a14acf",
+      "include/gnss_gpu/signal_sim.h": "2788f41ff6175da2d6c0db5212470ab3759f4e350d91f977a532e48fc70fa945",
+      "python/gnss_gpu/_signal_sim_bindings.cpp": "524f9460570f0b39f4165f8fb6526af927e6c2c8f39ff661c2731d34ee82bcff",
+      "python/gnss_gpu/signal_sim.py": "f316c47c4a9a9359498e6905f8d6afa8046f7b631f876e258074d44d527780d4",
+      "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+    }
+  },
+  "extension_sha256": {
+    "baseline": "f667ec093a6b27295c23eb0b50ebf16a85e3b772af26fbbdd85cc0edb71a314e",
+    "candidate": "88c7bd9ea0c81beafccda555a7eaeb27d56c762287cc28a2897eb66b185a3ab5"
+  },
+  "measurement_report": {
+    "path": "benchmarks/signal_batch_gpu_20261012.json",
+    "sha256": "b79f96628f8302018affd8ec4e6048a2f1aa82892cd35f459d94f5d9f9b30ccb"
+  },
+  "baseline_functions": 5,
+  "candidate_functions": 8,
+  "unchanged_instruction_bodies": 5,
+  "replaced_functions": [],
+  "added_functions": [
+    "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb0ELi32ELb1EEEvT_PKiPfiiddfy",
+    "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb1ELi256ELb1EEEvT_PKiPfiiddfy",
+    "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb1ELi32ELb1EEEvT_PKiPfiiddfy"
+  ],
+  "functions": {
+    "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelIPNS_13DeviceChannelELb0ELi32EEEvT_PKiPfiiddfy": {
+      "candidate_name": "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelIPNS_13DeviceChannelELb0ELi32ELb0EEEvT_PKiPfiiddfy",
+      "identical": true,
+      "baseline_normalized_sass_sha256": "fc289d47934725156feb1c4fd95a47315860e889edcaceb065df9ed2f27550b1",
+      "candidate_normalized_sass_sha256": "fc289d47934725156feb1c4fd95a47315860e889edcaceb065df9ed2f27550b1"
+    },
+    "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelIPNS_13DeviceChannelELb1ELi256EEEvT_PKiPfiiddfy": {
+      "candidate_name": "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelIPNS_13DeviceChannelELb1ELi256ELb0EEEvT_PKiPfiiddfy",
+      "identical": true,
+      "baseline_normalized_sass_sha256": "1b5bb2f716d4660d30bc5fca1357222cc8a2351dfc70906bdac1804618ecdeb6",
+      "candidate_normalized_sass_sha256": "1b5bb2f716d4660d30bc5fca1357222cc8a2351dfc70906bdac1804618ecdeb6"
+    },
+    "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_14InlineChannelsELb1ELi32EEEvT_PKiPfiiddfy": {
+      "candidate_name": "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_14InlineChannelsELb1ELi32ELb0EEEvT_PKiPfiiddfy",
+      "identical": true,
+      "baseline_normalized_sass_sha256": "f39d775ca0fafb3681c96f5091dc0daffaafb10a3c8dff9a2a3dd9c80b4f8f0f",
+      "candidate_normalized_sass_sha256": "f39d775ca0fafb3681c96f5091dc0daffaafb10a3c8dff9a2a3dd9c80b4f8f0f"
+    },
+    "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a16composite_kernelEPKfPfiify": {
+      "candidate_name": "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a16composite_kernelEPKfPfiify",
+      "identical": true,
+      "baseline_normalized_sass_sha256": "2aea88f584f57130b5e76f0d5a71abc78e47ace0cc661ee9fb4c8298113d6344",
+      "candidate_normalized_sass_sha256": "2aea88f584f57130b5e76f0d5a71abc78e47ace0cc661ee9fb4c8298113d6344"
+    },
+    "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a23generate_channel_kernelEPfPKiididddfiS2_ididd": {
+      "candidate_name": "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a23generate_channel_kernelEPfPKiididddfiS2_ididd",
+      "identical": true,
+      "baseline_normalized_sass_sha256": "307e0097017a33d8a6841bb9812188ddae86a2a8be504cb369884bde0b1655ee",
+      "candidate_normalized_sass_sha256": "307e0097017a33d8a6841bb9812188ddae86a2a8be504cb369884bde0b1655ee"
+    }
+  },
+  "normalization": "cuobjdump instruction bodies; collapse whitespace only; retain offsets/encodings/attributes",
+  "resources": {
+    "baseline": {
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelIPNS_13DeviceChannelELb0ELi32EEEvT_PKiPfiiddfy": {
+        "registers": 44,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelIPNS_13DeviceChannelELb1ELi256EEEvT_PKiPfiiddfy": {
+        "registers": 42,
+        "stack_bytes": 0,
+        "static_shared_bytes": 2048,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_14InlineChannelsELb1ELi32EEEvT_PKiPfiiddfy": {
+        "registers": 32,
+        "stack_bytes": 0,
+        "static_shared_bytes": 256,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a16composite_kernelEPKfPfiify": {
+        "registers": 50,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a23generate_channel_kernelEPfPKiididddfiS2_ididd": {
+        "registers": 26,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      }
+    },
+    "candidate": {
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb0ELi32ELb1EEEvT_PKiPfiiddfy": {
+        "registers": 54,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb1ELi256ELb1EEEvT_PKiPfiiddfy": {
+        "registers": 51,
+        "stack_bytes": 0,
+        "static_shared_bytes": 2048,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb1ELi32ELb1EEEvT_PKiPfiiddfy": {
+        "registers": 51,
+        "stack_bytes": 0,
+        "static_shared_bytes": 256,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelIPNS_13DeviceChannelELb0ELi32ELb0EEEvT_PKiPfiiddfy": {
+        "registers": 44,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelIPNS_13DeviceChannelELb1ELi256ELb0EEEvT_PKiPfiiddfy": {
+        "registers": 42,
+        "stack_bytes": 0,
+        "static_shared_bytes": 2048,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_14InlineChannelsELb1ELi32ELb0EEEvT_PKiPfiiddfy": {
+        "registers": 32,
+        "stack_bytes": 0,
+        "static_shared_bytes": 256,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a16composite_kernelEPKfPfiify": {
+        "registers": 50,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a23generate_channel_kernelEPfPKiididddfiS2_ididd": {
+        "registers": 26,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      }
+    }
+  },
+  "patch": {
+    "path": "benchmarks/probes/signal_batch_20261012.patch",
+    "sha256": "ce1eb87c0b82a36cda3b95f4848b4abb091cde41a6882d13c343c06530674510",
+    "files": {
+      "src/signal_sim/signal_sim.cu": {
+        "baseline_sha256": "14f99c48fc1d6558ad34436f98c071b807556d6203f2a0362724717f0e99443a",
+        "candidate_sha256": "15eb73c0272dad248ed072327a9f09b4fd11b72b1b8db3675d87a380e6a14acf",
+        "reconstructs_crlf_bytes": true
+      },
+      "include/gnss_gpu/signal_sim.h": {
+        "baseline_sha256": "f8a4b39d9f6ccbdf3ab7d5dcc9ed4f8a6e0a1450833faea1cba67e6994f93a6b",
+        "candidate_sha256": "2788f41ff6175da2d6c0db5212470ab3759f4e350d91f977a532e48fc70fa945",
+        "reconstructs_crlf_bytes": true
+      },
+      "python/gnss_gpu/_signal_sim_bindings.cpp": {
+        "baseline_sha256": "ab3751ea92145105f94a9b1899dceaa84f724a1911cfada631b8f7a0b7fcf4e7",
+        "candidate_sha256": "524f9460570f0b39f4165f8fb6526af927e6c2c8f39ff661c2731d34ee82bcff",
+        "reconstructs_crlf_bytes": true
+      },
+      "python/gnss_gpu/signal_sim.py": {
+        "baseline_sha256": "6dd8228712bd81647b252742b9289fff5354a40d8e2bd8c3ccbebd24fe21e40b",
+        "candidate_sha256": "f316c47c4a9a9359498e6905f8d6afa8046f7b631f876e258074d44d527780d4",
+        "reconstructs_crlf_bytes": true
+      },
+      "python/gnss_gpu/urban_signal_sim.py": {
+        "baseline_sha256": "5eb6613529364b336dded82d6458f08e2be090d15006ee97a1b3af937d23c516",
+        "candidate_sha256": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7",
+        "reconstructs_crlf_bytes": true
+      }
+    }
+  },
+  "dispatch": "Explicit generate_epochs or opt-in urban batch_size; equal nSamples; max valid row channels <=32/<=256/above256; grid.y epoch<=65535; urban output chunks <=32MiB unless one epoch exceeds cap",
+  "semantics": "Local sample index/time and per-row noise seed; original FP64 phase and ordered float accumulation; one batch launch and D2H with packed descriptor/channel/NAV uploads; old single-epoch instructions retained",
+  "build_configuration": "CUDA 12.8 / MSVC Release / compute 7.5 / C++20 / no fast math",
+  "validation": {
+    "related_regression_tests": 1218,
+    "sanitizer_tests": 111,
+    "memcheck_errors": 0,
+    "leaked_bytes": 0,
+    "racecheck_hazards": 0,
+    "synccheck_errors": 0
+  }
+}

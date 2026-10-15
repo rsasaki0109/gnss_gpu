@@ -1,0 +1,144 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -4084,8 +4084,124 @@
+     cdf[tid] = __longlong_as_double(static_cast<long long>(bits));
+ }
+ 
++// Invert the exact monotone CDF bit spans directly. Positive finite FP64
++// values have the same order as their uint64 representations. Find the
++// first span whose final value reaches the unchanged FP64 threshold, then
++// compute the first element reaching it with exact integer ceiling division.
++__global__ void pfd_uniform_cdf_indices_kernel(int* indices, int target_count,
++    int source_count, const pfd_uniform_cdf_segment* segments,
++    const std::uint64_t* reciprocals, int count) {
++    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
++    if (tid >= target_count) return;
++    const double threshold = __ddiv_rn(__dadd_rn((double)tid, 0.5), (double)target_count);
++    const std::uint64_t threshold_bits = static_cast<std::uint64_t>(__double_as_longlong(threshold));
++    int low = 0;
++    int high = count;
++    while (low < high) {
++        const int mid = low + (high - low) / 2;
++        const pfd_uniform_cdf_segment span = segments[mid];
++        const std::uint64_t end = span.base + span.stride *
++            static_cast<std::uint64_t>(span.last - span.first);
++        if (end < threshold_bits) low = mid + 1;
++        else high = mid;
++    }
++    if (low == count) {
++        indices[tid] = source_count - 1;
++        return;
++    }
++    const pfd_uniform_cdf_segment span = segments[low];
++    int selected = span.first;
++    if (threshold_bits > span.base && span.stride != 0) {
++        const std::uint64_t distance = threshold_bits - span.base;
++        // reciprocal = ceil(2^64 / stride). Since distance < 2^52,
++        // its high product overestimates floor(distance/stride) by at
++        // most one. The exact product comparison yields the ceiling,
++        // including exact ties, without a per-particle integer division.
++        std::uint64_t offset = span.stride == 1 ? distance :
++            __umul64hi(distance, reciprocals[low]);
++        if (offset * span.stride < distance) ++offset;
++        selected += static_cast<int>(offset);
++    }
++    indices[tid] = selected;
++}
++
++static bool pfd_gather_from_uniform_cdf_inverse(PFDeviceState* target, const PFDeviceState* source,
++                                      double* cdf_output) {
++    if (target == source || source->n_particles < 65536) return false;
++    std::array<pfd_uniform_cdf_segment, 64> segments;
++    int count;
++    if (!pfd_uniform_cdf_segments(source->n_particles, segments, count)) return false;
++    const size_t segment_bytes = static_cast<size_t>(count) * sizeof(segments[0]);
++    const size_t capacity_bytes = static_cast<size_t>(target->n_particles) * sizeof(int);
++    if (segment_bytes > capacity_bytes) return false;
++    const size_t direct_bytes = segment_bytes + static_cast<size_t>(count) * sizeof(std::uint64_t);
++    const bool direct = direct_bytes <= capacity_bytes;
++    std::array<std::uint64_t, 64 * 4> metadata;
++    std::memcpy(metadata.data(), segments.data(), segment_bytes);
++    if (direct) {
++        const size_t offset = segment_bytes / sizeof(std::uint64_t);
++        for (int i = 0; i < count; ++i) {
++            const std::uint64_t stride = segments[i].stride;
++            metadata[offset + i] = stride > 1 ? (~0ULL) / stride + 1 : 0;
++        }
++    }
++    cudaPointerAttributes src_attributes, dst_attributes;
++    CUDA_CHECK(cudaPointerGetAttributes(&src_attributes, source->d_px));
++    CUDA_CHECK(cudaPointerGetAttributes(&dst_attributes, target->d_px));
++    int current_device;
++    CUDA_CHECK(cudaGetDevice(&current_device));
++    if (src_attributes.device != dst_attributes.device ||
++        dst_attributes.device != current_device) return false;
++    CUDA_CHECK(cudaStreamSynchronize(source->stream));
++    target->ess_cached = false;
++    target->covariance_uniform = false;
++    CUDA_CHECK(cudaMemcpyAsync(target->d_megopolis_idx_b, metadata.data(),
++        direct ? direct_bytes : segment_bytes, cudaMemcpyHostToDevice, target->stream));
++    if (cdf_output != nullptr || !direct) {
++        // Keep the original full-CDF path when the optional reciprocal table
++        // does not fit, preserving the existing small-target acceptance.
++        pfd_uniform_cdf_kernel<<<source->grid_size, BLOCK_SIZE, 0, target->stream>>>(
++            source->d_cdf, source->n_particles,
++            reinterpret_cast<const pfd_uniform_cdf_segment*>(target->d_megopolis_idx_b), count);
++        CUDA_CHECK_LAST();
++    }
++    const int N = target->n_particles;
++    if (direct) {
++        pfd_uniform_cdf_indices_kernel<<<target->grid_size, BLOCK_SIZE, 0, target->stream>>>(
++            target->d_megopolis_idx_a, N, source->n_particles,
++            reinterpret_cast<const pfd_uniform_cdf_segment*>(target->d_megopolis_idx_b),
++            reinterpret_cast<const std::uint64_t*>(
++                reinterpret_cast<const char*>(target->d_megopolis_idx_b) + segment_bytes), count);
++    } else {
++        pfd_pool_cdf_indices_kernel<<<target->grid_size, BLOCK_SIZE, 0, target->stream>>>(
++            source->d_cdf, source->n_particles, target->d_megopolis_idx_a, N);
++    }
++    CUDA_CHECK_LAST();
++    pfd_megopolis_gather_kernel<<<target->grid_size, BLOCK_SIZE, 0, target->stream>>>(
++        source->d_px, source->d_py, source->d_pz,
++        source->d_vx, source->d_vy, source->d_vz, source->d_vcov, source->d_pcb,
++        target->d_px, target->d_py, target->d_pz,
++        target->d_vx, target->d_vy, target->d_vz, target->d_vcov, target->d_pcb,
++        target->d_megopolis_idx_a, N, true);
++    CUDA_CHECK_LAST();
++    pfd_reset_weights_kernel<<<target->grid_size, BLOCK_SIZE, 0, target->stream>>>(target->d_log_weights, N);
++    CUDA_CHECK_LAST();
++    if (cdf_output != nullptr) {
++        CUDA_CHECK(cudaMemcpyAsync(cdf_output, source->d_cdf,
++            static_cast<size_t>(source->n_particles) * sizeof(double),
++            cudaMemcpyDeviceToHost, target->stream));
++    }
++    CUDA_CHECK(cudaStreamSynchronize(target->stream));
++    return true;
++}
++
+ bool pf_device_gather_from_uniform_cdf(PFDeviceState* target, const PFDeviceState* source,
+                                       double* cdf_output) {
++    // Small-source measurements did not show a stable whole-operation gain.
++    // Keep D201's original host/CDF/search body below this measured gate.
++    if (source->n_particles >= 262144) {
++        return pfd_gather_from_uniform_cdf_inverse(target, source, cdf_output);
++    }
+     if (target == source || source->n_particles < 65536) return false;
+     std::array<pfd_uniform_cdf_segment, 64> segments;
+     int count;
+--- a/include/gnss_gpu/pf_device.h
++++ b/include/gnss_gpu/pf_device.h
+@@ -276,8 +276,12 @@
+ bool pf_device_gather_from_cdf(PFDeviceState* target, const PFDeviceState* source,
+                                const double* cdf);
+ 
+-// Construct the exact sequential FP64 CDF of source_n copies of 1/source_n,
+-// then gather as above. Borrows source CDF and target ancestor-B scratch.
++// Select from the exact sequential FP64 CDF of source_n copies of 1/source_n
++// by integer span inversion for source_n >= 262144. Smaller sources keep
++// the original full-CDF/search path. Borrows target ancestor-B
++// scratch for spans and exact integer reciprocals. If the extra table does
++// not fit, use the original full-CDF path. Source CDF is otherwise materialized
++// only for optional CDF output.
+ // Declines before mutation for non-nearest CPU rounding, small source/target,
+ // in-place/cross-device/unsupported host. Optional output copies all CDF bits.
+ bool pf_device_gather_from_uniform_cdf(PFDeviceState* target, const PFDeviceState* source,

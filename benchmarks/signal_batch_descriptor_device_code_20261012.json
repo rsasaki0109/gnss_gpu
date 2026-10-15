@@ -1,0 +1,211 @@
+{
+  "schema_version": 1,
+  "adopted": false,
+  "reason": "No stable complete public/urban improvement; native 12-channel full-run median regressed; controls also vary",
+  "source_sha256": {
+    "baseline": {
+      "src/signal_sim/signal_sim.cu": "15eb73c0272dad248ed072327a9f09b4fd11b72b1b8db3675d87a380e6a14acf",
+      "include/gnss_gpu/signal_sim.h": "2788f41ff6175da2d6c0db5212470ab3759f4e350d91f977a532e48fc70fa945",
+      "python/gnss_gpu/_signal_sim_bindings.cpp": "524f9460570f0b39f4165f8fb6526af927e6c2c8f39ff661c2731d34ee82bcff",
+      "python/gnss_gpu/signal_sim.py": "f316c47c4a9a9359498e6905f8d6afa8046f7b631f876e258074d44d527780d4",
+      "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+    },
+    "candidate": {
+      "src/signal_sim/signal_sim.cu": "fa6ac472f42f2b496a42baa796bb295b305c7753d98b6caa7df37336dad59336",
+      "include/gnss_gpu/signal_sim.h": "2788f41ff6175da2d6c0db5212470ab3759f4e350d91f977a532e48fc70fa945",
+      "python/gnss_gpu/_signal_sim_bindings.cpp": "524f9460570f0b39f4165f8fb6526af927e6c2c8f39ff661c2731d34ee82bcff",
+      "python/gnss_gpu/signal_sim.py": "f316c47c4a9a9359498e6905f8d6afa8046f7b631f876e258074d44d527780d4",
+      "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+    }
+  },
+  "extension_sha256": {
+    "baseline": "88c7bd9ea0c81beafccda555a7eaeb27d56c762287cc28a2897eb66b185a3ab5",
+    "candidate": "e4c496d780b949d4060514c436a0eafcc8c53b22b7c009bbd02ed9934be726d5"
+  },
+  "baseline_functions": 8,
+  "candidate_functions": 9,
+  "unchanged_instruction_bodies": 8,
+  "added_functions": [
+    "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a37fused_signal_batch_descriptors_kernelENS_13BatchChannelsEPKiPfiiddfy"
+  ],
+  "resources": {
+    "baseline": {
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb0ELi32ELb1EEEvT_PKiPfiiddfy": {
+        "registers": 54,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb1ELi256ELb1EEEvT_PKiPfiiddfy": {
+        "registers": 51,
+        "stack_bytes": 0,
+        "static_shared_bytes": 2048,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb1ELi32ELb1EEEvT_PKiPfiiddfy": {
+        "registers": 51,
+        "stack_bytes": 0,
+        "static_shared_bytes": 256,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelIPNS_13DeviceChannelELb0ELi32ELb0EEEvT_PKiPfiiddfy": {
+        "registers": 44,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelIPNS_13DeviceChannelELb1ELi256ELb0EEEvT_PKiPfiiddfy": {
+        "registers": 42,
+        "stack_bytes": 0,
+        "static_shared_bytes": 2048,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_14InlineChannelsELb1ELi32ELb0EEEvT_PKiPfiiddfy": {
+        "registers": 32,
+        "stack_bytes": 0,
+        "static_shared_bytes": 256,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a16composite_kernelEPKfPfiify": {
+        "registers": 50,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a23generate_channel_kernelEPfPKiididddfiS2_ididd": {
+        "registers": 26,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      }
+    },
+    "candidate": {
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb0ELi32ELb1EEEvT_PKiPfiiddfy": {
+        "registers": 54,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb1ELi256ELb1EEEvT_PKiPfiiddfy": {
+        "registers": 51,
+        "stack_bytes": 0,
+        "static_shared_bytes": 2048,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb1ELi32ELb1EEEvT_PKiPfiiddfy": {
+        "registers": 51,
+        "stack_bytes": 0,
+        "static_shared_bytes": 256,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelIPNS_13DeviceChannelELb0ELi32ELb0EEEvT_PKiPfiiddfy": {
+        "registers": 44,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelIPNS_13DeviceChannelELb1ELi256ELb0EEEvT_PKiPfiiddfy": {
+        "registers": 42,
+        "stack_bytes": 0,
+        "static_shared_bytes": 2048,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_14InlineChannelsELb1ELi32ELb0EEEvT_PKiPfiiddfy": {
+        "registers": 32,
+        "stack_bytes": 0,
+        "static_shared_bytes": 256,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a16composite_kernelEPKfPfiify": {
+        "registers": 50,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a37fused_signal_batch_descriptors_kernelENS_13BatchChannelsEPKiPfiiddfy": {
+        "registers": 48,
+        "stack_bytes": 0,
+        "static_shared_bytes": 2816,
+        "local_bytes": 0
+      },
+      "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a23generate_channel_kernelEPfPKiididddfiS2_ididd": {
+        "registers": 26,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      }
+    }
+  },
+  "patch": {
+    "path": "benchmarks/probes/signal_batch_descriptor_rejected_20261012.patch",
+    "sha256": "31c7121d1d1c14b75b51d76aea75d2ba344b3c4e08c3a11f4996c89a04031898",
+    "files": {
+      "src/signal_sim/signal_sim.cu": {
+        "baseline_sha256": "15eb73c0272dad248ed072327a9f09b4fd11b72b1b8db3675d87a380e6a14acf",
+        "candidate_sha256": "fa6ac472f42f2b496a42baa796bb295b305c7753d98b6caa7df37336dad59336",
+        "reconstructs_crlf_bytes": true
+      }
+    }
+  },
+  "candidate_archive": "dist\\signal_batch_descriptor_rejected",
+  "validation_cases": 633,
+  "all_iq_and_metadata_bits_identical": true,
+  "measurement_reports": {
+    "benchmarks/signal_batch_descriptor_probe_20261012.json": "a1df61ded9d38845311c2bf223c493c7c1184deca03b4b73ce2b4930502c9db3",
+    "benchmarks/signal_batch_descriptor_rejected_20261012.json": "3ab6b79ba3cc8515ac3fa5538e4261dc3d8309b6f15b1c0d4f9b10f0dcd126dc"
+  },
+  "build_configuration": "CUDA 12.8 / MSVC Release / compute 7.5 / C++20 / no fast math",
+  "normalization": "cuobjdump instruction bodies; collapse whitespace only; retain offsets/encodings/attributes",
+  "functions": {
+    "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb0ELi32ELb1EEEvT_PKiPfiiddfy": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "073f728035cbc306e07d7d2dc47cd3279726e54ab55c0d5d71a4f21c97ce2eef",
+      "candidate_normalized_sass_sha256": "073f728035cbc306e07d7d2dc47cd3279726e54ab55c0d5d71a4f21c97ce2eef"
+    },
+    "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb1ELi256ELb1EEEvT_PKiPfiiddfy": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "ad0f8200be1f16ce39281a70245243395dbbc8453c61f63eccba24dabdbbdde0",
+      "candidate_normalized_sass_sha256": "ad0f8200be1f16ce39281a70245243395dbbc8453c61f63eccba24dabdbbdde0"
+    },
+    "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_13BatchChannelsELb1ELi32ELb1EEEvT_PKiPfiiddfy": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "ad0f8200be1f16ce39281a70245243395dbbc8453c61f63eccba24dabdbbdde0",
+      "candidate_normalized_sass_sha256": "ad0f8200be1f16ce39281a70245243395dbbc8453c61f63eccba24dabdbbdde0"
+    },
+    "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelIPNS_13DeviceChannelELb0ELi32ELb0EEEvT_PKiPfiiddfy": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "fc289d47934725156feb1c4fd95a47315860e889edcaceb065df9ed2f27550b1",
+      "candidate_normalized_sass_sha256": "fc289d47934725156feb1c4fd95a47315860e889edcaceb065df9ed2f27550b1"
+    },
+    "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelIPNS_13DeviceChannelELb1ELi256ELb0EEEvT_PKiPfiiddfy": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "1b5bb2f716d4660d30bc5fca1357222cc8a2351dfc70906bdac1804618ecdeb6",
+      "candidate_normalized_sass_sha256": "1b5bb2f716d4660d30bc5fca1357222cc8a2351dfc70906bdac1804618ecdeb6"
+    },
+    "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a19fused_signal_kernelINS_14InlineChannelsELb1ELi32ELb0EEEvT_PKiPfiiddfy": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "f39d775ca0fafb3681c96f5091dc0daffaafb10a3c8dff9a2a3dd9c80b4f8f0f",
+      "candidate_normalized_sass_sha256": "f39d775ca0fafb3681c96f5091dc0daffaafb10a3c8dff9a2a3dd9c80b4f8f0f"
+    },
+    "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a16composite_kernelEPKfPfiify": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "2aea88f584f57130b5e76f0d5a71abc78e47ace0cc661ee9fb4c8298113d6344",
+      "candidate_normalized_sass_sha256": "2aea88f584f57130b5e76f0d5a71abc78e47ace0cc661ee9fb4c8298113d6344"
+    },
+    "_ZN46_GLOBAL__N__925c3296_13_signal_sim_cu_2a63a00a23generate_channel_kernelEPfPKiididddfiS2_ididd": {
+      "identical": true,
+      "baseline_normalized_sass_sha256": "307e0097017a33d8a6841bb9812188ddae86a2a8be504cb369884bde0b1655ee",
+      "candidate_normalized_sass_sha256": "307e0097017a33d8a6841bb9812188ddae86a2a8be504cb369884bde0b1655ee"
+    }
+  },
+  "archive_files_sha256": {
+    "dist\\signal_batch_descriptor_rejected\\_gnss_gpu_signal_sim.cp312-win_amd64.pyd": "e4c496d780b949d4060514c436a0eafcc8c53b22b7c009bbd02ed9934be726d5",
+    "dist\\signal_batch_descriptor_rejected\\_signal_sim_bindings.cpp": "524f9460570f0b39f4165f8fb6526af927e6c2c8f39ff661c2731d34ee82bcff",
+    "dist\\signal_batch_descriptor_rejected\\bench_signal_batch_descriptor_compare.py": "5f95754d26be269d1dc45114f4e4070d6a6e792aa5cc84c297764623d03efc1d",
+    "dist\\signal_batch_descriptor_rejected\\signal_sim.cu": "fa6ac472f42f2b496a42baa796bb295b305c7753d98b6caa7df37336dad59336",
+    "dist\\signal_batch_descriptor_rejected\\signal_sim.h": "2788f41ff6175da2d6c0db5212470ab3759f4e350d91f977a532e48fc70fa945",
+    "dist\\signal_batch_descriptor_rejected\\signal_sim.py": "f316c47c4a9a9359498e6905f8d6afa8046f7b631f876e258074d44d527780d4",
+    "dist\\signal_batch_descriptor_rejected\\test_signal_batch_descriptor_cache.py": "ec56b1f45e10c3085d66837b88311cfef2d50bf738da4a8258b0a4e7d32053fd",
+    "dist\\signal_batch_descriptor_rejected\\urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+  }
+}

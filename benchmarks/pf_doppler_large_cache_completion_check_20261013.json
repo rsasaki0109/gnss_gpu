@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "verified": true,
+  "current_source_build_installed_match": true,
+  "comparison_cases": 14202,
+  "bit_identical_output_cases": 13770,
+  "matching_pr_input_rejections": 432,
+  "timed_conditions": 63,
+  "affected_large_timed_conditions_all_five_pairs_improve": 32,
+  "rounds": 5,
+  "repeats": 20,
+  "regression_tests": 2426,
+  "sanitizer_tests": 160,
+  "sanitizer_errors": 0,
+  "leaked_bytes": 0,
+  "unchanged_device_functions": 67,
+  "new_device_functions": 2,
+  "header_abi_unchanged": true,
+  "independent_retained_uncached_gpu_oracle": true,
+  "observation_owner_payload_and_shared_bytes_unchanged": true,
+  "bvh_parallel_mirror_chunks_retained": true,
+  "signal_batch_retained": true,
+  "rejected_wls_fusion_verified": true,
+  "quick_diagnostic_cases": 324,
+  "retained_artifacts": {
+    "benchmarks/bvh_parallel_mirror_chunks_gpu_20261013.json": "bcda1df440f75615bc2d869e031b039f3499d2318444243ef62b4e88d0215cd8",
+    "benchmarks/signal_batch_gpu_20261012.json": "b79f96628f8302018affd8ec4e6048a2f1aa82892cd35f459d94f5d9f9b30ccb"
+  },
+  "public_product_label_violations": 0,
+  "public_text_files_scanned": 2547,
+  "validation_log_sha256": {
+    "dist/pf_doppler_large_cache_regression_20261013.log": "1b0e1eccc3b19337e8800b74a80a450278edcc070764bce6427730145e32e266",
+    "dist/pf_doppler_large_cache_memcheck_console_20261013.log": "9318b47f298dcf8b21408a27e19f08dc76d37473131f34ca216609c2c1aa982c",
+    "dist/pf_doppler_large_cache_memcheck_20261013.log": "3ef41833580c07952672569330729d3a908130c68e7a514d721c5b0a3ddbd7d6",
+    "dist/pf_doppler_large_cache_racecheck_console_20261013.log": "698fbdb177582e2fab1303f2accca56626bf2f03496d85dcfbb28ffee8a158c8",
+    "dist/pf_doppler_large_cache_racecheck_20261013.log": "c69d09b31a66173faf98f267db57c7eb988035ce364fa0f0f184ffc933c541a7",
+    "dist/pf_doppler_large_cache_synccheck_console_20261013.log": "bbfff57ebca08fd719e4cba9df195aa702436f99c22c90bfb299197276af10d7",
+    "dist/pf_doppler_large_cache_synccheck_20261013.log": "adba10db853bd67fe9009b776eefe7b61210d2cbe3eee029ba6fa188978b5832"
+  },
+  "artifacts": {
+    "benchmarks/RESULTS.md": "a2cf4fa8c660e0616e46f4eeb476f342a063b713ed65dcf28cdc779163cb61ab",
+    "internal_docs/decisions.md": "cb7fc296968097af9a67dffd5bf3a9bb9dcd38ccb476a6ca05b9d6ff3a71914b",
+    "benchmarks/pf_doppler_large_cache_gpu_20261013.json": "9c8fa2c0d1ab475fb897d68813e863ecae19de59a5bb97ecda7a21512968c556",
+    "benchmarks/pf_doppler_large_cache_device_code_20261013.json": "55f065bfe24b7376d507f8457271f41b52873dbce602b0d7dd630946d663f3e7",
+    "benchmarks/bench_pf_doppler_large_cache_compare.py": "9181b38d8fb57168df24183c0b28313ed546862cb4fa6e9ed3c7403a58767753",
+    "tests/test_pf_doppler_large_cache.py": "0f42d39d518b90d5b35c0ff86a4d86573160634617945b94af998b5b1ddf15ae",
+    "tests/test_pf_doppler_weight_cache.py": "6d8f6a4b49f50fc74ccfc051ef23e0dd0ad2618520857e05380173fce99fc04a",
+    "benchmarks/probes/pf_doppler_large_cache_20261013.patch": "bc1e35bf9cdb7b140c2b978c46ddc12226955c3587ed6e44db96b7af8a4444d6",
+    "benchmarks/probes/pf_doppler_large_cache_oracle_20261013.patch": "928f648281f84e17f193e3fcec638585e262f805025a1dff2cf3ee3d925fcf8d",
+    "benchmarks/pf_doppler_wls_fusion_rejected_20261013.json": "76895edac6b43eefc275ed6811afe65fcc3cc912a8bc8f622ddfc8b83e17fbe6"
+  }
+}

@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "build_configuration": "CUDA 12.8 / MSVC Release / compute 7.5 / C++20 / no fast math",
+  "baseline_report": "benchmarks/bvh_build_gpu_20261012.json",
+  "measurement_report": "benchmarks/bvh_normal_gpu_20261012.json",
+  "normalization": "cuobjdump function bodies; collapse whitespace only; keep offsets/encodings/attributes",
+  "unchanged_functions": {
+    "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii": {
+      "candidate_function": "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii",
+      "baseline_normalized_sass_sha256": "ac36c4fea909ca1b067b131ead0e807a54c106ebf0c461356758cc5b6d6ab915",
+      "candidate_normalized_sass_sha256": "ac36c4fea909ca1b067b131ead0e807a54c106ebf0c461356758cc5b6d6ab915",
+      "identical": true
+    },
+    "_ZN8gnss_gpu27multipath_candidates_kernelEPKdS1_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiii": {
+      "candidate_function": "_ZN8gnss_gpu27multipath_candidates_kernelILb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalE",
+      "baseline_normalized_sass_sha256": "408d155aa283c7943a1d1c2dcfd97a24121d8a93f8c261d368ed0e1072888645",
+      "candidate_normalized_sass_sha256": "408d155aa283c7943a1d1c2dcfd97a24121d8a93f8c261d368ed0e1072888645",
+      "identical": true
+    },
+    "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii": {
+      "candidate_function": "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii",
+      "baseline_normalized_sass_sha256": "4e8ae452c1eba3d84027f7eb7600c65dfb6ae0fe2b67d9be0fc4dc54397c5f5a",
+      "candidate_normalized_sass_sha256": "4e8ae452c1eba3d84027f7eb7600c65dfb6ae0fe2b67d9be0fc4dc54397c5f5a",
+      "identical": true
+    },
+    "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii": {
+      "candidate_function": "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii",
+      "baseline_normalized_sass_sha256": "d12d67b93f6b9e8dad02078a0e2c703fae7520fee4c3d4a56a50d9dd0f6fed42",
+      "candidate_normalized_sass_sha256": "d12d67b93f6b9e8dad02078a0e2c703fae7520fee4c3d4a56a50d9dd0f6fed42",
+      "identical": true
+    },
+    "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii": {
+      "candidate_function": "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii",
+      "baseline_normalized_sass_sha256": "b0de8f220b77b975c30e402f1db956b9700d7cecd2f034ad234a83bf4e5e9087",
+      "candidate_normalized_sass_sha256": "b0de8f220b77b975c30e402f1db956b9700d7cecd2f034ad234a83bf4e5e9087",
+      "identical": true
+    }
+  },
+  "candidate_functions": {
+    "_ZN8gnss_gpu27multipath_candidates_kernelILb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalE": {
+      "normalized_sass_sha256": "408d155aa283c7943a1d1c2dcfd97a24121d8a93f8c261d368ed0e1072888645"
+    },
+    "_ZN8gnss_gpu27multipath_candidates_kernelILb1EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalE": {
+      "normalized_sass_sha256": "33ffeda1472ce61605d146684de9af42bbd8ad5af23e50777a8f97b84d13c370"
+    },
+    "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii": {
+      "normalized_sass_sha256": "ac36c4fea909ca1b067b131ead0e807a54c106ebf0c461356758cc5b6d6ab915"
+    },
+    "_ZN8gnss_gpu25reflection_normals_kernelEPKNS_8TriangleEPKiPNS_16ReflectionNormalEi": {
+      "normalized_sass_sha256": "b9822fdcd81636a436a075c4a8fc87689a25aa676632d84065675e5beba93617"
+    },
+    "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii": {
+      "normalized_sass_sha256": "4e8ae452c1eba3d84027f7eb7600c65dfb6ae0fe2b67d9be0fc4dc54397c5f5a"
+    },
+    "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii": {
+      "normalized_sass_sha256": "d12d67b93f6b9e8dad02078a0e2c703fae7520fee4c3d4a56a50d9dd0f6fed42"
+    },
+    "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii": {
+      "normalized_sass_sha256": "b0de8f220b77b975c30e402f1db956b9700d7cecd2f034ad234a83bf4e5e9087"
+    }
+  },
+  "resource_usage": {
+    "cached_candidates": {
+      "registers": 78,
+      "static_shared_bytes": 5120,
+      "stack_bytes": 0,
+      "local_bytes": 0
+    },
+    "uncached_candidates": {
+      "registers": 78,
+      "static_shared_bytes": 5120,
+      "stack_bytes": 0,
+      "local_bytes": 0
+    },
+    "normal_preparation": {
+      "registers": 36,
+      "static_shared_bytes": 0,
+      "stack_bytes": 0,
+      "local_bytes": 0
+    }
+  },
+  "memory": "32 bytes per visited triangle, lazy resident parallel reflections only; freed with scene",
+  "semantics": "FP64 GPU normal expression and strict cutoff retained; other reflection arithmetic unchanged",
+  "source_sha256": {
+    "baseline": {
+      "src/raytrace/bvh.cu": "cf844b53f494a647dc5996f2e553e682b4159ec84236f0a6f91795f8190f0094",
+      "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+      "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+      "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+      "python/gnss_gpu/urban_signal_sim.py": "5eb6613529364b336dded82d6458f08e2be090d15006ee97a1b3af937d23c516"
+    },
+    "candidate": {
+      "src/raytrace/bvh.cu": "2a479f38c1aaaf8e24c5f24d0d33d9bac171ed779a17f0f820a2781f6865b62a",
+      "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+      "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+      "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+      "python/gnss_gpu/urban_signal_sim.py": "5eb6613529364b336dded82d6458f08e2be090d15006ee97a1b3af937d23c516"
+    }
+  },
+  "measurement_report_sha256": "58d9a63cbe19648629b5c3d13d8bfe8d6c63a88575c822bfd64567504363023c",
+  "patch": {
+    "path": "benchmarks/probes/bvh_resident_normal_cache_20261012.patch",
+    "sha256": "2018bd063766b0b44eb77933faf01aa87aa3bed46be71347e55fd6d07132977e",
+    "baseline_source_sha256": "cf844b53f494a647dc5996f2e553e682b4159ec84236f0a6f91795f8190f0094",
+    "candidate_source_sha256": "2a479f38c1aaaf8e24c5f24d0d33d9bac171ed779a17f0f820a2781f6865b62a",
+    "reconstructs_measured_crlf_source": true
+  },
+  "extension_sha256": {
+    "baseline": "7c1358618c0fb5f1e745ba81cf83acca14af63dee06c2c7608f333eb43e30490",
+    "candidate": "94220317bd615cc20ada48035ac2d28aeb8805b7d55c8b6933542bb1984e3830"
+  },
+  "retained_components": [
+    "preceding PF Student-t build",
+    "preceding signal global-frequency build"
+  ]
+}

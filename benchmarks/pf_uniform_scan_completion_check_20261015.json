@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-15T00:09:11.884910+00:00",
+  "verified": true,
+  "adopted": true,
+  "source_build_installed_and_archive_match": true,
+  "measurement_report": {
+    "path": "benchmarks/pf_uniform_scan_gpu_20261015.json",
+    "sha256": "48a80b672078c9f615bece03ef83a60bad34f18fdeaefa4844e40edb4fc773fb"
+  },
+  "device_code_report": {
+    "path": "benchmarks/pf_uniform_scan_device_code_20261013.json",
+    "sha256": "e6946c81cfc8aac89a8f7c2548a3ad2686ce82ebc210adfb46a9349e41fdb412"
+  },
+  "bit_identical_cases": 6799,
+  "output_cases": 6719,
+  "matched_rejections": 80,
+  "candidate_records_fresh": 6799,
+  "baseline_frozen_prior_records_reused": 6587,
+  "baseline_additional_records_fresh": 212,
+  "stage_batch_conditions": 36,
+  "probe_conditions": 36,
+  "per_sample_pairs": 225,
+  "paired_full_state_snapshots": 45,
+  "traced_host_peak_cases": 6,
+  "new_test_cases_each": 137,
+  "candidate_handle_tests": 5,
+  "baseline_handle_tests_check_API_absence": true,
+  "regression_passed": 11269,
+  "fresh_pool_sanitizer_tests_each": 3148,
+  "fresh_cached_uncached_source_ESS_estimate_spread_probe_records_each": 12,
+  "additional_scratch_sanitizer_records_each": 12,
+  "memcheck_errors": 0,
+  "leaked_bytes": 0,
+  "racecheck_hazards": 0,
+  "synccheck_errors": 0,
+  "retained_GPU_bodies_and_resources": 84,
+  "new_GPU_kernels": 2,
+  "new_weight_validation_GPU_kernels_have_no_FP_arithmetic": true,
+  "no_weight_certificate_or_cache_every_element_checked": true,
+  "new_GPU_owner_buffers_or_allocation": false,
+  "original_FP64_CDF_threshold_search_all16_fields_and_ESS_cache_preserved": true,
+  "queued_source_target_reduction_scratch_and_rounding_policy_fallback_verified": true,
+  "held_inverse_and_initial_gates_preserved": true,
+  "retained_bvh_and_signal": {
+    "benchmarks/bvh_parallel_mirror_chunks_gpu_20261013.json": {
+      "sha256": "bcda1df440f75615bc2d869e031b039f3499d2318444243ef62b4e88d0215cd8",
+      "source_build_installed_match": true
+    },
+    "benchmarks/signal_wide_static_gpu_20261014.json": {
+      "sha256": "086e17293f916911ae63de639b76adf6371b15c514b535e9668fcb43b360d222",
+      "source_build_installed_match": true
+    }
+  },
+  "public_text_files_checked": 2768,
+  "public_device_model_names_absent": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  },
+  "long_real_data_position_error_curve_newly_evaluated": false
+}

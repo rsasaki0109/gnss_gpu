@@ -1,0 +1,40 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -684,6 +684,15 @@
+ 
+ static const int MULTIPATH_BLOCK_SIZE = 128;
+ 
++// Spread the independent candidates across the existing 256-block target.
++// A separate 32-tile cap left large meshes under-parallelized for <8 rays.
++// The total partial count remains <=256 for <=256 rays, then one per ray.
++static int multipath_tiles(int n_tri, int n_rays) {
++  return std::min((n_tri - 1) / MULTIPATH_BLOCK_SIZE + 1,
++                  std::max(1, 256 / n_rays));
++}
++
++
+ template <bool CACHED_NORMALS, bool SHARED_MIRRORS>
+ __global__ void multipath_candidates_kernel(const double* rx_ecef,
+                                             const double* sat_ecef,
+@@ -919,9 +928,7 @@
+       order.upload(host_order.data(), host_order.size());
+       std::vector<int>().swap(host_order);
+     }
+-    int tiles = std::min(32, std::min(
+-        (n_order + MULTIPATH_BLOCK_SIZE - 1) / MULTIPATH_BLOCK_SIZE,
+-        std::max(1, 256 / total)));
++    int tiles = multipath_tiles(n_order, total);
+     partial.reserve((size_t)total * tiles);
+     // Prepare only for the parallel reflection path. LOS-only, small meshes and
+     // serial fallback batches do not allocate or launch normal preparation.
+@@ -1157,9 +1164,7 @@
+   // ray-by-triangle output buffer and limits scratch to at most 4096 winners.
+   bool parallel = total > 0 && total <= 4096 && total_tris >= 512 &&
+       multipath_triangle_order(bvh, n_nodes, total_tris, triangle_order);
+-  int tiles = parallel ? std::min(32, std::min(
+-      ((int)triangle_order.size() + MULTIPATH_BLOCK_SIZE - 1) / MULTIPATH_BLOCK_SIZE,
+-      std::max(1, 256 / total))) : 1;
++  int tiles = parallel ? multipath_tiles((int)triangle_order.size(), total) : 1;
+   BVHNode* d_bvh = nullptr;
+   int* d_order = nullptr;
+   MultipathCandidate* d_partial = nullptr;

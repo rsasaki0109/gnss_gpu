@@ -1,0 +1,37 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -2724,7 +2724,10 @@
+     }
+ 
+     int N = state->n_particles;
+-    int grid = state->grid_size;
++    // The bounded geometry caches use a larger register footprint. Smaller
++    // blocks pack their warps more tightly without changing per-particle math.
++    int block = n_sat <= 32 ? 64 : BLOCK_SIZE;
++    int grid = (N + block - 1) / block;
+ 
+     int total_doubles = n_sat * 8;
+     size_t total_bytes = (size_t)total_doubles * sizeof(double);
+@@ -2745,19 +2748,19 @@
+     // The measurement geometry can now produce distinct particle covariances.
+     state->covariance_uniform = false;
+     if (n_sat <= 16) {
+-        pfd_doppler_kf_update_kernel<16><<<grid, BLOCK_SIZE, smem, state->stream>>>(
++        pfd_doppler_kf_update_kernel<16><<<grid, block, smem, state->stream>>>(
+             state->d_px, state->d_py, state->d_pz,
+             state->d_vx, state->d_vy, state->d_vz, state->d_vcov,
+             state->d_obs_scratch, state->d_log_weights,
+             N, n_sat, wavelength_m, sigma_mps);
+     } else if (n_sat <= 32) {
+-        pfd_doppler_kf_update_kernel<32><<<grid, BLOCK_SIZE, smem, state->stream>>>(
++        pfd_doppler_kf_update_kernel<32><<<grid, block, smem, state->stream>>>(
+             state->d_px, state->d_py, state->d_pz,
+             state->d_vx, state->d_vy, state->d_vz, state->d_vcov,
+             state->d_obs_scratch, state->d_log_weights,
+             N, n_sat, wavelength_m, sigma_mps);
+     } else {
+-        pfd_doppler_kf_update_kernel<0><<<grid, BLOCK_SIZE, smem, state->stream>>>(
++        pfd_doppler_kf_update_kernel<0><<<grid, block, smem, state->stream>>>(
+             state->d_px, state->d_py, state->d_pz,
+             state->d_vx, state->d_vy, state->d_vz, state->d_vcov,
+             state->d_obs_scratch, state->d_log_weights,

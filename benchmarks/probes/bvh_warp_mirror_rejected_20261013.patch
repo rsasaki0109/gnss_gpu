@@ -1,0 +1,127 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -667,6 +667,105 @@
+   reflection_points[tid * 3 + 2] = best_refl[2];
+ }
+ 
++// Aligned satellite groups share identical receiver mirror work within each warp.
++__global__ void multipath_warp_mirror_kernel(const double* rx_ecef,
++                                            const double* sat_ecef,
++                                            const int* triangle_order,
++                                            const ReflectionNormal* normals,
++                                            const Triangle* tris,
++                                            double* reflection_points,
++                                            double* excess_delays,
++                                            int n_epoch, int n_sat, int n_tri) {
++  int tid = blockIdx.x * blockDim.x + threadIdx.x;
++  int total = n_epoch * n_sat;
++  if (tid >= total) return;
++
++  int eid = tid / n_sat;
++  int sid = tid % n_sat;
++
++  double rx[3] = {rx_ecef[eid * 3 + 0],
++                   rx_ecef[eid * 3 + 1],
++                   rx_ecef[eid * 3 + 2]};
++  int sat_offset = (eid * n_sat + sid) * 3;
++  double sat[3] = {sat_ecef[sat_offset + 0],
++                    sat_ecef[sat_offset + 1],
++                    sat_ecef[sat_offset + 2]};
++
++  bool valid = isfinite(rx[0]) && isfinite(rx[1]) && isfinite(rx[2]) &&
++      isfinite(sat[0]) && isfinite(sat[1]) && isfinite(sat[2]);
++  // Dispatch guarantees a whole number of warps per epoch. Ballot before
++  // invalid rays exit, so every surviving lane uses the same participation set.
++  unsigned mask = __ballot_sync(0xffffffffu, valid);
++  if (!valid) {
++    excess_delays[tid] = 0.0;
++    reflection_points[tid * 3 + 0] = 0.0;
++    reflection_points[tid * 3 + 1] = 0.0;
++    reflection_points[tid * 3 + 2] = 0.0;
++    return;
++  }
++
++  double d_rx_sat = sqrt((rx[0] - sat[0]) * (rx[0] - sat[0]) +
++                          (rx[1] - sat[1]) * (rx[1] - sat[1]) +
++                          (rx[2] - sat[2]) * (rx[2] - sat[2]));
++
++  int leader = __ffs(mask) - 1;
++  bool is_leader = (threadIdx.x & 31) == leader;
++  double best_delay = 0.0;
++  double best_refl[3] = {0.0, 0.0, 0.0};
++  bool found = false;
++
++  // The owner captured the exact right-first traversal, including the
++  // legacy stack limit. Equal delays still retain the first visited triangle.
++  for (int ordinal = 0; ordinal < n_tri; ++ordinal) {
++    const Triangle& tri = tris[triangle_order[ordinal]];
++    const ReflectionNormal& normal = normals[ordinal];
++    if (!normal.valid) continue;
++    double mirror[3] = {0.0, 0.0, 0.0};
++    if (is_leader) {
++      double n[3] = {normal.value[0], normal.value[1], normal.value[2]};
++      double dv[3] = {rx[0] - tri.v0[0], rx[1] - tri.v0[1], rx[2] - tri.v0[2]};
++      double d = dv[0] * n[0] + dv[1] * n[1] + dv[2] * n[2];
++      mirror[0] = rx[0] - 2.0 * d * n[0];
++      mirror[1] = rx[1] - 2.0 * d * n[1];
++      mirror[2] = rx[2] - 2.0 * d * n[2];
++    }
++    mirror[0] = __shfl_sync(mask, mirror[0], leader);
++    mirror[1] = __shfl_sync(mask, mirror[1], leader);
++    mirror[2] = __shfl_sync(mask, mirror[2], leader);
++
++    double dir[3] = {sat[0] - mirror[0], sat[1] - mirror[1], sat[2] - mirror[2]};
++    double dir_len = sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
++    if (dir_len < 1e-15) continue;
++    dir[0] /= dir_len; dir[1] /= dir_len; dir[2] /= dir_len;
++
++    double t;
++    if (!mt_intersect(mirror, dir, tri.v0, tri.v1, tri.v2, t)) continue;
++
++    double refl[3] = {mirror[0] + t * dir[0],
++                       mirror[1] + t * dir[1],
++                       mirror[2] + t * dir[2]};
++
++    double d_rx_refl = sqrt((rx[0] - refl[0]) * (rx[0] - refl[0]) +
++                             (rx[1] - refl[1]) * (rx[1] - refl[1]) +
++                             (rx[2] - refl[2]) * (rx[2] - refl[2]));
++    double d_refl_sat = sqrt((refl[0] - sat[0]) * (refl[0] - sat[0]) +
++                              (refl[1] - sat[1]) * (refl[1] - sat[1]) +
++                              (refl[2] - sat[2]) * (refl[2] - sat[2]));
++    double excess = (d_rx_refl + d_refl_sat) - d_rx_sat;
++
++    if (excess > 0.0 && (!found || excess < best_delay)) {
++      best_delay = excess;
++      best_refl[0] = refl[0]; best_refl[1] = refl[1]; best_refl[2] = refl[2];
++      found = true;
++    }
++  }
++
++  excess_delays[tid] = best_delay;
++  reflection_points[tid * 3 + 0] = best_refl[0];
++  reflection_points[tid * 3 + 1] = best_refl[1];
++  reflection_points[tid * 3 + 2] = best_refl[2];
++}
++
+ struct ReflectionMirror {
+   double point[3];
+ };
+@@ -1063,9 +1162,15 @@
+                                   MULTIPATH_BLOCK_SIZE>>>(
+           partial.data, points.data, delays.data, total, tiles);
+     } else if (cached_serial) {
+-      multipath_cached_serial_kernel<<<(total + 255) / 256, 256>>>(
+-          rx.data, sat.data, order.data, normals.data, triangles.data,
+-          points.data, delays.data, n_epoch, n_sat, n_order);
++      if (n_order >= 8192 && n_sat % 32 == 0) {
++        multipath_warp_mirror_kernel<<<(total + 255) / 256, 256>>>(
++            rx.data, sat.data, order.data, normals.data, triangles.data,
++            points.data, delays.data, n_epoch, n_sat, n_order);
++      } else {
++        multipath_cached_serial_kernel<<<(total + 255) / 256, 256>>>(
++            rx.data, sat.data, order.data, normals.data, triangles.data,
++            points.data, delays.data, n_epoch, n_sat, n_order);
++      }
+     } else {
+       multipath_bvh_batch_kernel<<<(total + 255) / 256, 256>>>(
+           rx.data, sat.data, nodes.data, triangles.data, points.data, delays.data,

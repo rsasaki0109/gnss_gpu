@@ -1,0 +1,20 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -705,9 +705,16 @@
+     if (threadIdx.x == 0) partial[blockIdx.x] = best;
+     return;
+   }
+-  double d_rx_sat = sqrt((rx[0] - sat[0]) * (rx[0] - sat[0]) +
++  // All threads evaluate independent triangles for this same ray. Preserve
++  // the FP64 expression, but calculate its distance only once on the GPU.
++  __shared__ double ray_distance;
++  if (threadIdx.x == 0) {
++    ray_distance = sqrt((rx[0] - sat[0]) * (rx[0] - sat[0]) +
+                           (rx[1] - sat[1]) * (rx[1] - sat[1]) +
+                           (rx[2] - sat[2]) * (rx[2] - sat[2]));
++  }
++  __syncthreads();
++  double d_rx_sat = ray_distance;
+   for (int ordinal = tile * blockDim.x + threadIdx.x;
+        ordinal < n_tri; ordinal += tiles * blockDim.x) {
+     MultipathCandidate candidate = {};

@@ -111,7 +111,7 @@ CMC/FDE, and elevation-adaptive variance.
 CUDA MultiSD exercised the forced GPU solver successfully. CPU/GPU acceptance
 and integer decisions were identical, the maximum ECEF delta in the checked
 parity artifact was 3.4e-9 m, and two repeated GPU smoke runs produced exactly
-the same summary. Performance promotion is not met: on this GTX 1660 Ti the
+the same summary. Performance promotion is not met: on this NVIDIA CUDA GPU the
 measured GPU p95 was 34.16 ms versus 28.65 ms CPU for the small batch (1.19x
 slower), and a 300-epoch audit measured 61.67 ms versus 12.82 ms (4.81x
 slower). CUDA remains an opt-in parity-checked backend, not a claimed speedup.

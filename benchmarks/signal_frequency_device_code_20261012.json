@@ -1,0 +1,91 @@
+{
+  "normalization": "whitespace-normalized cuobjdump --dump-sass device function bodies",
+  "unchanged_device_functions": [
+    "single",
+    "noise_only",
+    "global"
+  ],
+  "function_sha256": {
+    "baseline": {
+      "global": "fc289d47934725156feb1c4fd95a47315860e889edcaceb065df9ed2f27550b1",
+      "inline": "6c10d33cde55952fcb8c0920e5005c719b4425b323c8c4b128e980a4c406c944",
+      "noise_only": "2aea88f584f57130b5e76f0d5a71abc78e47ace0cc661ee9fb4c8298113d6344",
+      "single": "307e0097017a33d8a6841bb9812188ddae86a2a8be504cb369884bde0b1655ee"
+    },
+    "candidate": {
+      "global": "fc289d47934725156feb1c4fd95a47315860e889edcaceb065df9ed2f27550b1",
+      "inline": "f39d775ca0fafb3681c96f5091dc0daffaafb10a3c8dff9a2a3dd9c80b4f8f0f",
+      "noise_only": "2aea88f584f57130b5e76f0d5a71abc78e47ace0cc661ee9fb4c8298113d6344",
+      "single": "307e0097017a33d8a6841bb9812188ddae86a2a8be504cb369884bde0b1655ee"
+    }
+  },
+  "baseline_reference": "signal_workspace_gpu_20261012.json",
+  "candidate_reference": "signal_frequency_gpu_20261012.json",
+  "source_patch": {
+    "path": "benchmarks\\probes\\signal_frequency_cache_20261012.patch",
+    "sha256": "89272a5bc15e607192e4484e2ce23a707728d1fb32adf0598ad3e856c2648e27",
+    "reconstructs_measured_crlf_source": true
+  },
+  "rejected_modulo": {
+    "reference": "signal_modulo_rejected_20261012.json",
+    "source_patch": {
+      "path": "benchmarks\\probes\\signal_modulo_rejected_20261012.patch",
+      "sha256": "b8ff55ab2d9d9b2c25d01569635de6748626bfcbf0428115be195826d2e4348f",
+      "reconstructs_measured_crlf_source": true
+    }
+  },
+  "resources": {
+    "baseline": {
+      "global": {
+        "reg": 44,
+        "stack": 0,
+        "shared": 0,
+        "local": 0
+      },
+      "inline": {
+        "reg": 32,
+        "stack": 0,
+        "shared": 0,
+        "local": 0
+      },
+      "noise_only": {
+        "reg": 50,
+        "stack": 0,
+        "shared": 0,
+        "local": 0
+      },
+      "single": {
+        "reg": 26,
+        "stack": 0,
+        "shared": 0,
+        "local": 0
+      }
+    },
+    "candidate": {
+      "global": {
+        "reg": 44,
+        "stack": 0,
+        "shared": 0,
+        "local": 0
+      },
+      "inline": {
+        "reg": 32,
+        "stack": 0,
+        "shared": 256,
+        "local": 0
+      },
+      "noise_only": {
+        "reg": 50,
+        "stack": 0,
+        "shared": 0,
+        "local": 0
+      },
+      "single": {
+        "reg": 26,
+        "stack": 0,
+        "shared": 0,
+        "local": 0
+      }
+    }
+  }
+}

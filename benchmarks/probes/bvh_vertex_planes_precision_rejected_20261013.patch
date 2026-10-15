@@ -1,0 +1,170 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -770,6 +770,20 @@
+   return true;
+ }
+ 
++// Copy immutable vertices into traversal-ordered coordinate planes. No
++// arithmetic is applied to these FP64 values; each lane reads one ordinal.
++__global__ void reflection_vertex_planes_kernel(const Triangle* tris,
++    const int* order, double* planes, int count) {
++  int ordinal = blockIdx.x * blockDim.x + threadIdx.x;
++  if (ordinal >= count) return;
++  const Triangle& tri = tris[order[ordinal]];
++  for (int d = 0; d < 3; ++d) {
++    planes[(size_t)d * count + ordinal] = tri.v0[d];
++    planes[(size_t)(3 + d) * count + ordinal] = tri.v1[d];
++    planes[(size_t)(6 + d) * count + ordinal] = tri.v2[d];
++  }
++}
++
+ static const int MULTIPATH_BLOCK_SIZE = 128;
+ 
+ template <bool CACHED_NORMALS, bool SHARED_MIRRORS>
+@@ -806,6 +820,60 @@
+     if constexpr (SHARED_MIRRORS) mirror = mirrors + (size_t)eid * n_tri + ordinal;
+     if (multipath_candidate<CACHED_NORMALS, SHARED_MIRRORS>(
+             rx, sat, d_rx_sat, tris[triangle_order[ordinal]], candidate, normal, mirror) &&
++        better_multipath(candidate, best)) best = candidate;
++  }
++  __shared__ MultipathCandidate winners[MULTIPATH_BLOCK_SIZE];
++  winners[threadIdx.x] = best;
++  __syncthreads();
++  for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
++    if (threadIdx.x < stride &&
++        better_multipath(winners[threadIdx.x + stride], winners[threadIdx.x])) {
++      winners[threadIdx.x] = winners[threadIdx.x + stride];
++    }
++    __syncthreads();
++  }
++  if (threadIdx.x == 0) partial[blockIdx.x] = winners[0];
++}
++
++template <bool SHARED_MIRRORS>
++__global__ void multipath_vertex_planes_kernel(const double* rx_ecef,
++                                            const double* sat_ecef,
++                                            const double* planes,
++                                            MultipathCandidate* partial,
++                                            int n_sat, int n_tri, int tiles,
++                                            const ReflectionNormal* normals,
++                                            const ReflectionMirror* mirrors) {
++  int ray = blockIdx.x / tiles;
++  int tile = blockIdx.x % tiles;
++  int eid = ray / n_sat;
++  double rx[3] = {rx_ecef[eid * 3], rx_ecef[eid * 3 + 1], rx_ecef[eid * 3 + 2]};
++  double sat[3] = {sat_ecef[ray * 3], sat_ecef[ray * 3 + 1], sat_ecef[ray * 3 + 2]};
++  MultipathCandidate best = {};
++  best.order = -1;
++  if (!isfinite(rx[0]) || !isfinite(rx[1]) || !isfinite(rx[2]) ||
++      !isfinite(sat[0]) || !isfinite(sat[1]) || !isfinite(sat[2])) {
++    if (threadIdx.x == 0) partial[blockIdx.x] = best;
++    return;
++  }
++  double d_rx_sat = sqrt((rx[0] - sat[0]) * (rx[0] - sat[0]) +
++                          (rx[1] - sat[1]) * (rx[1] - sat[1]) +
++                          (rx[2] - sat[2]) * (rx[2] - sat[2]));
++  for (int ordinal = tile * blockDim.x + threadIdx.x;
++       ordinal < n_tri; ordinal += tiles * blockDim.x) {
++    MultipathCandidate candidate = {};
++    candidate.order = ordinal;
++    const ReflectionNormal* normal = normals + ordinal;
++    if (!normal->valid) continue;
++    Triangle tri;
++    for (int d = 0; d < 3; ++d) {
++      tri.v0[d] = planes[(size_t)d * n_tri + ordinal];
++      tri.v1[d] = planes[(size_t)(3 + d) * n_tri + ordinal];
++      tri.v2[d] = planes[(size_t)(6 + d) * n_tri + ordinal];
++    }
++    const ReflectionMirror* mirror = nullptr;
++    if constexpr (SHARED_MIRRORS) mirror = mirrors + (size_t)eid * n_tri + ordinal;
++    if (multipath_candidate<true, SHARED_MIRRORS>(
++            rx, sat, d_rx_sat, tri, candidate, normal, mirror) &&
+         better_multipath(candidate, best)) best = candidate;
+   }
+   __shared__ MultipathCandidate winners[MULTIPATH_BLOCK_SIZE];
+@@ -963,6 +1031,9 @@
+   DeviceBuffer<ReflectionMirror> mirrors;
+   bool mirrors_active = false;
+   bool cached_serial = false;
++  DeviceBuffer<double> vertex_planes;
++  bool vertex_planes_ready = false;
++  bool vertex_planes_active = false;
+ 
+   ~Impl() {
+     int previous = 0;
+@@ -970,7 +1041,7 @@
+     if (!known || previous != device) cudaSetDevice(device);
+     nodes.reset(); triangles.reset(); order.reset(); los.reset();
+     rx.reset(); sat.reset(); points.reset(); delays.reset(); partial.reset(); normals.reset();
+-    mirrors.reset();
++    mirrors.reset(); vertex_planes.reset();
+     if (known && previous != device) cudaSetDevice(previous);
+   }
+ 
+@@ -1000,6 +1071,7 @@
+   int prepare_multipath(int total, int n_epoch, int n_sat) {
+     mirrors_active = false;
+     cached_serial = false;
++    vertex_planes_active = false;
+     points.reserve((size_t)total * 3);
+     delays.reserve((size_t)total);
+     if (!ordered) return 0;
+@@ -1043,6 +1115,17 @@
+     mirrors_active = n_order >= 8192 && n_sat >= 16 &&
+         mirror_count <= (32u * 1024u * 1024u) / sizeof(ReflectionMirror);
+     if (mirrors_active) mirrors.reserve(mirror_count);
++    // Bound this optional immutable copy to 8 MiB. Larger meshes and serial
++    // batches keep their original triangle loads and original math.
++    vertex_planes_active = n_order >= 8192 &&
++        (size_t)n_order <= (8u * 1024u * 1024u) / (9 * sizeof(double));
++    if (vertex_planes_active && !vertex_planes_ready) {
++      vertex_planes.reserve((size_t)n_order * 9);
++      reflection_vertex_planes_kernel<<<(n_order + 255) / 256, 256>>>(
++          triangles.data, order.data, vertex_planes.data, n_order);
++      CUDA_CHECK_LAST();
++      vertex_planes_ready = true;
++    }
+     return tiles;
+   }
+ 
+@@ -1053,13 +1136,25 @@
+         reflection_mirrors_kernel<<<dim3((n_order + 255) / 256, n_epoch), 256>>>(
+             rx.data, triangles.data, order.data, normals.data, mirrors.data, n_order);
+         CUDA_CHECK_LAST();
+-        multipath_candidates_kernel<true, true><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
+-            rx.data, sat.data, triangles.data, order.data, partial.data, n_sat, n_order, tiles,
+-            normals.data, mirrors.data);
++        if (vertex_planes_active) {
++          multipath_vertex_planes_kernel<true><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
++              rx.data, sat.data, vertex_planes.data, partial.data, n_sat, n_order, tiles,
++              normals.data, mirrors.data);
++        } else {
++          multipath_candidates_kernel<true, true><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
++              rx.data, sat.data, triangles.data, order.data, partial.data, n_sat, n_order, tiles,
++              normals.data, mirrors.data);
++        }
+       } else {
+-        multipath_candidates_kernel<true, false><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
+-            rx.data, sat.data, triangles.data, order.data, partial.data, n_sat, n_order, tiles,
+-            normals.data, nullptr);
++        if (vertex_planes_active) {
++          multipath_vertex_planes_kernel<false><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
++              rx.data, sat.data, vertex_planes.data, partial.data, n_sat, n_order, tiles,
++              normals.data, nullptr);
++        } else {
++          multipath_candidates_kernel<true, false><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
++              rx.data, sat.data, triangles.data, order.data, partial.data, n_sat, n_order, tiles,
++              normals.data, nullptr);
++        }
+       }
+       CUDA_CHECK_LAST();
+       multipath_finalize_kernel<<<(total + MULTIPATH_BLOCK_SIZE - 1) / MULTIPATH_BLOCK_SIZE,
+@@ -1135,7 +1230,7 @@
+       (s.rx.capacity + s.sat.capacity + s.points.capacity + s.delays.capacity) * sizeof(double) +
+       s.partial.capacity * sizeof(MultipathCandidate) +
+       s.normals.capacity * sizeof(ReflectionNormal) +
+-      s.mirrors.capacity * sizeof(ReflectionMirror);
++      s.mirrors.capacity * sizeof(ReflectionMirror) + s.vertex_planes.capacity * sizeof(double);
+ }
+ 
+ void DeviceBVH::check_los(const double* h_rx, const double* h_sat, int* h_los, int n_sat) {

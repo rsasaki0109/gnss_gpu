@@ -1,0 +1,93 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -733,6 +733,7 @@
+ 
+ // Joint DD pseudorange + carrier update. Sharing the range geometry avoids a
+ // second kernel launch and the duplicate square roots in the common path.
++template<bool CommonReference>
+ __global__ void pfd_weight_dd_joint_kernel(
+     const double* px, const double* py, const double* pz,
+     const double* dd_data,
+@@ -765,6 +766,14 @@
+     double x = px[tid];
+     double y = py[tid];
+     double z = pz[tid];
++
++    double common_ref_range = 0.0;
++    if constexpr (CommonReference) {
++        double dx_ref = x - s_ref[0];
++        double dy_ref = y - s_ref[1];
++        double dz_ref = z - s_ref[2];
++        common_ref_range = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
++    }
+     bool gate_pr = nlos_threshold_m > 0.0;
+     bool gate_cp = nlos_threshold_cycles > 0.0;
+ 
+@@ -779,7 +788,8 @@
+             double dy_ref = y - s_ref[d * 3 + 1];
+             double dz_ref = z - s_ref[d * 3 + 2];
+             double r_k = sqrt(dx_k * dx_k + dy_k * dy_k + dz_k * dz_k);
+-            double r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
++            double r_ref = CommonReference ? common_ref_range
++                : sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
+             double dd_range = r_k - r_ref - s_br_k[d] + s_br_ref[d];
+             if (gate_pr && fabs(s_dd_pr[d] - dd_range) <= nlos_threshold_m) {
+                 kept_pr++;
+@@ -810,7 +820,8 @@
+         double dy_ref = y - s_ref[d * 3 + 1];
+         double dz_ref = z - s_ref[d * 3 + 2];
+         double r_k = sqrt(dx_k * dx_k + dy_k * dy_k + dz_k * dz_k);
+-        double r_ref = sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
++        double r_ref = CommonReference ? common_ref_range
++                : sqrt(dx_ref * dx_ref + dy_ref * dy_ref + dz_ref * dz_ref);
+         double dd_range = r_k - r_ref - s_br_k[d] + s_br_ref[d];
+         double pr_residual = s_dd_pr[d] - dd_range;
+         if (!gate_pr || fabs(pr_residual) <= nlos_threshold_m) {
+@@ -824,7 +835,12 @@
+         if (!gate_cp || fabs(afv) <= nlos_threshold_cycles) {
+             cp_log_w += huber_cp
+                 ? -pfd_weighted_huber_cost(afv, sigma_cycles, s_ws[d], huber_carrier_k)
+-                : -0.5 * s_ws[d] * afv * afv * inv_cp_sigma2;
++                // The preceding joint kernel rounds this final multiply
++                // before its CP accumulator add, including odd loop tails.
++                // Keep that rounding when geometry reuse changes scheduling.
++                : (CommonReference
++                    ? __dmul_rn(-0.5 * s_ws[d] * afv * afv, inv_cp_sigma2)
++                    : -0.5 * s_ws[d] * afv * afv * inv_cp_sigma2);
+         }
+     }
+     log_weights[tid] = pr_log_w + cp_log_w;
+@@ -2774,14 +2790,25 @@
+     CUDA_CHECK(cudaMemcpyAsync(
+         state->d_obs_scratch, h_buf, total_bytes,
+         cudaMemcpyHostToDevice, state->stream));
+-    pfd_weight_dd_joint_kernel<<<
+-        grid, BLOCK_SIZE, (size_t)total_doubles * sizeof(double), state->stream>>>(
+-        state->d_px, state->d_py, state->d_pz,
+-        state->d_obs_scratch, state->d_log_weights,
+-        N, n_dd, sigma_pr, sigma_cycles,
+-        per_particle_nlos_threshold_m, per_particle_nlos_threshold_cycles,
+-        per_particle_huber, per_particle_huber_dd_pr_k,
+-        per_particle_huber_dd_carrier_k);
++    if (pfd_has_common_dd_reference(ref_ecef, n_dd)) {
++        pfd_weight_dd_joint_kernel<true><<<
++            grid, BLOCK_SIZE, (size_t)total_doubles * sizeof(double), state->stream>>>(
++            state->d_px, state->d_py, state->d_pz,
++            state->d_obs_scratch, state->d_log_weights,
++            N, n_dd, sigma_pr, sigma_cycles,
++            per_particle_nlos_threshold_m, per_particle_nlos_threshold_cycles,
++            per_particle_huber, per_particle_huber_dd_pr_k,
++            per_particle_huber_dd_carrier_k);
++    } else {
++        pfd_weight_dd_joint_kernel<false><<<
++            grid, BLOCK_SIZE, (size_t)total_doubles * sizeof(double), state->stream>>>(
++            state->d_px, state->d_py, state->d_pz,
++            state->d_obs_scratch, state->d_log_weights,
++            N, n_dd, sigma_pr, sigma_cycles,
++            per_particle_nlos_threshold_m, per_particle_nlos_threshold_cycles,
++            per_particle_huber, per_particle_huber_dd_pr_k,
++            per_particle_huber_dd_carrier_k);
++    }
+     CUDA_CHECK_LAST();
+ }
+ 

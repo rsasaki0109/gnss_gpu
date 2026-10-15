@@ -1,0 +1,185 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -821,6 +821,151 @@
+   if (threadIdx.x == 0) partial[blockIdx.x] = winners[0];
+ }
+ 
++__device__ static bool mt_intersect_early(const double origin[3], const double dir[3],
++                                    const double v0[3], const double v1[3],
++                                    const double v2[3], double& t) {
++  const double EPSILON = 1e-12;
++  double e1[3] = {v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2]};
++  double e2[3] = {v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2]};
++  double h[3] = {dir[1] * e2[2] - dir[2] * e2[1],
++                  dir[2] * e2[0] - dir[0] * e2[2],
++                  dir[0] * e2[1] - dir[1] * e2[0]};
++  double a = e1[0] * h[0] + e1[1] * h[1] + e1[2] * h[2];
++  if (fabs(a) < EPSILON) return false;
++  double s[3] = {origin[0] - v0[0], origin[1] - v0[1], origin[2] - v0[2]};
++  double numerator = s[0] * h[0] + s[1] * h[1] + s[2] * h[2];
++  // Certify only wide misses. For a finite determinant passing the original
++  // cutoff, 1/a is finite and nonzero. Opposite signs with |numerator|>=1
++  // cannot underflow to zero even at the largest finite |a|. Same signs with
++  // |numerator|/2>|a| remain strictly above1 after FP64 reciprocal rounding.
++  // Borderline and nonfinite inputs use the complete original division/test.
++  if (isfinite(a) && isfinite(numerator)) {
++    bool negative_miss = (a > 0.0 && numerator <= -1.0) ||
++                         (a < 0.0 && numerator >= 1.0);
++    bool positive_miss = ((a > 0.0 && numerator > 0.0) ||
++                          (a < 0.0 && numerator < 0.0)) &&
++                         fabs(numerator) * 0.5 > fabs(a);
++    if (negative_miss || positive_miss) return false;
++  }
++  double f = 1.0 / a;
++  double u = f * numerator;
++  if (u < 0.0 || u > 1.0) return false;
++  double q[3] = {s[1] * e1[2] - s[2] * e1[1],
++                  s[2] * e1[0] - s[0] * e1[2],
++                  s[0] * e1[1] - s[1] * e1[0]};
++  double v = f * (dir[0] * q[0] + dir[1] * q[1] + dir[2] * q[2]);
++  if (v < 0.0 || u + v > 1.0) return false;
++  t = f * (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]);
++  return t > EPSILON;
++}
++
++template <bool CACHED_NORMALS, bool SHARED_MIRRORS>
++__device__ static bool multipath_early_candidate(const double rx[3], const double sat[3],
++                                           double d_rx_sat, const Triangle& tri,
++                                           MultipathCandidate& result,
++                                           const ReflectionNormal* normal,
++                                           const ReflectionMirror* prepared_mirror) {
++  double n[3];
++  if constexpr (CACHED_NORMALS) {
++    if (!normal->valid) return false;
++    n[0] = normal->value[0]; n[1] = normal->value[1]; n[2] = normal->value[2];
++  } else {
++    double e1[3] = {tri.v1[0] - tri.v0[0], tri.v1[1] - tri.v0[1], tri.v1[2] - tri.v0[2]};
++    double e2[3] = {tri.v2[0] - tri.v0[0], tri.v2[1] - tri.v0[1], tri.v2[2] - tri.v0[2]};
++    n[0] = e1[1] * e2[2] - e1[2] * e2[1];
++    n[1] = e1[2] * e2[0] - e1[0] * e2[2];
++    n[2] = e1[0] * e2[1] - e1[1] * e2[0];
++    double nn = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
++    if (nn < 1e-15) return false;
++    n[0] /= nn; n[1] /= nn; n[2] /= nn;
++  }
++
++  double mirror[3];
++  if constexpr (SHARED_MIRRORS) {
++    mirror[0] = prepared_mirror->point[0];
++    mirror[1] = prepared_mirror->point[1];
++    mirror[2] = prepared_mirror->point[2];
++  } else {
++    double dv[3] = {rx[0] - tri.v0[0], rx[1] - tri.v0[1], rx[2] - tri.v0[2]};
++    double d = dv[0] * n[0] + dv[1] * n[1] + dv[2] * n[2];
++    mirror[0] = rx[0] - 2.0 * d * n[0];
++    mirror[1] = rx[1] - 2.0 * d * n[1];
++    mirror[2] = rx[2] - 2.0 * d * n[2];
++  }
++
++  double dir[3] = {sat[0] - mirror[0], sat[1] - mirror[1], sat[2] - mirror[2]};
++  double dir_len = sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
++  if (dir_len < 1e-15) return false;
++  dir[0] /= dir_len; dir[1] /= dir_len; dir[2] /= dir_len;
++
++  double t;
++  if (!mt_intersect_early(mirror, dir, tri.v0, tri.v1, tri.v2, t)) return false;
++
++  double refl[3] = {mirror[0] + t * dir[0],
++                     mirror[1] + t * dir[1],
++                     mirror[2] + t * dir[2]};
++  double d_rx_refl = sqrt((rx[0] - refl[0]) * (rx[0] - refl[0]) +
++                           (rx[1] - refl[1]) * (rx[1] - refl[1]) +
++                           (rx[2] - refl[2]) * (rx[2] - refl[2]));
++  double d_refl_sat = sqrt((refl[0] - sat[0]) * (refl[0] - sat[0]) +
++                            (refl[1] - sat[1]) * (refl[1] - sat[1]) +
++                            (refl[2] - sat[2]) * (refl[2] - sat[2]));
++  double excess = (d_rx_refl + d_refl_sat) - d_rx_sat;
++  if (!(excess > 0.0)) return false;
++  result.delay = excess;
++  result.point[0] = refl[0]; result.point[1] = refl[1]; result.point[2] = refl[2];
++  return true;
++}
++
++template <bool CACHED_NORMALS, bool SHARED_MIRRORS>
++__global__ void multipath_early_candidates_kernel(const double* rx_ecef,
++                                            const double* sat_ecef,
++                                            const Triangle* tris,
++                                            const int* triangle_order,
++                                            MultipathCandidate* partial,
++                                            int n_sat, int n_tri, int tiles,
++                                            const ReflectionNormal* normals,
++                                            const ReflectionMirror* mirrors) {
++  int ray = blockIdx.x / tiles;
++  int tile = blockIdx.x % tiles;
++  int eid = ray / n_sat;
++  double rx[3] = {rx_ecef[eid * 3], rx_ecef[eid * 3 + 1], rx_ecef[eid * 3 + 2]};
++  double sat[3] = {sat_ecef[ray * 3], sat_ecef[ray * 3 + 1], sat_ecef[ray * 3 + 2]};
++  MultipathCandidate best = {};
++  best.order = -1;
++  if (!isfinite(rx[0]) || !isfinite(rx[1]) || !isfinite(rx[2]) ||
++      !isfinite(sat[0]) || !isfinite(sat[1]) || !isfinite(sat[2])) {
++    if (threadIdx.x == 0) partial[blockIdx.x] = best;
++    return;
++  }
++  double d_rx_sat = sqrt((rx[0] - sat[0]) * (rx[0] - sat[0]) +
++                          (rx[1] - sat[1]) * (rx[1] - sat[1]) +
++                          (rx[2] - sat[2]) * (rx[2] - sat[2]));
++  for (int ordinal = tile * blockDim.x + threadIdx.x;
++       ordinal < n_tri; ordinal += tiles * blockDim.x) {
++    MultipathCandidate candidate = {};
++    candidate.order = ordinal;
++    const ReflectionNormal* normal = nullptr;
++    if constexpr (CACHED_NORMALS) normal = normals + ordinal;
++    const ReflectionMirror* mirror = nullptr;
++    if constexpr (SHARED_MIRRORS) mirror = mirrors + (size_t)eid * n_tri + ordinal;
++    if (multipath_early_candidate<CACHED_NORMALS, SHARED_MIRRORS>(
++            rx, sat, d_rx_sat, tris[triangle_order[ordinal]], candidate, normal, mirror) &&
++        better_multipath(candidate, best)) best = candidate;
++  }
++  __shared__ MultipathCandidate winners[MULTIPATH_BLOCK_SIZE];
++  winners[threadIdx.x] = best;
++  __syncthreads();
++  for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
++    if (threadIdx.x < stride &&
++        better_multipath(winners[threadIdx.x + stride], winners[threadIdx.x])) {
++      winners[threadIdx.x] = winners[threadIdx.x + stride];
++    }
++    __syncthreads();
++  }
++  if (threadIdx.x == 0) partial[blockIdx.x] = winners[0];
++}
++
+ __global__ void multipath_finalize_kernel(const MultipathCandidate* partial,
+                                           double* reflection_points,
+                                           double* excess_delays, int n_rays, int tiles) {
+@@ -1061,16 +1206,29 @@
+               rx.data + (size_t)first_epoch * 3, triangles.data, order.data,
+               normals.data, mirrors.data, n_order);
+           CUDA_CHECK_LAST();
++          if (n_order >= 512) {
++          multipath_early_candidates_kernel<true, true><<<epochs * n_sat * tiles, MULTIPATH_BLOCK_SIZE>>>(
++              rx.data + (size_t)first_epoch * 3, sat.data + ray_offset * 3,
++              triangles.data, order.data, partial.data + ray_offset * tiles,
++              n_sat, n_order, tiles, normals.data, mirrors.data);
++        } else {
+           multipath_candidates_kernel<true, true><<<epochs * n_sat * tiles, MULTIPATH_BLOCK_SIZE>>>(
+               rx.data + (size_t)first_epoch * 3, sat.data + ray_offset * 3,
+               triangles.data, order.data, partial.data + ray_offset * tiles,
+               n_sat, n_order, tiles, normals.data, mirrors.data);
++        }
+           CUDA_CHECK_LAST();
+         }
+       } else {
+-        multipath_candidates_kernel<true, false><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
++        if (n_order >= 512) {
++          multipath_early_candidates_kernel<true, false><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
+             rx.data, sat.data, triangles.data, order.data, partial.data, n_sat, n_order, tiles,
+             normals.data, nullptr);
++        } else {
++          multipath_candidates_kernel<true, false><<<total * tiles, MULTIPATH_BLOCK_SIZE>>>(
++            rx.data, sat.data, triangles.data, order.data, partial.data, n_sat, n_order, tiles,
++            normals.data, nullptr);
++        }
+       }
+       CUDA_CHECK_LAST();
+       multipath_finalize_kernel<<<(total + MULTIPATH_BLOCK_SIZE - 1) / MULTIPATH_BLOCK_SIZE,

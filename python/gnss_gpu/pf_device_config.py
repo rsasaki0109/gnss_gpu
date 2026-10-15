@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from importlib import import_module
 from types import SimpleNamespace
 
 from gnss_gpu.backends import backend_unavailable, is_missing_optional_module
@@ -83,6 +84,32 @@ def load_pf_device_bindings() -> SimpleNamespace:
         pf_device_get_particles=pf_device_get_particles,
         pf_device_get_particle_states=pf_device_get_particle_states,
         pf_device_set_particle_states=pf_device_set_particle_states,
+        pf_device_try_gather_uniform_weights=getattr(
+            import_module("gnss_gpu._gnss_gpu_pf_device"), "pf_device_try_gather_uniform_weights", None),
+        pf_device_uniform_scan_getter=getattr(
+            import_module("gnss_gpu._gnss_gpu_pf_device"), "_uniform_scan_getter", None),
+        pf_device_uniform_scan_cdf=getattr(
+            import_module("gnss_gpu._gnss_gpu_pf_device"), "_uniform_scan_cdf", None),
+        pf_device_uniform_scan_state_type=getattr(
+            import_module("gnss_gpu._gnss_gpu_pf_device"), "_uniform_scan_state_type", None),
+        pf_device_gather_from_uniform_cdf=getattr(
+            import_module("gnss_gpu._gnss_gpu_pf_device"), "pf_device_gather_from_uniform_cdf", None),
+        pf_device_uniform_cdf_checked_gather=getattr(
+            import_module("gnss_gpu._gnss_gpu_pf_device"), "_uniform_cdf_checked_gather", None),
+        pf_device_gather_from_cdf=getattr(
+            import_module("gnss_gpu._gnss_gpu_pf_device"), "pf_device_gather_from_cdf", None),
+        pf_device_gather_from=getattr(
+            import_module("gnss_gpu._gnss_gpu_pf_device"), "pf_device_gather_from", None),
+        pf_device_set_velocity_covariance=getattr(
+            import_module("gnss_gpu._gnss_gpu_pf_device"),
+            "pf_device_set_velocity_covariance", None),
+        pf_device_position_mixture_components=getattr(
+            import_module("gnss_gpu._gnss_gpu_pf_device"),
+            "pf_device_position_mixture_components", None),
+        pf_device_fill_log_weights=getattr(
+            import_module("gnss_gpu._gnss_gpu_pf_device"), "pf_device_fill_log_weights", None),
+        pf_device_fill_log_weights_setter=getattr(
+            import_module("gnss_gpu._gnss_gpu_pf_device"), "_uniform_weights_array_setter", None),
         pf_device_get_log_weights=pf_device_get_log_weights,
         pf_device_set_log_weights=pf_device_set_log_weights,
         pf_device_get_resample_ancestors=pf_device_get_resample_ancestors,
@@ -126,6 +153,20 @@ _BINDING_ATTRS = (
 def attach_pf_device_bindings(pf, bindings: SimpleNamespace) -> None:
     for name in _BINDING_ATTRS:
         setattr(pf, f"_{name}", getattr(bindings, name))
+    pf._pf_device_fill_log_weights = getattr(bindings, "pf_device_fill_log_weights", None)
+    pf._pf_device_fill_log_weights_setter = getattr(bindings, "pf_device_fill_log_weights_setter", None)
+    pf._pf_device_gather_from = getattr(bindings, "pf_device_gather_from", None)
+    for name in ("pf_device_try_gather_uniform_weights", "pf_device_uniform_scan_getter",
+                 "pf_device_uniform_scan_cdf", "pf_device_uniform_scan_state_type"):
+        setattr(pf, f"_{name}", getattr(bindings, name, None))
+    pf._pf_device_gather_from_uniform_cdf = getattr(bindings, "pf_device_gather_from_uniform_cdf", None)
+    pf._pf_device_uniform_cdf_checked_gather = getattr(bindings, "pf_device_uniform_cdf_checked_gather", None)
+    pf._pf_device_gather_from_cdf = getattr(bindings, "pf_device_gather_from_cdf", None)
+    pf._pf_device_position_mixture_components = getattr(
+        bindings, "pf_device_position_mixture_components", None)
+    # Older native modules and injected backends retain the existing fallback.
+    pf._pf_device_set_velocity_covariance = getattr(
+        bindings, "pf_device_set_velocity_covariance", None)
 
 
 # "megopolis" is the Chesser et al. (2021) algorithm (ancestor-weight acceptance,

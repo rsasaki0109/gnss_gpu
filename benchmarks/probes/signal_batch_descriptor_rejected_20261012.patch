@@ -1,0 +1,84 @@
+--- a/src/signal_sim/signal_sim.cu
++++ b/src/signal_sim/signal_sim.cu
+@@ -379,6 +379,68 @@
+         else
+             phase = kTwoPi * (intermediate_freq + channel.doppler_hz) * t
+                     + channel.carrier_phase;
++        float cos_val, sin_val;
++        __sincosf((float)phase, &sin_val, &cos_val);
++        float signal = channel.amplitude * (float)nav_bit * code_val;
++        sum_i = __fadd_rn(sum_i, __fmul_rn(signal, cos_val));
++        sum_q = __fadd_rn(sum_q, __fmul_rn(signal, -sin_val));
++    }
++
++    if (noise_std > 0.0f) {
++        curandStatePhilox4_32_10_t state;
++        curand_init(seed, (unsigned long long)idx, 0, &state);
++        sum_i += curand_normal(&state) * noise_std;
++        sum_q += curand_normal(&state) * noise_std;
++    }
++    iq_out[2 * idx] = sum_i;
++    iq_out[2 * idx + 1] = sum_q;
++}
++
++// Batch descriptors are shared within a block; sample math and order stay unchanged.
++__global__ void fused_signal_batch_descriptors_kernel(BatchChannels channels,
++                                    const int* nav_bits,
++                                    float* iq_out,
++                                    int n_samples,
++                                    int n_channels,
++                                    double sampling_freq,
++                                    double intermediate_freq,
++                                    float noise_std,
++                                    unsigned long long seed) {
++    const EpochDescriptor epoch = channels.epochs[blockIdx.y];
++    n_channels = epoch.channel_count;
++    seed = epoch.seed;
++    iq_out += (size_t)blockIdx.y * (size_t)n_samples * 2;
++    __shared__ DeviceChannel cached_channels[kInlineChannels];
++    __shared__ double angular_frequency[kInlineChannels];
++    if (threadIdx.x < n_channels) {
++        const DeviceChannel channel = channels.data[epoch.channel_offset + threadIdx.x];
++        cached_channels[threadIdx.x] = channel;
++        angular_frequency[threadIdx.x] = kTwoPi * (intermediate_freq + channel.doppler_hz);
++    }
++    __syncthreads();
++    // Partial blocks must participate in the coefficient barrier first.
++    int idx = blockIdx.x * blockDim.x + threadIdx.x;
++    if (idx >= n_samples) return;
++
++    double t = (double)idx / sampling_freq;
++    float sum_i = 0.0f, sum_q = 0.0f;
++    for (int ch = 0; ch < n_channels; ++ch) {
++        const DeviceChannel& channel = cached_channels[ch];
++        int chip_idx = ((int)(t * channel.chip_rate + channel.code_phase))
++                       % channel.code_length;
++        if (chip_idx < 0) chip_idx += channel.code_length;
++        float code_val = (float)channel.code_table[
++            channel.prn_index * channel.code_length + chip_idx];
++
++        int nav_bit = channel.static_nav_bit;
++        if (channel.nav_bit_count > 0) {
++            int bit_idx = (int)(t * channel.nav_bit_rate);
++            if (bit_idx < 0) bit_idx = 0;
++            if (bit_idx >= channel.nav_bit_count) bit_idx = channel.nav_bit_count - 1;
++            nav_bit = nav_bits[channel.nav_offset + (size_t)bit_idx];
++        }
++
++        double phase = angular_frequency[ch] * t + channel.carrier_phase;
+         float cos_val, sin_val;
+         __sincosf((float)phase, &sin_val, &cos_val);
+         float signal = channel.amplitude * (float)nav_bit * code_val;
+@@ -659,7 +721,11 @@
+     BatchChannels batch{impl_->channels.data, impl_->epochs.data};
+     dim3 blocks((n_samples + kBlockSize - 1) / kBlockSize, n_epochs);
+     float noise_std = std::pow(10.0f, (float)config.noise_floor_db / 20.0f);
+-    if (max_channels <= kInlineChannels) {
++    if (max_channels >= 2 && max_channels <= kInlineChannels && n_samples >= 4096) {
++        fused_signal_batch_descriptors_kernel<<<blocks, kBlockSize>>>(
++            batch, impl_->nav_bits.data, impl_->output.data, n_samples, max_channels,
++            config.sampling_freq, config.intermediate_freq, noise_std, 0ULL);
++    } else if (max_channels <= kInlineChannels) {
+         fused_signal_kernel<BatchChannels, true, kInlineChannels, true><<<blocks, kBlockSize>>>(
+             batch, impl_->nav_bits.data, impl_->output.data, n_samples, max_channels,
+             config.sampling_freq, config.intermediate_freq, noise_std, 0ULL);

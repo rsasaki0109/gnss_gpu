@@ -52,6 +52,68 @@ def _make_synthetic_scenario(
     return sat_ecef, pseudoranges, true_cb
 
 
+def _dense_weight_reference(sat, pr, weights, init_pos, weight_func, max_iter=10):
+    """Original dense normal equations for end-to-end numerical regression."""
+    state = np.empty(4)
+    state[:3] = init_pos
+    state[3] = np.median(pr - np.linalg.norm(sat - state[:3], axis=1))
+    for iteration in range(max_iter):
+        dx_vec = sat - state[:3]
+        ranges = np.maximum(np.linalg.norm(dx_vec, axis=1), 1.0)
+        H = np.column_stack([-dx_vec / ranges[:, None], np.ones(len(sat))])
+        y = pr - (ranges + state[3])
+        robust = np.ones(len(sat)) if iteration == 0 else _compute_robust_weights(y, 15.0, weight_func)
+        combined = weights * robust
+        if np.sum(combined > 0.1) < 5:
+            return None
+        W = np.diag(combined)
+        try:
+            delta = np.linalg.solve(H.T @ W @ H, H.T @ W @ y)
+        except np.linalg.LinAlgError:
+            return None
+        state += delta
+        if np.linalg.norm(delta[:3]) < 1e-4:
+            break
+    return state[:3].copy()
+
+
+@pytest.mark.parametrize("weight_func", ["cauchy", "huber"])
+@pytest.mark.parametrize("n_sat", [5, 8, 32, 96])
+@pytest.mark.parametrize("case", ["clean", "outliers", "zero_weight", "too_few_effective"])
+def test_matches_dense_weight_reference(weight_func, n_sat, case):
+    true_pos = TestRobustSPP.TRUE_POS
+    sat, pr, _ = _make_synthetic_scenario(
+        true_pos, n_sat=n_sat, seed=n_sat,
+        outlier_indices=[1] if case == "outliers" else None,
+        outlier_bias=200.0,
+    )
+    weights = np.linspace(0.3, 2.0, n_sat)
+    if case == "zero_weight":
+        weights[0] = 0.0
+    elif case == "too_few_effective":
+        weights[4:] = 0.0
+    init_pos = true_pos + np.array([5.0, -10.0, 20.0])
+    inputs = [value.copy() for value in (sat, pr, weights, init_pos)]
+    reference = _dense_weight_reference(sat, pr, weights, init_pos, weight_func)
+    actual = robust_spp(sat, pr, weights=weights, init_pos=init_pos, weight_func=weight_func)
+    if reference is None:
+        assert actual is None
+    else:
+        assert actual is not None
+        np.testing.assert_allclose(actual, reference, rtol=0.0, atol=1e-8)
+    for value, original in zip((sat, pr, weights, init_pos), inputs):
+        np.testing.assert_array_equal(value, original)
+
+
+def test_singular_geometry_matches_dense_reference():
+    sat = np.tile([2e7, 1e7, 3e7], (8, 1))
+    pr = np.full(8, 2.5e7)
+    weights = np.ones(8)
+    init_pos = np.zeros(3)
+    assert _dense_weight_reference(sat, pr, weights, init_pos, "cauchy") is None
+    assert robust_spp(sat, pr, weights=weights, init_pos=init_pos) is None
+
+
 class TestComputeRobustWeights:
     def test_cauchy_small_residuals(self):
         """Small residuals should get weight near 1."""

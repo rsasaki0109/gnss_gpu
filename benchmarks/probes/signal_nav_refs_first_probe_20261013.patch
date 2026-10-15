@@ -1,0 +1,56 @@
+--- a/python/gnss_gpu/_signal_sim_bindings.cpp
++++ b/python/gnss_gpu/_signal_sim_bindings.cpp
+@@ -3,6 +3,7 @@
+ #include <pybind11/stl.h>
+ #include <cstdint>
+ #include <vector>
++#include <utility>
+ #include <limits>
+ #include "gnss_gpu/pybind_validation.h"
+ #include "gnss_gpu/signal_sim.h"
+@@ -70,10 +71,11 @@
+ }
+ 
+ void parse_channels(const py::list& channels_list, std::vector<gnss_gpu::SatChannel>& channels,
+-                    std::vector<py::array_t<int>>& nav_bits_refs) {
++                    std::vector<py::object>& nav_bits_refs) {
+     size_t n_ch = channels_list.size();
+     channels.resize(n_ch);
+-    // Keep nav_bits numpy arrays alive until simulate_epoch returns
++    // Default object handles allocate no empty NumPy arrays. Retain each
++    // converted nav array through the complete synchronous generation call.
+     nav_bits_refs.resize(n_ch);
+ 
+     for (size_t i = 0; i < n_ch; ++i) {
+@@ -88,9 +90,10 @@
+         ch.nav_bit = d["nav_bit"].cast<int>();
+         if (d.contains("nav_bit_rate")) ch.nav_bit_rate = d["nav_bit_rate"].cast<double>();
+         if (d.contains("nav_bits") && !d["nav_bits"].is_none()) {
+-            nav_bits_refs[i] = d["nav_bits"].cast<py::array_t<int>>();
+-            ch.nav_bits = static_cast<const int*>(nav_bits_refs[i].data());
+-            ch.nav_bit_count = (int)nav_bits_refs[i].size();
++            auto bits = d["nav_bits"].cast<py::array_t<int>>();
++            ch.nav_bits = static_cast<const int*>(bits.data());
++            ch.nav_bit_count = (int)bits.size();
++            nav_bits_refs[i] = std::move(bits);
+         }
+     }
+ 
+@@ -109,7 +112,7 @@
+     validate_channels_list(channels_list);
+ 
+     std::vector<gnss_gpu::SatChannel> channels;
+-    std::vector<py::array_t<int>> nav_bits_refs;
++    std::vector<py::object> nav_bits_refs;
+     parse_channels(channels_list, channels, nav_bits_refs);
+ 
+     gnss_gpu::SignalSimConfig config{};
+@@ -146,7 +149,7 @@
+         if (seeds.size() != count) throw std::runtime_error("noise_seeds must match epoch count");
+     }
+     std::vector<std::vector<gnss_gpu::SatChannel>> channels(count);
+-    std::vector<std::vector<py::array_t<int>>> nav_refs(count);
++    std::vector<std::vector<py::object>> nav_refs(count);
+     std::vector<const gnss_gpu::SatChannel*> pointers(count);
+     std::vector<int> sizes(count);
+     for (size_t e = 0; e < count; ++e) {

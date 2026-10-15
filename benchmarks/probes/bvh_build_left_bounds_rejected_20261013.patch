@@ -1,0 +1,48 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -64,12 +64,15 @@
+ static int build_recursive(const BuildTriangle* geometry,
+                            std::vector<int>& indices, int start, int end,
+                            std::vector<BVHNode>& nodes,
+-                           AABB* prefix_box, AABB* suffix_box) {
++                           AABB* prefix_box, AABB* suffix_box,
++                           const AABB* known_bounds) {
+   int count = end - start;
+   // Compute bounds of all triangles in range
+-  AABB bounds = geometry[indices[start]].bounds;
+-  for (int i = start + 1; i < end; i++) {
+-    bounds = union_aabb(bounds, geometry[indices[i]].bounds);
++  AABB bounds = known_bounds ? *known_bounds : geometry[indices[start]].bounds;
++  if (!known_bounds) {
++    for (int i = start + 1; i < end; i++) {
++      bounds = union_aabb(bounds, geometry[indices[i]].bounds);
++    }
+   }
+ 
+   // Leaf node
+@@ -217,10 +220,14 @@
+   int node_idx = (int)nodes.size();
+   nodes.push_back(BVHNode());  // placeholder
+ 
++  // The prefix visits the left child's input range in exactly the same
++  // order as its bounds scan. Copy before recursive scratch reuse; suffix
++  // order differs, so the right child keeps its original bounds scan.
++  AABB left_child_bounds = prefix_box[best_split - start - 1];
+   int left_child = build_recursive(geometry, indices, start, best_split, nodes,
+-                                   prefix_box, suffix_box);
++                                   prefix_box, suffix_box, &left_child_bounds);
+   int right_child = build_recursive(geometry, indices, best_split, end, nodes,
+-                                    prefix_box, suffix_box);
++                                    prefix_box, suffix_box, nullptr);
+ 
+   nodes[node_idx].bbox = bounds;
+   nodes[node_idx].left = left_child;
+@@ -254,7 +261,7 @@
+   std::vector<AABB> prefix_box(n_tri > MAX_LEAF_TRIS ? n_tri : 0);
+   std::vector<AABB> suffix_box(prefix_box.size());
+   build_recursive(geometry.data(), indices, 0, n_tri, node_vec,
+-                  prefix_box.data(), suffix_box.data());
++                  prefix_box.data(), suffix_box.data(), nullptr);
+ 
+   *n_nodes = (int)node_vec.size();
+   for (int i = 0; i < *n_nodes; i++) {

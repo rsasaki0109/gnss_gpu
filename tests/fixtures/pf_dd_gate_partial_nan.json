@@ -1,0 +1,7 @@
+{
+  "description": "One finite satellite coordinate overflows range. Three remaining DDs pass both gates. Joint filtered sums exclude its NaN AFV.",
+  "particle_x": 1.0,
+  "overflow_satellite_x": 1e308,
+  "previous_fused_weight_bits": 18444492273895866368,
+  "expected_weight_bits": 0
+}

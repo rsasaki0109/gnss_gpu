@@ -250,6 +250,41 @@ class UrbanSignalSimulator:
                 'excess_delays': float array [m]
                 'elevations': float array [rad]
         """
+        if n_samples is None:
+            n_samples = int(self.sim.sampling_freq * 1e-3)
+        result = self._prepare_epoch(rx_ecef, sat_ecef, sat_clk, sat_vel, rx_vel,
+            rx_clock_bias, prn_list, gps_time, atmo_correction, iono_params, n_samples)
+        result["iq"] = self.sim.generate_epoch(result["channels"], n_samples=n_samples)
+        return result
+
+    def _prepare_epoch(self, rx_ecef, sat_ecef, sat_clk=None, sat_vel=None,
+                      rx_vel=None, rx_clock_bias=0.0,
+                      prn_list=None, gps_time=0.0,
+                      atmo_correction=None, iono_params=None,
+                      n_samples=None):
+        """Generate IQ signal for one epoch with urban environment effects.
+
+        Args:
+            rx_ecef: [3] receiver ECEF position [m].
+            sat_ecef: [n_sat, 3] satellite ECEF positions [m].
+            sat_clk: [n_sat] satellite clock corrections [s].
+            sat_vel: [n_sat, 3] satellite ECEF velocities [m/s] (for Doppler).
+            rx_vel: [3] receiver velocity [m/s] (for Doppler).
+            rx_clock_bias: Receiver clock bias [m].
+            prn_list: List of PRN numbers (1-32). Defaults to range(1, n_sat+1).
+            gps_time: GPS time of week [s] (for ionosphere model).
+            atmo_correction: AtmosphereCorrection instance (optional).
+            iono_params: dict with 'alpha' and 'beta' arrays (Klobuchar).
+            n_samples: Number of IQ samples (default: 1ms).
+
+        Returns:
+            dict with:
+                'iq': float32 array [2*n_samples] interleaved I/Q
+                'channels': list of per-satellite parameter dicts
+                'is_los': boolean array
+                'excess_delays': float array [m]
+                'elevations': float array [rad]
+        """
         rx = np.asarray(rx_ecef, dtype=np.float64).ravel()
         sats = np.asarray(sat_ecef, dtype=np.float64).reshape(-1, 3)
         n_sat = sats.shape[0]
@@ -284,6 +319,11 @@ class UrbanSignalSimulator:
             and self.building_model is not None
             and hasattr(self.building_model, 'compute_reflection_paths')
         )
+        use_combined_trace = (
+            not use_reflection_paths
+            and self.building_model is not None
+            and hasattr(self.building_model, 'trace')
+        )
         use_diffraction_paths = self.max_diffraction_paths > 0
         use_double_reflection_paths = (
             self.max_double_reflection_paths > 0
@@ -299,7 +339,11 @@ class UrbanSignalSimulator:
 
         if self.building_model is not None:
             if len(vis_idx) > 0:
-                los_result = self.building_model.check_los(rx, sats[vis_idx])
+                if use_combined_trace:
+                    los_result, delays, _ = self.building_model.trace(rx, sats[vis_idx])
+                    excess_delays[vis_idx] = np.asarray(delays, dtype=np.float64)
+                else:
+                    los_result = self.building_model.check_los(rx, sats[vis_idx])
                 is_los_vis = np.asarray(los_result, dtype=bool)
                 is_los[vis_idx] = is_los_vis
 
@@ -336,7 +380,7 @@ class UrbanSignalSimulator:
                             excess_delays[sat_idx] = min(
                                 float(path.excess_delay) for path in sat_paths)
                 # Multipath excess delay (if supported by the model)
-                elif hasattr(self.building_model, 'compute_multipath'):
+                elif not use_combined_trace and hasattr(self.building_model, 'compute_multipath'):
                     delays, _ = self.building_model.compute_multipath(rx, sats[vis_idx])
                     excess_delays[vis_idx] = np.asarray(delays, dtype=np.float64)
 
@@ -615,7 +659,7 @@ class UrbanSignalSimulator:
                     n_reflection_diffraction_paths += 1
 
         # --- Generate IQ signal ---
-        iq = self.sim.generate_epoch(channels, n_samples=n_samples)
+        iq = None
 
         return {
             "iq": iq,
@@ -642,7 +686,7 @@ class UrbanSignalSimulator:
                             prn_list=None, sat_clk_per_epoch=None, sat_vel_per_epoch=None,
                             rx_vel_per_epoch=None, gps_times=None,
                             atmo_correction=None, iono_params=None,
-                            n_samples=None):
+                            n_samples=None, batch_size=1):
         """Generate IQ signal for a trajectory of epochs.
 
         Args:
@@ -656,6 +700,9 @@ class UrbanSignalSimulator:
             atmo_correction: AtmosphereCorrection instance.
             iono_params: dict with 'alpha'/'beta'.
             n_samples: Samples per epoch.
+            batch_size: Epochs per IQ batch. Default 1 preserves lazy evaluation.
+                Larger batches evaluate scene callbacks ahead of each yield;
+                output chunks are bounded to 32 MiB.
 
         Yields:
             (epoch_idx, result_dict) for each epoch.
@@ -663,6 +710,13 @@ class UrbanSignalSimulator:
         rx_pos = np.asarray(rx_positions, dtype=np.float64)
         n_epoch = rx_pos.shape[0]
 
+        if isinstance(batch_size, bool) or int(batch_size) != batch_size or batch_size < 1:
+            raise ValueError("batch_size must be a positive integer")
+        samples = int(self.sim.sampling_freq * 1e-3) if n_samples is None else n_samples
+        from gnss_gpu.input_validation import positive_int
+        positive_int("n_samples", samples)
+        effective_batch = min(int(batch_size), 65535, max(1, (32 * 1024 * 1024) // (int(samples) * 8)))
+        pending = []
         for i in range(n_epoch):
             if callable(sat_ecef_per_epoch):
                 sat_ecef = sat_ecef_per_epoch(i)
@@ -683,7 +737,8 @@ class UrbanSignalSimulator:
 
             gps_time = gps_times[i] if gps_times is not None else 0.0
 
-            result = self.compute_epoch(
+            operation = self.compute_epoch if effective_batch == 1 else self._prepare_epoch
+            result = operation(
                 rx_ecef=rx_pos[i],
                 sat_ecef=sat_ecef,
                 sat_clk=sat_clk,
@@ -693,6 +748,15 @@ class UrbanSignalSimulator:
                 gps_time=gps_time,
                 atmo_correction=atmo_correction,
                 iono_params=iono_params,
-                n_samples=n_samples,
+                n_samples=samples,
             )
-            yield i, result
+            if effective_batch == 1:
+                yield i, result
+            else:
+                pending.append((i, result))
+                if len(pending) == effective_batch or i + 1 == n_epoch:
+                    iq = self.sim.generate_epochs([item[1]["channels"] for item in pending], n_samples=samples)
+                    for row, (epoch, item) in enumerate(pending):
+                        item["iq"] = iq[row]
+                        yield epoch, item
+                    pending.clear()

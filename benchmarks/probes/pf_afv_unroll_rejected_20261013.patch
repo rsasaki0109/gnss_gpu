@@ -1,0 +1,29 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -875,6 +875,12 @@
+     double sigma_cycles) {  // ~ 0.05 cycles
+ 
+     // Dynamic shared memory layout: [sat_ecef: n_sat*3] [cp: n_sat] [ws: n_sat]
++    __shared__ double s_inv_wl, s_inv_sigma2;
++    if (threadIdx.x == 0) {
++        // The same GPU FP64 operations are shared by the entire block.
++        s_inv_wl = 1.0 / wavelength;
++        s_inv_sigma2 = 1.0 / (sigma_cycles * sigma_cycles);
++    }
+     extern __shared__ double s_data[];
+     double* s_sat = s_data;
+     double* s_cp  = s_data + n_sat * 3;
+@@ -897,10 +903,11 @@
+     double z  = pz[tid];
+     double cb = pcb[tid];
+ 
+-    double inv_wl = 1.0 / wavelength;
+-    double inv_sigma2 = 1.0 / (sigma_cycles * sigma_cycles);
++    double inv_wl = s_inv_wl;
++    double inv_sigma2 = s_inv_sigma2;
+     double log_w = 0.0;
+ 
++    #pragma unroll 2
+     for (int s = 0; s < n_sat; s++) {
+         double dx = x - s_sat[s * 3 + 0];
+         double dy = y - s_sat[s * 3 + 1];

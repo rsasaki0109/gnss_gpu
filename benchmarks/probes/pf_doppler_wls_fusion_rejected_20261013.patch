@@ -1,0 +1,179 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -1635,6 +1635,138 @@
+     vz[tid] = vzi + gain * dvz;
+ }
+ 
++// Positive-gain WLS accumulates each original matrix entry in observation order
++// while clock drift visits the same geometry. Likelihood and solver stay later.
++template<int CACHE_SATS>
++__global__ void pfd_weight_doppler_wls_fused_kernel(
++    const double* px, const double* py, const double* pz,
++    double* vx, double* vy, double* vz,
++    const double* doppler_data,  // [sat_ecef: n*3][sat_vel: n*3][doppler_hz: n][weights: n]
++    double* log_weights,
++    int N, int n_sat,
++    double wavelength_m,
++    double sigma_mps,
++    double velocity_update_gain,
++    double max_velocity_update_mps) {
++
++    extern __shared__ double s_data[];
++    double* s_sat = s_data;                 // n_sat * 3
++    double* s_sat_vel = s_data + n_sat * 3; // n_sat * 3
++    double* s_doppler = s_data + n_sat * 6; // n_sat
++    double* s_weights = s_data + n_sat * 7; // n_sat
++
++    int total_shared = n_sat * 8;
++    for (int i = threadIdx.x; i < total_shared; i += blockDim.x) {
++        s_data[i] = doppler_data[i];
++    }
++    __syncthreads();
++
++    int tid = blockIdx.x * blockDim.x + threadIdx.x;
++    if (tid >= N) return;
++
++    double x = px[tid];
++    double y = py[tid];
++    double z = pz[tid];
++    double vxi = vx[tid];
++    double vyi = vy[tid];
++    double vzi = vz[tid];
++
++    double geometry[CACHE_SATS * 3];
++    unsigned int valid_geometry = 0;
++
++    double normal[4][5];
++    for (int row = 0; row < 4; row++) {
++        for (int col = 0; col < 5; col++) {
++            normal[row][col] = 0.0;
++        }
++    }
++
++    double weighted_cd = 0.0;
++    double weight_sum = 0.0;
++    for (int s = 0; s < n_sat; s++) {
++        double dx = s_sat[s * 3 + 0] - x;
++        double dy = s_sat[s * 3 + 1] - y;
++        double dz = s_sat[s * 3 + 2] - z;
++        double r = sqrt(dx * dx + dy * dy + dz * dz);
++        if (r < 1.0) continue;
++        double lx = dx / r;
++        double ly = dy / r;
++        double lz = dz / r;
++        geometry[s * 3 + 0] = lx;
++        geometry[s * 3 + 1] = ly;
++        geometry[s * 3 + 2] = lz;
++        valid_geometry |= 1u << s;
++        double obs = -s_doppler[s] * wavelength_m;
++        double sv_radial =
++            s_sat_vel[s * 3 + 0] * lx +
++            s_sat_vel[s * 3 + 1] * ly +
++            s_sat_vel[s * 3 + 2] * lz;
++        double rx_radial = vxi * lx + vyi * ly + vzi * lz;
++        double w = fmax(s_weights[s], 0.0);
++        weighted_cd += w * (obs - sv_radial + rx_radial);
++        weight_sum += w;
++        double h[4] = {-lx, -ly, -lz, 1.0};
++        double rhs = -s_doppler[s] * wavelength_m - sv_radial;
++        for (int a = 0; a < 4; a++) {
++            normal[a][4] += h[a] * w * rhs;
++            for (int b = 0; b < 4; b++) {
++                normal[a][b] += h[a] * w * h[b];
++            }
++        }
++    }
++    double cd = (weight_sum > 0.0) ? (weighted_cd / weight_sum) : 0.0;
++    if (weight_sum <= 0.0) {
++        return;
++    }
++
++    double inv_sigma2 = 1.0 / (sigma_mps * sigma_mps);
++    double log_w = 0.0;
++    for (int s = 0; s < n_sat; s++) {
++        if (!(valid_geometry & (1u << s))) continue;
++        double lx = geometry[s * 3 + 0];
++        double ly = geometry[s * 3 + 1];
++        double lz = geometry[s * 3 + 2];
++        double obs = -s_doppler[s] * wavelength_m;
++        double pred =
++            (s_sat_vel[s * 3 + 0] - vxi) * lx +
++            (s_sat_vel[s * 3 + 1] - vyi) * ly +
++            (s_sat_vel[s * 3 + 2] - vzi) * lz +
++            cd;
++        double residual = obs - pred;
++        log_w += -0.5 * fmax(s_weights[s], 0.0) * residual * residual * inv_sigma2;
++    }
++    log_weights[tid] += log_w;
++
++    double gain = fmin(1.0, fmax(0.0, velocity_update_gain));
++    if (gain <= 0.0 || n_sat < 4) {
++        return;
++    }
++
++    for (int d = 0; d < 4; d++) {
++        normal[d][d] += 1e-9;
++    }
++
++    double solution[4] = {0.0, 0.0, 0.0, 0.0};
++    if (!pfd_solve_4x4(normal, solution)) {
++        return;
++    }
++
++    double dvx = solution[0] - vxi;
++    double dvy = solution[1] - vyi;
++    double dvz = solution[2] - vzi;
++    double dv_norm = sqrt(dvx * dvx + dvy * dvy + dvz * dvz);
++    if (max_velocity_update_mps > 0.0 && dv_norm > max_velocity_update_mps) {
++        double scale = max_velocity_update_mps / fmax(dv_norm, 1e-9);
++        dvx *= scale;
++        dvy *= scale;
++        dvz *= scale;
++    }
++
++    vx[tid] = vxi + gain * dvx;
++    vy[tid] = vyi + gain * dvy;
++    vz[tid] = vzi + gain * dvz;
++}
++
+ template<int CACHE_SATS>
+ __global__ void pfd_doppler_kf_update_kernel(
+     const double* px, const double* py, const double* pz,
+@@ -3603,19 +3735,37 @@
+ 
+     size_t smem = (size_t)total_doubles * sizeof(double);
+     if (n_sat <= 8) {
++        if (n_sat >= 4 && velocity_update_gain > 0.0) {
++    pfd_weight_doppler_wls_fused_kernel<8><<<(N + 127) / 128, 128, smem, state->stream>>>(
++        state->d_px, state->d_py, state->d_pz,
++        state->d_vx, state->d_vy, state->d_vz,
++        state->d_obs_scratch, state->d_log_weights,
++        N, n_sat, wavelength_m, sigma_mps,
++        velocity_update_gain, max_velocity_update_mps);
++        } else {
+     pfd_weight_doppler_cached_kernel<8><<<(N + 127) / 128, 128, smem, state->stream>>>(
+         state->d_px, state->d_py, state->d_pz,
+         state->d_vx, state->d_vy, state->d_vz,
+         state->d_obs_scratch, state->d_log_weights,
+         N, n_sat, wavelength_m, sigma_mps,
+         velocity_update_gain, max_velocity_update_mps);
++        }
+     } else if (n_sat <= 16) {
++        if (velocity_update_gain > 0.0) {
++    pfd_weight_doppler_wls_fused_kernel<16><<<(N + 127) / 128, 128, smem, state->stream>>>(
++        state->d_px, state->d_py, state->d_pz,
++        state->d_vx, state->d_vy, state->d_vz,
++        state->d_obs_scratch, state->d_log_weights,
++        N, n_sat, wavelength_m, sigma_mps,
++        velocity_update_gain, max_velocity_update_mps);
++        } else {
+     pfd_weight_doppler_cached_kernel<16><<<(N + 127) / 128, 128, smem, state->stream>>>(
+         state->d_px, state->d_py, state->d_pz,
+         state->d_vx, state->d_vy, state->d_vz,
+         state->d_obs_scratch, state->d_log_weights,
+         N, n_sat, wavelength_m, sigma_mps,
+         velocity_update_gain, max_velocity_update_mps);
++        }
+     } else {
+     pfd_weight_doppler_kernel<<<grid, BLOCK_SIZE, smem, state->stream>>>(
+         state->d_px, state->d_py, state->d_pz,
