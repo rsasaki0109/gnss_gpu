@@ -1782,6 +1782,26 @@ partial gateは各sideの採用subsetと元のungated joint GPU costを独立に
 12*nDD sharedを保ち512DDも48KiB内。H2D/allocation/launch/API/既定設定、common joint/個別mixed gates/BVH/signalを維持。
 raw/device/patch/completionを `benchmarks/pf_dd_mixed_joint_gate_*_20261013.json`、`benchmarks/RESULTS.md` に記録。
 
+## D-207: RB-FGO-PFのbasin ID並べ替え候補は安定した高速化がなく採用保留 (2026-10-15)
+
+状態: 保留（本番runtimeはD206から変更なし）
+
+基準satのmin探索と(sat,整数差分)tuple sortを、sat keyの1回sortへまとめる候補を検証。
+Tokyo run1実入力600epoch、N64/K12/seed20260710から24step内の11434実callを記録し、
+合成・水増しなしで元の呼び出し順と戻り値構築をreplayする。2warmup後10交互pair。
+最初のwall計測はpaired短縮中央値35.43%でも6/10改善、範囲-73.93–49.09%。
+追加のCPU/wall同時計測も各6/10改善にとどまり、CPU中央値15.24%（-61.90–68.57%）、
+wall中央値24.65%（-40.91–66.95%）。全試行を保存し、正の中央値だけで採用しない。
+CPU計時は非実行時間を除くが観測値に15.625ms粒度があり、ばらつきの原因は断定しない。
+全体・全経路・GPUの速度改善は主張しない。ローカル検証を終了してから各計時を実施。
+
+全記録ID、TRACK2の600epoch/ TRACK1の350epochで位置bytesと90配列が完全一致、除外0。
+runtimeをbaseline 98f0a89へbyte単位で戻し、候補を実験専用basin_id_candidate.pyに隔離。
+測定した関数と隔離候補のAST一致を監査し、入力記録・wall/CPU再生controllerと43回帰caseを残す。
+記録: benchmarks/rbpf_basin_id_tokyo_prefix_20261015.json、
+benchmarks/rbpf_basin_id_cpu_tokyo_prefix_20261015.json、
+benchmarks/rbpf_basin_id_audit_20261015.json、experiments/rbpf_fgo/README.md。
+
 ## D-206: RB-FGO-PFの追加・解除の整数差分を1粒子内で再利用 (2026-10-15)
 
 状態: 採用（構造移動stageの速度、全体速度は未計測）

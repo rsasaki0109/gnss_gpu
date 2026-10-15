@@ -1,0 +1,244 @@
+{
+  "schemaVersion": 1,
+  "decision": "deferred: no stable reduction across paired observations",
+  "productionRuntimeChanged": false,
+  "finalRuntime": {
+    "name": "rbpf_fgo.py",
+    "bytes": 157526,
+    "sha256": "43a29f6a7db344494943166f0605ebf9e5759a801a8a99711730dcfbbd802cd9"
+  },
+  "isolatedCandidate": {
+    "name": "basin_id_candidate.py",
+    "bytes": 561,
+    "sha256": "f78bdf777d67db6f46b1c1b7ec632896de8ae3c6b13f7559cb400229aa1db949"
+  },
+  "candidateFunctionAstSha256": "a67e4cb66c5d380920c5b8be3684e22b83703219f49e618111b62339f956e870",
+  "archivedCandidateFunctionExact": true,
+  "parity": {
+    "schemaVersion": 1,
+    "baselineCommit": "98f0a899fc2f711bf78a5ec709ff7a4d6fbeb3f3",
+    "baseline": {
+      "name": "rbpf_fgo_original.py",
+      "bytes": 157526,
+      "sha256": "43a29f6a7db344494943166f0605ebf9e5759a801a8a99711730dcfbbd802cd9"
+    },
+    "candidate": {
+      "name": "rbpf_fgo_candidate.py",
+      "bytes": 157533,
+      "sha256": "cf6fc1b0b417715130e5d725bdf79f47073e64082725f300ad639a7a74afee97"
+    },
+    "captureManifest": {
+      "name": "manifest.json",
+      "bytes": 16361,
+      "sha256": "416abc9b15bb7789a6f79502cf8d57261a6c8c199146301b46299e9959d6106b"
+    },
+    "epochs": 24,
+    "calls": 11434,
+    "configuredParticles": [
+      64
+    ],
+    "pipeline": [
+      {
+        "mode": "observer-track2",
+        "epochs": 600,
+        "exactArrays": 90,
+        "excluded": [],
+        "positionSha256": "8a221393fff79b71ce6e64972292b3e76a6b90ced0fccf31f37379deacee85cd"
+      },
+      {
+        "mode": "candidate-track2",
+        "epochs": 600,
+        "exactArrays": 90,
+        "excluded": [],
+        "positionSha256": "8a221393fff79b71ce6e64972292b3e76a6b90ced0fccf31f37379deacee85cd"
+      },
+      {
+        "mode": "candidate-track1",
+        "epochs": 350,
+        "exactArrays": 90,
+        "excluded": [],
+        "positionSha256": "8b8ffdd0a0bd8698997a0768c7cc0a9c38e8e2fd8b4be355964ff7cad9307cc1"
+      }
+    ],
+    "sourceLibraries": [
+      {
+        "name": "gnss.py",
+        "bytes": 41184,
+        "sha256": "a8702c83c1f3cde8ad60d67a42bb326103b81f7a8a1a64ff4dcf6aa9221785a4"
+      },
+      {
+        "name": "gtsam.pyd",
+        "bytes": 16236032,
+        "sha256": "76d018af6634358e5245c25e6676864abefa56044e3b5862b3361b78128f18a3"
+      }
+    ],
+    "originalInputs": [
+      {
+        "name": "rover.obs",
+        "bytes": 90593655,
+        "sha256": "97e7b370d381a64760cd07d251bcf5df2dc2b3b6dd2444323ff8d6f35e4689e5"
+      },
+      {
+        "name": "base.obs",
+        "bytes": 35794907,
+        "sha256": "2624939cd82cdbd839a32ccb4d22f9f846e7613a934b45539b5f98e8c31e37f8"
+      },
+      {
+        "name": "base.nav",
+        "bytes": 815565,
+        "sha256": "6a8fcef262ae62854f971cf383ee17c19fddd7d49071effc0f94c156b923d4b7"
+      },
+      {
+        "name": "imu.csv",
+        "bytes": 22469390,
+        "sha256": "bba039063ebcfde1f3be5e5c8c4a86e522064a8873a2310a5ed142e820acc091"
+      },
+      {
+        "name": "reference.csv",
+        "bytes": 1658813,
+        "sha256": "8e468a6a959cd47144f4ad1f1dc0129e7ee160011f4d236e4ffdb63b203373e9"
+      }
+    ],
+    "note": "Every recorded canonical ID matches both exact source bodies. Observer baseline and fresh candidate TRACK=2 600-epoch runs, plus candidate TRACK=1 350 epochs against the frozen same-source baseline, match position bytes and all 90 arrays. Zero exclusions. Correctness jobs may overlap local checks; their timings are not speed evidence."
+  },
+  "firstWallStudy": {
+    "schemaVersion": 1,
+    "parity": {
+      "schemaVersion": 1,
+      "baselineCommit": "98f0a899fc2f711bf78a5ec709ff7a4d6fbeb3f3",
+      "baseline": {
+        "name": "rbpf_fgo_original.py",
+        "bytes": 157526,
+        "sha256": "43a29f6a7db344494943166f0605ebf9e5759a801a8a99711730dcfbbd802cd9"
+      },
+      "candidate": {
+        "name": "rbpf_fgo_candidate.py",
+        "bytes": 157533,
+        "sha256": "cf6fc1b0b417715130e5d725bdf79f47073e64082725f300ad639a7a74afee97"
+      },
+      "captureManifest": {
+        "name": "manifest.json",
+        "bytes": 16361,
+        "sha256": "416abc9b15bb7789a6f79502cf8d57261a6c8c199146301b46299e9959d6106b"
+      },
+      "epochs": 24,
+      "calls": 11434,
+      "configuredParticles": [
+        64
+      ],
+      "pipeline": [
+        {
+          "mode": "observer-track2",
+          "epochs": 600,
+          "exactArrays": 90,
+          "excluded": [],
+          "positionSha256": "8a221393fff79b71ce6e64972292b3e76a6b90ced0fccf31f37379deacee85cd"
+        },
+        {
+          "mode": "candidate-track2",
+          "epochs": 600,
+          "exactArrays": 90,
+          "excluded": [],
+          "positionSha256": "8a221393fff79b71ce6e64972292b3e76a6b90ced0fccf31f37379deacee85cd"
+        },
+        {
+          "mode": "candidate-track1",
+          "epochs": 350,
+          "exactArrays": 90,
+          "excluded": [],
+          "positionSha256": "8b8ffdd0a0bd8698997a0768c7cc0a9c38e8e2fd8b4be355964ff7cad9307cc1"
+        }
+      ],
+      "sourceLibraries": [
+        {
+          "name": "gnss.py",
+          "bytes": 41184,
+          "sha256": "a8702c83c1f3cde8ad60d67a42bb326103b81f7a8a1a64ff4dcf6aa9221785a4"
+        },
+        {
+          "name": "gtsam.pyd",
+          "bytes": 16236032,
+          "sha256": "76d018af6634358e5245c25e6676864abefa56044e3b5862b3361b78128f18a3"
+        }
+      ],
+      "originalInputs": [
+        {
+          "name": "rover.obs",
+          "bytes": 90593655,
+          "sha256": "97e7b370d381a64760cd07d251bcf5df2dc2b3b6dd2444323ff8d6f35e4689e5"
+        },
+        {
+          "name": "base.obs",
+          "bytes": 35794907,
+          "sha256": "2624939cd82cdbd839a32ccb4d22f9f846e7613a934b45539b5f98e8c31e37f8"
+        },
+        {
+          "name": "base.nav",
+          "bytes": 815565,
+          "sha256": "6a8fcef262ae62854f971cf383ee17c19fddd7d49071effc0f94c156b923d4b7"
+        },
+        {
+          "name": "imu.csv",
+          "bytes": 22469390,
+          "sha256": "bba039063ebcfde1f3be5e5c8c4a86e522064a8873a2310a5ed142e820acc091"
+        },
+        {
+          "name": "reference.csv",
+          "bytes": 1658813,
+          "sha256": "8e468a6a959cd47144f4ad1f1dc0129e7ee160011f4d236e4ffdb63b203373e9"
+        }
+      ],
+      "note": "Every recorded canonical ID matches both exact source bodies. Observer baseline and fresh candidate TRACK=2 600-epoch runs, plus candidate TRACK=1 350 epochs against the frozen same-source baseline, match position bytes and all 90 arrays. Zero exclusions. Correctness jobs may overlap local checks; their timings are not speed evidence."
+    },
+    "replayRecord": {
+      "name": "replay.json",
+      "bytes": 15962,
+      "sha256": "43f757eae6aa86bd3ae63fa0212c990acb732d06f1359672f68f8b5beb6863bc"
+    },
+    "timingScope": "All actual canonical-ID calls inside 24 sampled filter steps, original order/count, including output construction. No synthetic or expanded hypotheses. Two warmups per source excluded. Imports, decoding, parity and hashes outside clocks. Not full-filter or GPU latency.",
+    "trials": 10,
+    "improvedPairs": 6,
+    "minimumReductionPercent": -73.9254573415314,
+    "maximumReductionPercent": 49.091470579898335,
+    "medianReductionPercent": 35.42656328503068,
+    "note": "Independent arithmetic, medians, source hashes and full pipeline parity checked. All correctness jobs, tests and local scans finish before timing. No edits or local checks overlap clocks. Canonical-ID construction only; no full-filter/GPU speed claim."
+  },
+  "additionalStudy": {
+    "cpu": {
+      "baselineMedianMs": 351.5625,
+      "candidateMedianMs": 265.625,
+      "medianReductionPercent": 15.238095238095239,
+      "improvedPairs": 6,
+      "minimumReductionPercent": -61.904761904761905,
+      "maximumReductionPercent": 68.57142857142857
+    },
+    "wall": {
+      "baselineMedianMs": 359.86075,
+      "candidateMedianMs": 268.1024,
+      "medianReductionPercent": 24.645776045421627,
+      "improvedPairs": 6,
+      "minimumReductionPercent": -40.90651561248728,
+      "maximumReductionPercent": 66.95379617531925
+    }
+  },
+  "additionalReplayRecord": {
+    "name": "cpu-replay.json",
+    "bytes": 28477,
+    "sha256": "c10ac22468799862e6b174d0df7efcefcfad85aea0fc131699ceb7fc3752aa9a"
+  },
+  "clocks": {
+    "cpu": {
+      "implementation": "GetProcessTimes()",
+      "monotonic": true,
+      "adjustable": false,
+      "resolution": 1e-07
+    },
+    "wall": {
+      "implementation": "QueryPerformanceCounter()",
+      "monotonic": true,
+      "adjustable": false,
+      "resolution": 1e-07
+    }
+  },
+  "note": "All attempted studies retained. First wall replay and additional process-CPU/wall replay each improve only 6/10 pairs. Large negative pairs prevent a stable speed claim. Runtime restored byte-for-byte to baseline. Public experimental function has the exact AST of the candidate function timed in the archived full runtime. All 11434 recorded identities match both final public functions. Windows CPU observations are quantized to 15.625 ms; nominal clock resolution does not remove that limitation. No full-filter/GPU latency claim."
+}

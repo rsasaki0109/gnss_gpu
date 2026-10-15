@@ -35,6 +35,7 @@ pytest -q \
   tests/test_rbpf_shared_moves.py \
   tests/test_rbpf_move_selection.py \
   tests/test_rbpf_move_pair.py \
+  tests/test_rbpf_basin_id.py \
   tests/test_cross_domain_validation.py \
   tests/test_ambiguity_basin_pf.py \
   tests/test_audit_ppc_basin_fgo_candidate_supply.py \

@@ -18,6 +18,74 @@ archived copy.
 | `wp13m_lambda_diag.py` | finite-guarded MLAMBDA used by the backbone |
 | `relabel_nb9_pos.py` | report floor: relabels fixes with fewer than `nb` resolved ambiguities as float |
 
+## Canonical basin identity candidate: adoption deferred (2026-10-15)
+
+The experimental `basin_id_candidate.py` sorts satellite numbers once per
+nonempty group. The first
+number supplies the gauge anchor, and the already sorted numbers determine
+the output order. This replaces a separate minimum scan and sorting allocated
+satellite/difference tuples. Empty groups, singleton groups, integer values,
+group order and the hashable identity remain unchanged. There is no persistent
+cache: a mutated hypothesis always produces a fresh identity. **The live
+runtime retains its original canonicalization.**
+
+Tokyo run1's 600-epoch prefix supplies **11,434 actual calls inside 24
+sampled steps**, with the original N=64, K=12 and seed 20260710. Naturally
+repeated hypotheses retain their original count/order; no hypotheses are
+synthesized or expanded. Two warmups per source precede 10 alternating pairs.
+Conditions: Windows, Python 3.12.10, NumPy 2.4.6, one OpenBLAS/OMP thread;
+other local correctness jobs/checks finish before either timed study.
+
+| Study / metric | Baseline median ms | Candidate median ms | Paired reduction median | Paired range | Improved pairs |
+|---|---:|---:|---:|---:|---:|
+| First / wall | 503.16 | 452.02 | 35.43% | -73.93–49.09% | 6/10 |
+| Additional / process CPU | 351.56 | 265.63 | 15.24% | -61.90–68.57% | 6/10 |
+| Additional / wall | 359.86 | 268.10 | 24.65% | -40.91–66.95% | 6/10 |
+
+Paired percentages are computed separately from the per-policy time medians.
+Both studies have substantial regressions in four pairs, so the positive
+medians do **not** establish a stable speed improvement. Process CPU time
+excludes time when this process is not scheduled; observed CPU times have
+15.625 ms quantization despite the clock's nominal resolution. Both clocks
+and all raw trials remain available. No cause is assigned to the variability.
+There is no full-filter, full-route or GPU speed claim.
+
+All recorded identities match both functions. The observed baseline 600-epoch
+run matches the frozen PR #241 control, and candidate TRACK=2 600 epochs and
+TRACK=1 350 epochs match their respective controls: position bytes and all 90
+arrays are identical, with zero exclusions. Correctness-run timings are not
+speed evidence. The candidate function retained here has exactly the same AST
+as the function measured in the archived full candidate runtime. Production
+`rbpf_fgo.py` is restored byte-for-byte to the baseline. The 43 regression cases
+cover insertion order, empty/singleton groups, independent gauge shifts,
+large and NumPy integers, hash/type preservation and mutation of the same H.
+
+Records: [first wall study](../../benchmarks/rbpf_basin_id_tokyo_prefix_20261015.json),
+[additional CPU/wall study](../../benchmarks/rbpf_basin_id_cpu_tokyo_prefix_20261015.json),
+and [independent audit and adoption decision](../../benchmarks/rbpf_basin_id_audit_20261015.json).
+
+To reproduce on new output paths, save the baseline runtime from commit
+`98f0a89`, use the WP56 flags/environment in `benchmark_shared_moves_cpu.py`
+(N=64, K=12, seed 20260710), and forward runner arguments after `--`:
+
+```bash
+python capture_basin_ids.py --source BASELINE.py --output NEW_CAPTURE \
+  --tc-src tc/src -- 1 --max-ep 600 --out-dir NEW_RUN [WP56 flags]
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python benchmark_basin_id.py \
+  --manifest NEW_CAPTURE/manifest.json --baseline BASELINE.py \
+  --candidate basin_id_candidate.py --output NEW_REPLAY.json --pairs 10
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python benchmark_basin_id_cpu.py \
+  --manifest NEW_CAPTURE/manifest.json --baseline BASELINE.py \
+  --candidate basin_id_candidate.py --output NEW_CPU_REPLAY.json --pairs 10
+```
+
+The observer records all canonical calls inside sampled filter steps and
+returns original identities unchanged. Replay verifies source/input hashes,
+every identity and input immutability before timing exact function bodies.
+Loading, imports, decoding and validation stay outside the clocks; identity
+construction and the resulting tuples are included. Preserve completed
+controllers and records, and use fresh directories for later studies.
+
 ## Reusing DDs within a structural move pair (2026-10-15)
 
 `_move_pair` builds the current particle's integer double differences once
