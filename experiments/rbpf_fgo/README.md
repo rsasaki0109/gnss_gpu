@@ -18,6 +18,87 @@ archived copy.
 | `wp13m_lambda_diag.py` | finite-guarded MLAMBDA used by the backbone |
 | `relabel_nb9_pos.py` | report floor: relabels fixes with fewer than `nb` resolved ambiguities as float |
 
+## Experimental likelihood replay on CUDA
+
+`capture_likelihood_inputs.py` records actual scalar weight-cache misses and
+tracked-conditional batches while returning the original CPU results. It forwards
+runner arguments after `--`; supply the same WP56 flags from `run_ship.sh`, a
+fresh runner `--out-dir`, and a fresh capture `--output`. `--tc-src` points at the
+pinned dependency's `src` directory. Capture overhead is not timing evidence.
+
+```bash
+python capture_likelihood_inputs.py --output NEW_CAPTURE --tc-src tc/src -- \
+    1 --max-ep 600 --out-dir NEW_RUN [normal WP56 runner flags]
+python benchmark_likelihood_replay.py --manifest NEW_CAPTURE/manifest.json \
+    --output NEW_TIMING.json
+```
+
+The replay controller checks input/source hashes and original CPU values before
+timing. Its CPU reference compiles the unchanged `_batch_rows` and
+`_loglik_batch` method bodies without importing GTSAM. Both policies receive the
+same packed design, integers, means and covariance arrays. CUDA uses an FP64
+kernel with growing work buffers, and its clock includes all input uploads,
+output readbacks and synchronization. Imports, JIT, packing and parity checks
+are outside the clock. The optional replay backend requires a working
+Numba/CUDA installation; unsupported/singular systems raise explicitly.
+
+This is an isolated experiment. The live filter's candidate loop, GTSAM graph,
+random-number consumption, resampling, FIX gates and default CPU dispatch retain
+their existing code. Scalar-weight recordings verify GPU likelihoods against
+actual scalar results, but replay CPU timings use the existing batch method;
+they do not measure the scalar proposal loop or positioning throughput.
+
+The packed-transfer variant is `benchmark_likelihood_packed.py`. It uses the
+same arithmetic kernel, combines inputs into two uploads and reads results in
+one transfer. Host payload concatenation is part of the excluded preparation;
+these timings cannot establish live-filter latency.
+
+On a Tokyo run1 600-epoch WP56 prefix (seed 20260710), recording preserved the
+position file and all 88 saved arrays byte-for-byte. Sampling every eighth
+phase-2 epoch captured 32 weight-cache-miss batches (811 hypotheses, 15–39 per
+batch) and 32 conditional batches (755 hypotheses, 5–53 per batch), with 48–100
+measurement rows and state size 11. No hypotheses were replicated. This is an
+early, predominantly fixed prefix, not a difficult-canyon or six-route study.
+
+| Replay/pass | Kind, 32 batches | NumPy total median, ms | CUDA total median, ms | Faster paired totals |
+| --- | --- | ---: | ---: | ---: |
+| Separate transfers / initial | Conditional | 140.94 | 325.63 | 0/10 |
+| Separate transfers / initial | Weight | 137.68 | 337.05 | 0/10 |
+| Separate transfers / final | Conditional | 162.29 | 375.51 | 0/10 |
+| Separate transfers / final | Weight | 160.95 | 380.02 | 0/10 |
+| Packed transfers / initial | Conditional | 118.50 | 202.01 | 0/10 |
+| Packed transfers / initial | Weight | 114.90 | 208.89 | 0/10 |
+| Packed transfers / final | Conditional | 100.39 | 195.36 | 0/10 |
+| Packed transfers / final | Weight | 103.61 | 204.86 | 0/10 |
+
+Each controller/pass uses a fresh process, two warm-up pairs and ten alternating
+timed pairs per recorded batch. The final process reverses the first policy.
+The table reports medians of per-trial sums over 32 distinct recorded calls,
+not one artificial larger batch. Both variants match all captured CPU values
+at `rtol=atol=1e-9`, and compare all three returned arrays to the unchanged NumPy
+batch method. CUDA timings include the same full output readback for weight
+records, although the live scalar weight method only needs the likelihood.
+
+Neither variant wins on this workload: packed CUDA takes about 1.7–2.0 times
+the NumPy batch duration. Separate and packed studies ran sequentially with
+changing CPU medians, so their ratios do not establish a paired speedup between
+the two GPU variants. No default/live GPU backend is enabled. Further work must
+measure actual proposal generation, packing and same-epoch ensemble scheduling;
+increasing particle counts or batching future observations would change the
+workload. Replay uses Windows, Python 3.12.10, NumPy 2.4.6, Numba 0.66.0, CUDA
+12.8 and compute capability 7.5, with one OpenBLAS/OpenMP thread. Production
+does not force these settings.
+
+All observations, source hashes, capture provenance and numeric errors are in
+the [separate initial](../../benchmarks/rbpf_likelihood_tokyo_prefix_20261015_initial.json),
+[separate final](../../benchmarks/rbpf_likelihood_tokyo_prefix_20261015_final.json),
+[packed initial](../../benchmarks/rbpf_likelihood_packed_tokyo_prefix_20261015_initial.json)
+and [packed final](../../benchmarks/rbpf_likelihood_packed_tokyo_prefix_20261015_final.json)
+records. The 29 replay tests exercise both backends on CUDA, input ownership,
+validation, unheld/partial carrier hypotheses, IRLS, workspace growth/shrink,
+singular failure/recovery and explicit close. CPU-only CI covers the parser and
+NumPy reference while skipping the optional CUDA cases.
+
 ## Dependencies
 
 All pinned; `setup_deps.sh` fetches them.

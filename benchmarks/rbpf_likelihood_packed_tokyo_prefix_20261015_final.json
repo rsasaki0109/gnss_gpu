@@ -1,0 +1,6370 @@
+{
+  "schemaVersion": 1,
+  "comparison": "rbpf-likelihood-cuda-packed-replay",
+  "manifest": {
+    "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\manifest.json",
+    "bytes": 50305,
+    "sha256": "d6417f94cef21241c9915e16b3633da1aebbd45839220c5119db130260e2d486"
+  },
+  "captureProvenance": {
+    "schemaVersion": 1,
+    "sourceFiles": [
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\af_select.py",
+        "bytes": 5044,
+        "sha256": "d87b18c5a7a0fd67a72248a13d7f5552f3f152de4bc114651be1ebb227c1957d"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\capture_likelihood_inputs.py",
+        "bytes": 7216,
+        "sha256": "7bc7f18b83bb3f9285e029a8a66cc3473a090e17ce39560a27557e489c4ef2b6"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\check_frozen_copy.py",
+        "bytes": 1072,
+        "sha256": "bdf9627e02f309fe3817ae032040e8ebde7fd5c1cdfab6c024f77afcb9fb3746"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\combine_fb.py",
+        "bytes": 7416,
+        "sha256": "4bafd63aafe6aa958da99ba67d15497954770bdf189d17bcc92a86712c4f0afa"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\error_budget.py",
+        "bytes": 2287,
+        "sha256": "36c925f3b3edcc4eef214d5f6ee59929cf28308990987f5b810131846de63c85"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\fix_integrity.py",
+        "bytes": 6488,
+        "sha256": "166250dc1b6bf051c5e7a4e41b44fb3a851c5b718a0b69e19cdae71f86e61208"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\fix_rule_loro.py",
+        "bytes": 12614,
+        "sha256": "1b4baa0e86ca3468cafbae6afe8ab79d0a17bc8f29a82713e1938d1b1bf64383"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\fix_rules.py",
+        "bytes": 3157,
+        "sha256": "ac3d5f6c057b81c38b3f7c1e3682019c69c5951612e16991b9c1fa14341e273c"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\fix_witness.py",
+        "bytes": 7413,
+        "sha256": "65ccdca595e648c83d50a072eae5b05d94708374ed2d5ef834e782c0de94b383"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+        "bytes": 374779,
+        "sha256": "9063766b242187f0ec31833e8fb8fa5d3490de272fc189cd4395d95c7edffee2"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\integer_carry.py",
+        "bytes": 8701,
+        "sha256": "85e5b0581bbe11da3852e20b52bd94c5a8ac536424846439275280229ad6fd81"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\integer_smoother.py",
+        "bytes": 2895,
+        "sha256": "27aa85ad8b1cd516e196d2f7097375e7ffb9a7a3d309ef3cfeff5c334b08693e"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\output_policies.py",
+        "bytes": 7114,
+        "sha256": "a0a3688e2b6154bda5895d7ea243c7b134e76e60f40d5697ebb2b6b7997474df"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\plateau_los.py",
+        "bytes": 9194,
+        "sha256": "e44f9a6ddfdbb4e0bacea11b282adff86a0ab98decf69dd410fbe533cc81bac0"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\rbpf_fgo.py",
+        "bytes": 156457,
+        "sha256": "77d85543a2dc5bb8d8a16a1ee5708118d84e427fd876227cdf09909d82b01a0a"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\relabel_nb9_pos.py",
+        "bytes": 1366,
+        "sha256": "91667eff82ee6bd9d4922f04fe3f4b0dcef98085e851dea83ddba57ed528fe41"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\replay_carry.py",
+        "bytes": 3806,
+        "sha256": "78259b87d055e4a63f9472d048a2fd637535ef93e11a6b2c4c5e89aadb6e1978"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\reverse_time.py",
+        "bytes": 4322,
+        "sha256": "ff0f485030751bb742e3771d291697d8319d55aa4d28877cb49ea014ea74bf7f"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\rt_ensemble.py",
+        "bytes": 15993,
+        "sha256": "0264703d3b4c2407f15c166f7e44393b2b54b54e9ced5896c8dc0c7032626a7f"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\score_label.py",
+        "bytes": 1844,
+        "sha256": "6ec63c9f3e0ba59ef573201c193a8ecd1356835393331d79f251f755dad654d2"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\score_runs.py",
+        "bytes": 3900,
+        "sha256": "674df23154a292068900713c22b09106617df6f8dc4f5622be11cd843cf04b22"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\test_loglik_batch.py",
+        "bytes": 4001,
+        "sha256": "5c52348d0d71fc42221dd2ebca3253818a6ba56f0bdecaedfeabd4e89bc1fa53"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\wp13a_run_standalone_rtk.py",
+        "bytes": 52101,
+        "sha256": "4ba89784643d4f5b520fb076f4437419367233b11634c83c92c76c61e2bc789f"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\wp13m_lambda_diag.py",
+        "bytes": 6299,
+        "sha256": "bdf8f8ffa99bee31395e8155e5a07ae6c0586b24a04a95767abbd47f347702c7"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\wp16_run_rbpf.py",
+        "bytes": 56419,
+        "sha256": "e503223ab337d6173d7d87606f5b27938da6d9f168121b79d7055a4fa1d5a0d9"
+      }
+    ],
+    "inputs": [
+      {
+        "path": "E:\\datasets\\PPC-Dataset-data\\tokyo\\run1\\rover.obs",
+        "bytes": 90593655,
+        "sha256": "97e7b370d381a64760cd07d251bcf5df2dc2b3b6dd2444323ff8d6f35e4689e5"
+      },
+      {
+        "path": "E:\\datasets\\PPC-Dataset-data\\tokyo\\run1\\base.obs",
+        "bytes": 35794907,
+        "sha256": "2624939cd82cdbd839a32ccb4d22f9f846e7613a934b45539b5f98e8c31e37f8"
+      },
+      {
+        "path": "E:\\datasets\\PPC-Dataset-data\\tokyo\\run1\\base.nav",
+        "bytes": 815565,
+        "sha256": "6a8fcef262ae62854f971cf383ee17c19fddd7d49071effc0f94c156b923d4b7"
+      },
+      {
+        "path": "E:\\datasets\\PPC-Dataset-data\\tokyo\\run1\\imu.csv",
+        "bytes": 22469390,
+        "sha256": "bba039063ebcfde1f3be5e5c8c4a86e522064a8873a2310a5ed142e820acc091"
+      },
+      {
+        "path": "E:\\datasets\\PPC-Dataset-data\\tokyo\\run1\\reference.csv",
+        "bytes": 1658813,
+        "sha256": "8e468a6a959cd47144f4ad1f1dc0129e7ee160011f4d236e4ffdb63b203373e9"
+      }
+    ],
+    "libraries": [
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\old\\repro_tc_fgo\\.venv\\src\\cssrlib\\src\\cssrlib\\gnss.py",
+        "bytes": 41184,
+        "sha256": "a8702c83c1f3cde8ad60d67a42bb326103b81f7a8a1a64ff4dcf6aa9221785a4"
+      },
+      {
+        "path": "C:\\Users\\rsasa\\Workspace\\old\\repro_tc_fgo\\.venv\\Lib\\site-packages\\gtsam\\gtsam.pyd",
+        "bytes": 16236032,
+        "sha256": "76d018af6634358e5245c25e6676864abefa56044e3b5862b3361b78128f18a3"
+      }
+    ],
+    "numpy": "2.4.6",
+    "argv": [
+      "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\wp16_run_rbpf.py",
+      "1",
+      "--max-ep",
+      "600",
+      "--out-dir",
+      "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture-run",
+      "--nf",
+      "2",
+      "--band-priority",
+      "C:2,6;R:-",
+      "--dr-fill",
+      "1",
+      "--gap-fill",
+      "1",
+      "--fix-rule",
+      "5,15,5,15,0.1,5,1.0",
+      "--fix-hyst",
+      "5,2,2,6,2,6,0.1,5",
+      "--carry",
+      "1",
+      "--af-select",
+      "6",
+      "--fix-flt-max",
+      "0.5",
+      "--checkpoint-every",
+      "0",
+      "--log-every",
+      "100",
+      "--env",
+      "SEED_N_CYCLES=1",
+      "--env",
+      "COND_HOLD=1",
+      "--env",
+      "RBPF_FB=1",
+      "--env",
+      "RBPF_SPAWN=1",
+      "--env",
+      "RBPF_FIX_VOTE_DD=6.0",
+      "--env",
+      "RBPF_FIX_VOTE_DPR=3.5",
+      "--env",
+      "RBPF_FB_COMMIT_MAX_DPR=1.5",
+      "--env",
+      "RBPF_TRACK=2",
+      "--env",
+      "RBPF_TRACK_EMPTY=1",
+      "--env",
+      "RBPF_TRACK_OUT=2",
+      "--env",
+      "RBPF_KEEP=1",
+      "--env",
+      "QC_ANY_BAND=1",
+      "--env",
+      "QC_ANY_BAND_CODE_ONLY=1",
+      "--env",
+      "QC_ANY_BAND_PR_SCALE=10",
+      "--env",
+      "QC_BASE_MASK=1",
+      "--env",
+      "ELMIN_DEG=10.0",
+      "--env",
+      "HUBER_PR=1.345",
+      "--env",
+      "HUBER_CP=2.0",
+      "--env",
+      "PR_CNR_ERR=0.5",
+      "--env",
+      "DOP_V2=1",
+      "--env",
+      "DOPPLER_LEVER_COMP=1",
+      "--env",
+      "DOP_COV_SCALE=1.5",
+      "--env",
+      "RBPF_CARRY=1",
+      "--env",
+      "RBPF_DUMP_ROWS=1"
+    ],
+    "captureEvery": 8,
+    "note": "Original CPU results are returned unchanged. Inputs and expected values are copied from actual calls; scalar captures include cache misses only. No generated/duplicated hypotheses. Capture timings include observation overhead and are not speed evidence."
+  },
+  "sources": [
+    {
+      "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\benchmark_likelihood_packed.py",
+      "bytes": 8954,
+      "sha256": "c25cdd8e1008bb479aa6c21c31a72095b68fd9eb5e09164beda7fc5da96a5bc8"
+    },
+    {
+      "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\likelihood_cuda_packed.py",
+      "bytes": 2230,
+      "sha256": "6eff84c631513df51b87e013413b500ff5745396cc784d8543a30110f7874fc7"
+    },
+    {
+      "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\likelihood_cuda.py",
+      "bytes": 11778,
+      "sha256": "48d3ac0e9872dfe317bddc7df8d02fa35153fd06121e03c06302b90e3b86b137"
+    },
+    {
+      "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\capture_likelihood_inputs.py",
+      "bytes": 7216,
+      "sha256": "7bc7f18b83bb3f9285e029a8a66cc3473a090e17ce39560a27557e489c4ef2b6"
+    },
+    {
+      "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\gnss-rbpf-gpu-20261015\\experiments\\rbpf_fgo\\rbpf_fgo.py",
+      "bytes": 156457,
+      "sha256": "77d85543a2dc5bb8d8a16a1ee5708118d84e427fd876227cdf09909d82b01a0a"
+    }
+  ],
+  "environment": {
+    "python": "3.12.10",
+    "numpy": "2.4.6",
+    "numba": "0.66.0",
+    "computeCapability": [
+      7,
+      5
+    ],
+    "ompNumThreads": "1",
+    "openblasNumThreads": "1"
+  },
+  "startPolicy": "cuda",
+  "repeats": 10,
+  "batches": [
+    {
+      "record": {
+        "file": "0000-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0000-conditional.npz",
+          "bytes": 6626,
+          "sha256": "e3a646e51ff5dc8f876669e8da7bab19cb28d8f29b8bb49db70153035f74c666"
+        },
+        "kind": "conditional",
+        "epoch": 8,
+        "hypotheses": 8,
+        "rows": 96,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 5.684341886080802e-14,
+            "maxRelative": 6.629508364799763e-16
+          },
+          "sol": {
+            "maxAbs": 2.688821387764051e-17,
+            "maxRelative": 2.688821387764051e-17
+          },
+          "covariance": {
+            "maxAbs": 8.131516293641283e-20,
+            "maxRelative": 8.131516293641283e-20
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0001-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0001-weight.npz",
+          "bytes": 5488,
+          "sha256": "311cba73a3834f5b1666611ffd72c64fac8fe7d0b63e2e77677b65cce02c87f1"
+        },
+        "kind": "weight",
+        "epoch": 8,
+        "hypotheses": 17,
+        "rows": 96,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 1.4210854715202004e-14,
+            "maxRelative": 3.0655720503786286e-16
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 7.105427357601002e-14,
+            "maxRelative": 3.3583533644350364e-15
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0002-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0002-conditional.npz",
+          "bytes": 6605,
+          "sha256": "e5ecf13d27f71e5ecf7affef4f3ee8d7e43b2a9b09e3d0f33ace6311d6cdfc4a"
+        },
+        "kind": "conditional",
+        "epoch": 16,
+        "hypotheses": 9,
+        "rows": 96,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 5.684341886080802e-14,
+            "maxRelative": 7.364009882988218e-16
+          },
+          "sol": {
+            "maxAbs": 2.2551405187698492e-17,
+            "maxRelative": 2.2551405187698492e-17
+          },
+          "covariance": {
+            "maxAbs": 2.168404344971009e-19,
+            "maxRelative": 2.168404344971009e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0003-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0003-weight.npz",
+          "bytes": 5524,
+          "sha256": "b8d892c1e127039adb3e47d1b288db0e6ad74e64f01a4efeebc3193f127d4c39"
+        },
+        "kind": "weight",
+        "epoch": 16,
+        "hypotheses": 20,
+        "rows": 96,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 4.263256414560601e-14,
+            "maxRelative": 7.224224304253273e-16
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 5.684341886080802e-14,
+            "maxRelative": 2.1626190908274474e-15
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0004-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0004-conditional.npz",
+          "bytes": 7490,
+          "sha256": "cba46ec6dd95a21ee7237e9f6612e823e385b5fb09dfa92b8a70e36311330f71"
+        },
+        "kind": "conditional",
+        "epoch": 24,
+        "hypotheses": 24,
+        "rows": 88,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.842170943040401e-14,
+            "maxRelative": 5.821832362816542e-16
+          },
+          "sol": {
+            "maxAbs": 6.245004513516506e-17,
+            "maxRelative": 6.245004513516506e-17
+          },
+          "covariance": {
+            "maxAbs": 2.303929616531697e-19,
+            "maxRelative": 2.303929616531697e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0005-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0005-weight.npz",
+          "bytes": 5405,
+          "sha256": "03570aad2783b65a8ac164263f79b21dd3988beeed4fcf4e9a5a223e6824dbe9"
+        },
+        "kind": "weight",
+        "epoch": 24,
+        "hypotheses": 30,
+        "rows": 88,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 2.842170943040401e-14,
+            "maxRelative": 2.046789595967253e-14
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 4.263256414560601e-14,
+            "maxRelative": 1.7909408964713465e-14
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0006-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0006-conditional.npz",
+          "bytes": 7927,
+          "sha256": "8d67dbb1b668ea139c32f89c5421aa9962aac296db339edcb38beb75fa15cf4c"
+        },
+        "kind": "conditional",
+        "epoch": 32,
+        "hypotheses": 24,
+        "rows": 72,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.1316282072803006e-14,
+            "maxRelative": 4.870822120750692e-16
+          },
+          "sol": {
+            "maxAbs": 9.367506770274758e-17,
+            "maxRelative": 9.367506770274758e-17
+          },
+          "covariance": {
+            "maxAbs": 4.607859233063394e-19,
+            "maxRelative": 4.607859233063394e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0007-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0007-weight.npz",
+          "bytes": 4895,
+          "sha256": "4cc3d81adf2d3ce7d50fd87bc7b6c3f779220f7b58ebabb1c131c08e7b744c48"
+        },
+        "kind": "weight",
+        "epoch": 32,
+        "hypotheses": 26,
+        "rows": 72,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 2.842170943040401e-14,
+            "maxRelative": 1.2712617284744623e-15
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 3.552713678800501e-14,
+            "maxRelative": 1.6037519461180095e-15
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0008-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0008-conditional.npz",
+          "bytes": 6497,
+          "sha256": "c795f70bfed788146ac3c6f0160eb47fa0c5e0f68b3cfb4ca5905e7e15731169"
+        },
+        "kind": "conditional",
+        "epoch": 40,
+        "hypotheses": 12,
+        "rows": 72,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.1316282072803006e-14,
+            "maxRelative": 9.815397579489526e-16
+          },
+          "sol": {
+            "maxAbs": 4.163336342344337e-17,
+            "maxRelative": 4.163336342344337e-17
+          },
+          "covariance": {
+            "maxAbs": 3.7947076036992655e-19,
+            "maxRelative": 3.7947076036992655e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0009-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0009-weight.npz",
+          "bytes": 4932,
+          "sha256": "3b633886794353e070e8214ec3b86c20b06663b07adb3e9135f10e47a20af9dc"
+        },
+        "kind": "weight",
+        "epoch": 40,
+        "hypotheses": 24,
+        "rows": 72,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 4.263256414560601e-14,
+            "maxRelative": 5.783827742409426e-15
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 3.197442310920451e-14,
+            "maxRelative": 2.5942782295334997e-14
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0010-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0010-conditional.npz",
+          "bytes": 8175,
+          "sha256": "eb3ae9619b422c4eb20f930fdf7d8222d81b84933373ebd3a5dd4b4aff02ad43"
+        },
+        "kind": "conditional",
+        "epoch": 48,
+        "hypotheses": 23,
+        "rows": 68,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.1316282072803006e-14,
+            "maxRelative": 6.522520774921082e-16
+          },
+          "sol": {
+            "maxAbs": 6.765421556309548e-17,
+            "maxRelative": 6.765421556309548e-17
+          },
+          "covariance": {
+            "maxAbs": 4.607859233063394e-19,
+            "maxRelative": 4.607859233063394e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0011-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0011-weight.npz",
+          "bytes": 4919,
+          "sha256": "c8c64895b251f7ff708e9357a4979ffa668993757cea86d6e7fd5ecd38af0061"
+        },
+        "kind": "weight",
+        "epoch": 48,
+        "hypotheses": 39,
+        "rows": 68,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 2.842170943040401e-14,
+            "maxRelative": 3.552713678800501e-15
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.4868995751603507e-14,
+            "maxRelative": 6.346135312596024e-15
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0012-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0012-conditional.npz",
+          "bytes": 5423,
+          "sha256": "8e60ca3ba3382b57bc0758d185e5deaac40082c3decf5714750ce2fcae061479"
+        },
+        "kind": "conditional",
+        "epoch": 56,
+        "hypotheses": 10,
+        "rows": 48,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.1316282072803006e-14,
+            "maxRelative": 6.031080315547855e-16
+          },
+          "sol": {
+            "maxAbs": 6.938893903907228e-17,
+            "maxRelative": 6.938893903907228e-17
+          },
+          "covariance": {
+            "maxAbs": 5.421010862427522e-19,
+            "maxRelative": 5.421010862427522e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0013-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0013-weight.npz",
+          "bytes": 4164,
+          "sha256": "1d6aece9f71f2e28498f8df949fad3dd8ecf0d049727a0a0a28f2ec9c25ab92d"
+        },
+        "kind": "weight",
+        "epoch": 56,
+        "hypotheses": 35,
+        "rows": 48,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 2.842170943040401e-14,
+            "maxRelative": 5.275183994147099e-15
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 4.263256414560601e-14,
+            "maxRelative": 4.220147195317679e-15
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0014-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0014-conditional.npz",
+          "bytes": 5788,
+          "sha256": "6e54d379d48e8f5e86e6affaa6bde4678cf86eee260e378c346d1680c50534c0"
+        },
+        "kind": "conditional",
+        "epoch": 64,
+        "hypotheses": 10,
+        "rows": 48,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 1.4210854715202004e-14,
+            "maxRelative": 5.720900484905368e-16
+          },
+          "sol": {
+            "maxAbs": 1.457167719820518e-16,
+            "maxRelative": 1.457167719820518e-16
+          },
+          "covariance": {
+            "maxAbs": 2.6020852139652106e-18,
+            "maxRelative": 2.6020852139652106e-18
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0015-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0015-weight.npz",
+          "bytes": 4304,
+          "sha256": "fdd4cddffb22c5af43fccef1560dda22e9e8d0e944e65fa13f496440a9c9256e"
+        },
+        "kind": "weight",
+        "epoch": 64,
+        "hypotheses": 37,
+        "rows": 48,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 9.947598300641403e-14,
+            "maxRelative": 1.6343028392376285e-15
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 7.105427357601002e-14,
+            "maxRelative": 3.421599896785291e-15
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0016-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0016-conditional.npz",
+          "bytes": 5058,
+          "sha256": "b6f02ea6980df537c2a78ed963500d354329e2f849caae87cbd8d88779ccdc2a"
+        },
+        "kind": "conditional",
+        "epoch": 72,
+        "hypotheses": 5,
+        "rows": 52,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 1.4210854715202004e-14,
+            "maxRelative": 5.788297721754126e-16
+          },
+          "sol": {
+            "maxAbs": 8.326672684688674e-17,
+            "maxRelative": 8.326672684688674e-17
+          },
+          "covariance": {
+            "maxAbs": 1.3552527156068805e-18,
+            "maxRelative": 1.3552527156068805e-18
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0017-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0017-weight.npz",
+          "bytes": 4241,
+          "sha256": "2d5e179f40c6cb485492d91b43a0047ad04cea2ae4c51751b2f88326e305391f"
+        },
+        "kind": "weight",
+        "epoch": 72,
+        "hypotheses": 19,
+        "rows": 52,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 5.684341886080802e-14,
+            "maxRelative": 2.182651838343561e-15
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 9.947598300641403e-14,
+            "maxRelative": 2.5794976271332994e-15
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0018-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0018-conditional.npz",
+          "bytes": 5045,
+          "sha256": "6917b1e26393b4efa33f023e78ed6067486da9768e6f927c3108fa3ad1ef47b8"
+        },
+        "kind": "conditional",
+        "epoch": 80,
+        "hypotheses": 5,
+        "rows": 52,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 1.4210854715202004e-14,
+            "maxRelative": 3.4764438251162674e-16
+          },
+          "sol": {
+            "maxAbs": 7.28583859910259e-17,
+            "maxRelative": 7.28583859910259e-17
+          },
+          "covariance": {
+            "maxAbs": 2.168404344971009e-19,
+            "maxRelative": 2.168404344971009e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0019-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0019-weight.npz",
+          "bytes": 4193,
+          "sha256": "10655d6b05f2f001c9f5386739c756f6e012524d7b3d048f2ef8dcbe0be965fa"
+        },
+        "kind": "weight",
+        "epoch": 80,
+        "hypotheses": 15,
+        "rows": 52,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 3.197442310920451e-14,
+            "maxRelative": 5.305263228075566e-15
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.1316282072803006e-14,
+            "maxRelative": 6.3975952206796405e-15
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0020-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0020-conditional.npz",
+          "bytes": 7836,
+          "sha256": "550674eaef7f3a9c28f5c52d5a3046d3c9dcac34f8bfeb8bfdb9251767903653"
+        },
+        "kind": "conditional",
+        "epoch": 88,
+        "hypotheses": 32,
+        "rows": 52,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.842170943040401e-14,
+            "maxRelative": 5.981968833415012e-16
+          },
+          "sol": {
+            "maxAbs": 4.85722573273506e-17,
+            "maxRelative": 4.85722573273506e-17
+          },
+          "covariance": {
+            "maxAbs": 4.0657581468206416e-19,
+            "maxRelative": 4.0657581468206416e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0021-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0021-weight.npz",
+          "bytes": 4291,
+          "sha256": "564b58e3ed299c1a8d9f7addf0809199d46b8cd6543493a2b4482418717979f2"
+        },
+        "kind": "weight",
+        "epoch": 88,
+        "hypotheses": 33,
+        "rows": 52,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 1.4210854715202004e-14,
+            "maxRelative": 8.902845921934371e-16
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 3.197442310920451e-14,
+            "maxRelative": 3.0918662623398113e-15
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0022-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0022-conditional.npz",
+          "bytes": 7059,
+          "sha256": "a5a9649849437dba7cd184a5c2ac1d42338f2da8399614568dd7344a43b3d1df"
+        },
+        "kind": "conditional",
+        "epoch": 96,
+        "hypotheses": 24,
+        "rows": 52,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.1316282072803006e-14,
+            "maxRelative": 4.710049122410353e-16
+          },
+          "sol": {
+            "maxAbs": 5.551115123125783e-17,
+            "maxRelative": 5.551115123125783e-17
+          },
+          "covariance": {
+            "maxAbs": 2.981555974335137e-19,
+            "maxRelative": 2.981555974335137e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0023-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0023-weight.npz",
+          "bytes": 4309,
+          "sha256": "56b5467a7ecc752e5cda6239ecee65036e36e055df04f91819b795d18c9a3c78"
+        },
+        "kind": "weight",
+        "epoch": 96,
+        "hypotheses": 25,
+        "rows": 52,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 2.1316282072803006e-14,
+            "maxRelative": 1.3337824797305662e-14
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.842170943040401e-14,
+            "maxRelative": 2.6675649594611323e-14
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0024-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0024-conditional.npz",
+          "bytes": 8588,
+          "sha256": "e45ad4786da476afc3683e1c10ac5770dabdc9e0a0621ff09b93b27279c35ffe"
+        },
+        "kind": "conditional",
+        "epoch": 104,
+        "hypotheses": 30,
+        "rows": 76,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 4.263256414560601e-14,
+            "maxRelative": 7.755306538078625e-16
+          },
+          "sol": {
+            "maxAbs": 3.8163916471489756e-17,
+            "maxRelative": 3.8163916471489756e-17
+          },
+          "covariance": {
+            "maxAbs": 1.3552527156068805e-19,
+            "maxRelative": 1.3552527156068805e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0025-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0025-weight.npz",
+          "bytes": 5003,
+          "sha256": "808a94e51634998c2d8c73289962d05df4fd621a48c560c54eb8196b77fe3dda"
+        },
+        "kind": "weight",
+        "epoch": 104,
+        "hypotheses": 20,
+        "rows": 76,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 1.4210854715202004e-14,
+            "maxRelative": 7.105427357601002e-15
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.842170943040401e-14,
+            "maxRelative": 3.5326308436745648e-15
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0026-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0026-conditional.npz",
+          "bytes": 8327,
+          "sha256": "92f31e94afbd967da95c60b6555ca431d89c7b2b56f09abbe946df5f429c9a7a"
+        },
+        "kind": "conditional",
+        "epoch": 112,
+        "hypotheses": 34,
+        "rows": 84,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 3.552713678800501e-14,
+            "maxRelative": 7.412141166470319e-16
+          },
+          "sol": {
+            "maxAbs": 2.7755575615628914e-17,
+            "maxRelative": 2.7755575615628914e-17
+          },
+          "covariance": {
+            "maxAbs": 1.2197274440461925e-19,
+            "maxRelative": 1.2197274440461925e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0027-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0027-weight.npz",
+          "bytes": 5282,
+          "sha256": "13c8089367d813f04c229182cc271d11f69f586d4ba81370da57077ea327012e"
+        },
+        "kind": "weight",
+        "epoch": 112,
+        "hypotheses": 25,
+        "rows": 84,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 2.1316282072803006e-14,
+            "maxRelative": 8.770236474974439e-15
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 3.552713678800501e-14,
+            "maxRelative": 2.046388510827369e-14
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0028-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0028-conditional.npz",
+          "bytes": 7171,
+          "sha256": "9da68abb57a52e21d23e29e876f433bdc315cc81da6a3ed25655b685228a2ba5"
+        },
+        "kind": "conditional",
+        "epoch": 120,
+        "hypotheses": 20,
+        "rows": 72,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.1316282072803006e-14,
+            "maxRelative": 4.442742297350141e-16
+          },
+          "sol": {
+            "maxAbs": 2.7755575615628914e-17,
+            "maxRelative": 2.7755575615628914e-17
+          },
+          "covariance": {
+            "maxAbs": 1.7618285302889447e-19,
+            "maxRelative": 1.7618285302889447e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0029-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0029-weight.npz",
+          "bytes": 4931,
+          "sha256": "ca9d0103229dd2a41a85e814d5545e59fa4cea24fe33e16f25be7d6195adfb26"
+        },
+        "kind": "weight",
+        "epoch": 120,
+        "hypotheses": 27,
+        "rows": 72,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 2.842170943040401e-14,
+            "maxRelative": 2.8444891782042693e-15
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 4.263256414560601e-14,
+            "maxRelative": 4.9778560618574715e-15
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0030-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0030-conditional.npz",
+          "bytes": 6553,
+          "sha256": "97715b6ecd410d9a0045d60448cc6e9314b81ed8adfab1632c0cb4b4f9757f34"
+        },
+        "kind": "conditional",
+        "epoch": 128,
+        "hypotheses": 18,
+        "rows": 72,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 4.263256414560601e-14,
+            "maxRelative": 7.644133386312542e-16
+          },
+          "sol": {
+            "maxAbs": 1.9081958235744878e-17,
+            "maxRelative": 1.9081958235744878e-17
+          },
+          "covariance": {
+            "maxAbs": 1.4907779871675686e-19,
+            "maxRelative": 1.4907779871675686e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0031-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0031-weight.npz",
+          "bytes": 4885,
+          "sha256": "a1e4e076b127986726dfc907591a6b33e8d9706f9e096312be20e1019ce431df"
+        },
+        "kind": "weight",
+        "epoch": 128,
+        "hypotheses": 21,
+        "rows": 72,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 4.973799150320701e-14,
+            "maxRelative": 7.105427357601002e-15
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 3.907985046680551e-14,
+            "maxRelative": 9.202679527425032e-15
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0032-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0032-conditional.npz",
+          "bytes": 6886,
+          "sha256": "78648a69c173264ab1341261824196243948a013a923adb4e67394132fa34d84"
+        },
+        "kind": "conditional",
+        "epoch": 136,
+        "hypotheses": 16,
+        "rows": 76,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.1316282072803006e-14,
+            "maxRelative": 4.260933408190428e-16
+          },
+          "sol": {
+            "maxAbs": 4.423544863740858e-17,
+            "maxRelative": 4.423544863740858e-17
+          },
+          "covariance": {
+            "maxAbs": 1.7618285302889447e-19,
+            "maxRelative": 1.7618285302889447e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0033-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0033-weight.npz",
+          "bytes": 4990,
+          "sha256": "d0ad2b3b2bff35f6fcdee80acfdb622fce5df915627d98dfec08f4cdd18034a5"
+        },
+        "kind": "weight",
+        "epoch": 136,
+        "hypotheses": 22,
+        "rows": 76,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 2.1316282072803006e-14,
+            "maxRelative": 1.6925841990821773e-15
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 4.973799150320701e-14,
+            "maxRelative": 5.077752597246532e-15
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0034-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0034-conditional.npz",
+          "bytes": 6810,
+          "sha256": "3e54413f1f2999b3a729eaddee961c62c144de10cc3ccf346fc0513c9e1eed07"
+        },
+        "kind": "conditional",
+        "epoch": 144,
+        "hypotheses": 20,
+        "rows": 72,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 3.552713678800501e-14,
+            "maxRelative": 7.544191724544167e-16
+          },
+          "sol": {
+            "maxAbs": 3.61039323437673e-17,
+            "maxRelative": 3.61039323437673e-17
+          },
+          "covariance": {
+            "maxAbs": 2.439454888092385e-19,
+            "maxRelative": 2.439454888092385e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0035-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0035-weight.npz",
+          "bytes": 5015,
+          "sha256": "e89665b0d342fdde34fbe1f6f59462b15538e9c3f4d2f4c978aedb48d90cd0d6"
+        },
+        "kind": "weight",
+        "epoch": 144,
+        "hypotheses": 29,
+        "rows": 72,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 4.263256414560601e-14,
+            "maxRelative": 3.2544041329581734e-15
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 3.907985046680551e-14,
+            "maxRelative": 9.380341324408852e-15
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0036-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0036-conditional.npz",
+          "bytes": 8835,
+          "sha256": "56f386589b53ff4669cb7f69f17b2018fd5cebb0b22f706f2ca1cc21b7de58f5"
+        },
+        "kind": "conditional",
+        "epoch": 152,
+        "hypotheses": 37,
+        "rows": 80,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 3.552713678800501e-14,
+            "maxRelative": 5.987737792484301e-16
+          },
+          "sol": {
+            "maxAbs": 3.122502256758253e-17,
+            "maxRelative": 3.122502256758253e-17
+          },
+          "covariance": {
+            "maxAbs": 2.0328790734103208e-19,
+            "maxRelative": 2.0328790734103208e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0037-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0037-weight.npz",
+          "bytes": 5297,
+          "sha256": "d13e48f426fb099da5259b17c834e7bced45baeb671f5466770dc50c0545f1c8"
+        },
+        "kind": "weight",
+        "epoch": 152,
+        "hypotheses": 32,
+        "rows": 80,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 3.552713678800501e-14,
+            "maxRelative": 3.391386979150157e-15
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 4.973799150320701e-14,
+            "maxRelative": 2.5435402343626176e-15
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0038-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0038-conditional.npz",
+          "bytes": 6489,
+          "sha256": "88770bef38768483459882eb9783e8d8c460979a634809a7fae74879b9488120"
+        },
+        "kind": "conditional",
+        "epoch": 160,
+        "hypotheses": 18,
+        "rows": 76,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.842170943040401e-14,
+            "maxRelative": 8.975520222866843e-16
+          },
+          "sol": {
+            "maxAbs": 3.2959746043559335e-17,
+            "maxRelative": 3.2959746043559335e-17
+          },
+          "covariance": {
+            "maxAbs": 1.0842021724855044e-19,
+            "maxRelative": 1.0842021724855044e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0039-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0039-weight.npz",
+          "bytes": 5170,
+          "sha256": "71c198aec7d21194409b2684ed08965e0b9cab9bc2bd4397518408ce9d13c6e3"
+        },
+        "kind": "weight",
+        "epoch": 160,
+        "hypotheses": 30,
+        "rows": 76,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 3.552713678800501e-14,
+            "maxRelative": 3.776180304368495e-15
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.842170943040401e-14,
+            "maxRelative": 8.723773833630709e-15
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0040-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0040-conditional.npz",
+          "bytes": 5426,
+          "sha256": "96c04b147704d59474aa0fad2ec67cc0dad8ab04356edd739195d589885c6ffd"
+        },
+        "kind": "conditional",
+        "epoch": 168,
+        "hypotheses": 6,
+        "rows": 76,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.1316282072803006e-14,
+            "maxRelative": 4.828792404279716e-16
+          },
+          "sol": {
+            "maxAbs": 1.0408340855860843e-17,
+            "maxRelative": 1.0408340855860843e-17
+          },
+          "covariance": {
+            "maxAbs": 5.421010862427522e-20,
+            "maxRelative": 5.421010862427522e-20
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0041-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0041-weight.npz",
+          "bytes": 4974,
+          "sha256": "6fac01ccb54911b5bfaa6f32196eb31a77d2edb0fcd1193cd34fda23dfd5376f"
+        },
+        "kind": "weight",
+        "epoch": 168,
+        "hypotheses": 19,
+        "rows": 76,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 2.1316282072803006e-14,
+            "maxRelative": 3.782640870069245e-15
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.842170943040401e-14,
+            "maxRelative": 2.036798008325502e-14
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0042-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0042-conditional.npz",
+          "bytes": 6124,
+          "sha256": "81357f7e5db0c7cf6aaa1f88a56ef7b444a9d41cbe9da54380cc3dd158fa1dcb"
+        },
+        "kind": "conditional",
+        "epoch": 176,
+        "hypotheses": 11,
+        "rows": 80,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.842170943040401e-14,
+            "maxRelative": 6.362674965132026e-16
+          },
+          "sol": {
+            "maxAbs": 1.9081958235744878e-17,
+            "maxRelative": 1.9081958235744878e-17
+          },
+          "covariance": {
+            "maxAbs": 1.8973538018496328e-19,
+            "maxRelative": 1.8973538018496328e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0043-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0043-weight.npz",
+          "bytes": 5178,
+          "sha256": "9525c38e0c41359d260f07515b614454f078279912a33a5f9fb92d211bd69080"
+        },
+        "kind": "weight",
+        "epoch": 176,
+        "hypotheses": 24,
+        "rows": 80,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 2.1316282072803006e-14,
+            "maxRelative": 6.105985888767451e-15
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.842170943040401e-14,
+            "maxRelative": 1.6439192777450828e-14
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0044-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0044-conditional.npz",
+          "bytes": 6488,
+          "sha256": "6e42dfd7ecea435cca5172907884bcc5f20c543babed36d861b3285923f0c276"
+        },
+        "kind": "conditional",
+        "epoch": 184,
+        "hypotheses": 18,
+        "rows": 76,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.1316282072803006e-14,
+            "maxRelative": 5.298072024738003e-16
+          },
+          "sol": {
+            "maxAbs": 1.9081958235744878e-17,
+            "maxRelative": 1.9081958235744878e-17
+          },
+          "covariance": {
+            "maxAbs": 1.3552527156068805e-19,
+            "maxRelative": 1.3552527156068805e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0045-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0045-weight.npz",
+          "bytes": 5073,
+          "sha256": "363a94e6bd737b0e1899c471fd371a5741cf1d0b73312091fd7af18681a03beb"
+        },
+        "kind": "weight",
+        "epoch": 184,
+        "hypotheses": 24,
+        "rows": 76,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 2.842170943040401e-14,
+            "maxRelative": 6.994405055138486e-15
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.842170943040401e-14,
+            "maxRelative": 2.3203661214665772e-14
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0046-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0046-conditional.npz",
+          "bytes": 7538,
+          "sha256": "7d38680848cfd62a79d8ade6635790bb842647e96ec485a4850b4eb2c8640de4"
+        },
+        "kind": "conditional",
+        "epoch": 192,
+        "hypotheses": 25,
+        "rows": 76,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.1316282072803006e-14,
+            "maxRelative": 4.807572974447492e-16
+          },
+          "sol": {
+            "maxAbs": 1.214306433183765e-17,
+            "maxRelative": 1.214306433183765e-17
+          },
+          "covariance": {
+            "maxAbs": 2.439454888092385e-19,
+            "maxRelative": 2.439454888092385e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0047-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0047-weight.npz",
+          "bytes": 5173,
+          "sha256": "a9e394126585412c979115af0cf2189a0c4744742b6b22d3ec2494036d4ed770"
+        },
+        "kind": "weight",
+        "epoch": 192,
+        "hypotheses": 30,
+        "rows": 76,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 1.4210854715202004e-14,
+            "maxRelative": 1.6806613654766857e-15
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.842170943040401e-14,
+            "maxRelative": 1.8984813721090177e-14
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0048-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0048-conditional.npz",
+          "bytes": 7914,
+          "sha256": "0ad60655a9242c453f9e04e70cb8d86ea710b91249198084ee9120980cf3fc4e"
+        },
+        "kind": "conditional",
+        "epoch": 200,
+        "hypotheses": 31,
+        "rows": 76,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 2.842170943040401e-14,
+            "maxRelative": 5.298405115901293e-16
+          },
+          "sol": {
+            "maxAbs": 2.7755575615628914e-17,
+            "maxRelative": 2.7755575615628914e-17
+          },
+          "covariance": {
+            "maxAbs": 2.303929616531697e-19,
+            "maxRelative": 2.303929616531697e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0049-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0049-weight.npz",
+          "bytes": 5164,
+          "sha256": "3f6ab7d517c9e1edcd2a9b7f10ed6b0441c8d0a11b9b51625a1173baf2691415"
+        },
+        "kind": "weight",
+        "epoch": 200,
+        "hypotheses": 29,
+        "rows": 76,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 3.552713678800501e-14,
+            "maxRelative": 2.1659490431555365e-15
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 4.263256414560601e-14,
+            "maxRelative": 1.017600290804826e-14
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0050-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0050-conditional.npz",
+          "bytes": 8061,
+          "sha256": "e54e6290cec7b98964993771340de2370f2538463962b46c7b2a5058bbfd235a"
+        },
+        "kind": "conditional",
+        "epoch": 208,
+        "hypotheses": 36,
+        "rows": 72,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 4.263256414560601e-14,
+            "maxRelative": 6.362859035205804e-16
+          },
+          "sol": {
+            "maxAbs": 2.42861286636753e-17,
+            "maxRelative": 2.42861286636753e-17
+          },
+          "covariance": {
+            "maxAbs": 2.574980159653073e-19,
+            "maxRelative": 2.574980159653073e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0051-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0051-weight.npz",
+          "bytes": 5130,
+          "sha256": "fcf67e5d466c6acad328aa3d60f0c9fe61003ad4db86c41923bf0469968a534e"
+        },
+        "kind": "weight",
+        "epoch": 208,
+        "hypotheses": 37,
+        "rows": 72,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 3.552713678800501e-14,
+            "maxRelative": 3.6093983500604766e-15
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 4.263256414560601e-14,
+            "maxRelative": 3.2484585150544292e-15
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0052-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0052-conditional.npz",
+          "bytes": 6823,
+          "sha256": "3d0e55f800cbc7eebfbe75b63d45af2f684693531137c01750e92d7676524795"
+        },
+        "kind": "conditional",
+        "epoch": 216,
+        "hypotheses": 17,
+        "rows": 80,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 7.105427357601002e-14,
+            "maxRelative": 9.570414854104676e-16
+          },
+          "sol": {
+            "maxAbs": 2.168404344971009e-17,
+            "maxRelative": 2.168404344971009e-17
+          },
+          "covariance": {
+            "maxAbs": 1.4907779871675686e-19,
+            "maxRelative": 1.4907779871675686e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0053-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0053-weight.npz",
+          "bytes": 5192,
+          "sha256": "f5c0cf192ad4caa7f02db032694c6e1636b55cb0e9ae0fdeaecd407a3f0e4713"
+        },
+        "kind": "weight",
+        "epoch": 216,
+        "hypotheses": 25,
+        "rows": 80,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 1.4210854715202004e-14,
+            "maxRelative": 3.3098371794902937e-16
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 5.684341886080802e-14,
+            "maxRelative": 1.2907246265360425e-15
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0054-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0054-conditional.npz",
+          "bytes": 8432,
+          "sha256": "d666f2c788fd330b31bc9b0387711a8b5064e02fdb11672b4e86069c9c7c0ac4"
+        },
+        "kind": "conditional",
+        "epoch": 224,
+        "hypotheses": 29,
+        "rows": 80,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 5.684341886080802e-14,
+            "maxRelative": 5.689443370496885e-16
+          },
+          "sol": {
+            "maxAbs": 4.85722573273506e-17,
+            "maxRelative": 4.85722573273506e-17
+          },
+          "covariance": {
+            "maxAbs": 2.168404344971009e-19,
+            "maxRelative": 2.168404344971009e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0055-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0055-weight.npz",
+          "bytes": 5098,
+          "sha256": "8106fb8c3984904a7f776fa09552542675611d029ab492a11a22d77dedef1307"
+        },
+        "kind": "weight",
+        "epoch": 224,
+        "hypotheses": 20,
+        "rows": 80,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 2.842170943040401e-14,
+            "maxRelative": 3.698261036184799e-16
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 5.684341886080802e-14,
+            "maxRelative": 7.396522072369598e-16
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0056-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0056-conditional.npz",
+          "bytes": 8978,
+          "sha256": "fa0b4f77487eabb1331dbb68a3996edc7c704149ba7f7aec379846cc0803565c"
+        },
+        "kind": "conditional",
+        "epoch": 232,
+        "hypotheses": 50,
+        "rows": 84,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 7.105427357601002e-14,
+            "maxRelative": 7.129106758310947e-16
+          },
+          "sol": {
+            "maxAbs": 3.220080452281948e-17,
+            "maxRelative": 3.220080452281948e-17
+          },
+          "covariance": {
+            "maxAbs": 1.0842021724855044e-19,
+            "maxRelative": 1.0842021724855044e-19
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0057-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0057-weight.npz",
+          "bytes": 5193,
+          "sha256": "df5b61cab4e9a3c7402dc0e06770dc21af52d7511fb19cc8c2ade9b0aa2b9606"
+        },
+        "kind": "weight",
+        "epoch": 232,
+        "hypotheses": 20,
+        "rows": 84,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 1.4210854715202004e-14,
+            "maxRelative": 3.0662412410217846e-16
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 4.263256414560601e-14,
+            "maxRelative": 6.076953247427496e-16
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0058-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0058-conditional.npz",
+          "bytes": 9755,
+          "sha256": "23881dd441283b0073b6835ecaf8f375db2448133b31bde2caeea55974a8059e"
+        },
+        "kind": "conditional",
+        "epoch": 240,
+        "hypotheses": 48,
+        "rows": 92,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 5.684341886080802e-14,
+            "maxRelative": 5.824139232211662e-16
+          },
+          "sol": {
+            "maxAbs": 1.3877787807814457e-17,
+            "maxRelative": 1.3877787807814457e-17
+          },
+          "covariance": {
+            "maxAbs": 6.098637220230962e-20,
+            "maxRelative": 6.098637220230962e-20
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0059-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0059-weight.npz",
+          "bytes": 5433,
+          "sha256": "3a23b963c1cf5ec84efcba73deab85ed890cabe0be3696430845fa2f1ce09d64"
+        },
+        "kind": "weight",
+        "epoch": 240,
+        "hypotheses": 22,
+        "rows": 92,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 4.263256414560601e-14,
+            "maxRelative": 6.002638868152022e-16
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 7.105427357601002e-14,
+            "maxRelative": 1.0643101930084679e-15
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0060-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0060-conditional.npz",
+          "bytes": 8228,
+          "sha256": "5926dd256bce94d51113aa94512ba3a4de0f35f5fca27106ccbaa9d238d073b4"
+        },
+        "kind": "conditional",
+        "epoch": 248,
+        "hypotheses": 52,
+        "rows": 92,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 4.263256414560601e-14,
+            "maxRelative": 4.31845548366067e-16
+          },
+          "sol": {
+            "maxAbs": 1.734723475976807e-17,
+            "maxRelative": 1.734723475976807e-17
+          },
+          "covariance": {
+            "maxAbs": 6.098637220230962e-20,
+            "maxRelative": 6.098637220230962e-20
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0061-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0061-weight.npz",
+          "bytes": 5362,
+          "sha256": "88ad7ad0bee2fc0a0883066a52511395ebefdff9f98b35de8bb0792395dd1423"
+        },
+        "kind": "weight",
+        "epoch": 248,
+        "hypotheses": 17,
+        "rows": 92,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 1.4210854715202004e-14,
+            "maxRelative": 3.623507951549545e-16
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 7.105427357601002e-14,
+            "maxRelative": 1.630578578197295e-15
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0062-conditional.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0062-conditional.npz",
+          "bytes": 9880,
+          "sha256": "2e581c80526bf9bf9b26218791c2ee0f893babd152daad208e46af6ee049959d"
+        },
+        "kind": "conditional",
+        "epoch": 256,
+        "hypotheses": 53,
+        "rows": 100,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "sol": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          },
+          "covariance": {
+            "maxAbs": 0.0,
+            "maxRelative": 0.0
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 8.526512829121202e-14,
+            "maxRelative": 9.038559133010206e-16
+          },
+          "sol": {
+            "maxAbs": 1.734723475976807e-17,
+            "maxRelative": 1.734723475976807e-17
+          },
+          "covariance": {
+            "maxAbs": 4.743384504624082e-20,
+            "maxRelative": 4.743384504624082e-20
+          }
+        }
+      }
+    },
+    {
+      "record": {
+        "file": "0063-weight.npz",
+        "fingerprint": {
+          "path": "C:\\Users\\rsasa\\Workspace\\CloudAnalyzer\\notes\\rbpf-likelihood-inputs-20261015\\capture\\0063-weight.npz",
+          "bytes": 5636,
+          "sha256": "b53ce404d7f7a3bcb67501d73d417a2bb70ce7a7027a8b303ba5d0396c91b76a"
+        },
+        "kind": "weight",
+        "epoch": 256,
+        "hypotheses": 18,
+        "rows": 100,
+        "stateSize": 11,
+        "config": {
+          "beta": 0.5,
+          "huber_c": 3.0,
+          "sig_group": 0.02,
+          "mix_eps": 0.1,
+          "mix_sigma_cp": 0.05,
+          "mix_sigma_pr": 10.0
+        }
+      },
+      "parity": {
+        "cpu": {
+          "ll": {
+            "maxAbs": 4.263256414560601e-14,
+            "maxRelative": 7.5667469956163095e-16
+          }
+        },
+        "cuda": {
+          "ll": {
+            "maxAbs": 8.526512829121202e-14,
+            "maxRelative": 2.5425588625238952e-15
+          }
+        }
+      }
+    }
+  ],
+  "warmups": [
+    {
+      "order": [
+        "cuda",
+        "cpu"
+      ],
+      "observations": [
+        {
+          "cuda": 9.3299,
+          "cpu": 1.2461
+        },
+        {
+          "cuda": 8.6434,
+          "cpu": 2.3092
+        },
+        {
+          "cuda": 9.5284,
+          "cpu": 1.3831
+        },
+        {
+          "cuda": 8.2402,
+          "cpu": 2.8644
+        },
+        {
+          "cuda": 7.9476,
+          "cpu": 2.853
+        },
+        {
+          "cuda": 8.2078,
+          "cpu": 3.7654
+        },
+        {
+          "cuda": 6.8845,
+          "cpu": 2.585
+        },
+        {
+          "cuda": 8.1371,
+          "cpu": 2.8359
+        },
+        {
+          "cuda": 6.6477,
+          "cpu": 1.5787
+        },
+        {
+          "cuda": 7.0074,
+          "cpu": 2.8915
+        },
+        {
+          "cuda": 7.5166,
+          "cpu": 5.6162
+        },
+        {
+          "cuda": 8.1031,
+          "cpu": 9.0788
+        },
+        {
+          "cuda": 6.2601,
+          "cpu": 2.4023
+        },
+        {
+          "cuda": 6.6515,
+          "cpu": 3.6741
+        },
+        {
+          "cuda": 6.2675,
+          "cpu": 2.2815
+        },
+        {
+          "cuda": 6.6271,
+          "cpu": 6.3722
+        },
+        {
+          "cuda": 6.5163,
+          "cpu": 0.7723
+        },
+        {
+          "cuda": 5.5831,
+          "cpu": 1.6833
+        },
+        {
+          "cuda": 5.5475,
+          "cpu": 0.8933
+        },
+        {
+          "cuda": 5.8914,
+          "cpu": 3.5835
+        },
+        {
+          "cuda": 6.8628,
+          "cpu": 6.1792
+        },
+        {
+          "cuda": 7.2558,
+          "cpu": 6.202
+        },
+        {
+          "cuda": 6.9572,
+          "cpu": 4.8036
+        },
+        {
+          "cuda": 7.1067,
+          "cpu": 2.0107
+        },
+        {
+          "cuda": 6.4456,
+          "cpu": 3.1907
+        },
+        {
+          "cuda": 7.3259,
+          "cpu": 2.4514
+        },
+        {
+          "cuda": 7.2344,
+          "cpu": 3.9444
+        },
+        {
+          "cuda": 7.6845,
+          "cpu": 2.6164
+        },
+        {
+          "cuda": 6.3534,
+          "cpu": 1.9804
+        },
+        {
+          "cuda": 7.2149,
+          "cpu": 2.6522
+        },
+        {
+          "cuda": 6.659,
+          "cpu": 3.0811
+        },
+        {
+          "cuda": 7.0554,
+          "cpu": 2.9001
+        },
+        {
+          "cuda": 6.931,
+          "cpu": 1.9742
+        },
+        {
+          "cuda": 7.2854,
+          "cpu": 2.3381
+        },
+        {
+          "cuda": 6.5326,
+          "cpu": 1.9074
+        },
+        {
+          "cuda": 6.9637,
+          "cpu": 2.994
+        },
+        {
+          "cuda": 7.1332,
+          "cpu": 4.8185
+        },
+        {
+          "cuda": 7.8544,
+          "cpu": 3.8684
+        },
+        {
+          "cuda": 7.2853,
+          "cpu": 5.283
+        },
+        {
+          "cuda": 8.4935,
+          "cpu": 7.9438
+        },
+        {
+          "cuda": 8.0246,
+          "cpu": 1.0985
+        },
+        {
+          "cuda": 6.9552,
+          "cpu": 2.0157
+        },
+        {
+          "cuda": 6.6977,
+          "cpu": 1.3288
+        },
+        {
+          "cuda": 7.0324,
+          "cpu": 3.1268
+        },
+        {
+          "cuda": 5.5249,
+          "cpu": 2.1112
+        },
+        {
+          "cuda": 6.2454,
+          "cpu": 3.0449
+        },
+        {
+          "cuda": 6.7205,
+          "cpu": 3.5252
+        },
+        {
+          "cuda": 6.3071,
+          "cpu": 3.609
+        },
+        {
+          "cuda": 6.0784,
+          "cpu": 5.0099
+        },
+        {
+          "cuda": 7.5404,
+          "cpu": 6.5658
+        },
+        {
+          "cuda": 7.2316,
+          "cpu": 7.4431
+        },
+        {
+          "cuda": 6.9848,
+          "cpu": 6.4107
+        },
+        {
+          "cuda": 5.9763,
+          "cpu": 1.8264
+        },
+        {
+          "cuda": 6.0785,
+          "cpu": 4.8769
+        },
+        {
+          "cuda": 7.6603,
+          "cpu": 5.7359
+        },
+        {
+          "cuda": 7.1365,
+          "cpu": 4.1583
+        },
+        {
+          "cuda": 7.3992,
+          "cpu": 10.67
+        },
+        {
+          "cuda": 7.5321,
+          "cpu": 4.8319
+        },
+        {
+          "cuda": 7.8673,
+          "cpu": 10.7238
+        },
+        {
+          "cuda": 7.8426,
+          "cpu": 5.2534
+        },
+        {
+          "cuda": 7.8342,
+          "cpu": 12.037
+        },
+        {
+          "cuda": 7.8118,
+          "cpu": 4.9126
+        },
+        {
+          "cuda": 8.1246,
+          "cpu": 10.6412
+        },
+        {
+          "cuda": 7.2685,
+          "cpu": 2.2131
+        }
+      ]
+    },
+    {
+      "order": [
+        "cpu",
+        "cuda"
+      ],
+      "observations": [
+        {
+          "cpu": 1.1397,
+          "cuda": 6.7426
+        },
+        {
+          "cpu": 2.2465,
+          "cuda": 6.9835
+        },
+        {
+          "cpu": 1.5102,
+          "cuda": 6.3831
+        },
+        {
+          "cpu": 2.4773,
+          "cuda": 7.0257
+        },
+        {
+          "cpu": 2.9911,
+          "cuda": 7.2686
+        },
+        {
+          "cpu": 5.3613,
+          "cuda": 7.1716
+        },
+        {
+          "cpu": 3.7355,
+          "cuda": 6.6752
+        },
+        {
+          "cpu": 5.0786,
+          "cuda": 6.9229
+        },
+        {
+          "cpu": 2.9931,
+          "cuda": 7.3448
+        },
+        {
+          "cpu": 5.2678,
+          "cuda": 7.2363
+        },
+        {
+          "cpu": 5.1465,
+          "cuda": 6.5155
+        },
+        {
+          "cpu": 3.6757,
+          "cuda": 5.8557
+        },
+        {
+          "cpu": 0.9847,
+          "cuda": 4.1284
+        },
+        {
+          "cpu": 2.3063,
+          "cuda": 4.5496
+        },
+        {
+          "cpu": 1.0152,
+          "cuda": 4.2348
+        },
+        {
+          "cpu": 4.0804,
+          "cuda": 6.2875
+        },
+        {
+          "cpu": 0.9979,
+          "cuda": 4.4393
+        },
+        {
+          "cpu": 1.6242,
+          "cuda": 4.8777
+        },
+        {
+          "cpu": 1.2843,
+          "cuda": 5.3863
+        },
+        {
+          "cpu": 1.5706,
+          "cuda": 4.5611
+        },
+        {
+          "cpu": 2.1873,
+          "cuda": 4.4584
+        },
+        {
+          "cpu": 2.34,
+          "cuda": 4.6849
+        },
+        {
+          "cpu": 3.3639,
+          "cuda": 4.6101
+        },
+        {
+          "cpu": 1.9835,
+          "cuda": 4.8462
+        },
+        {
+          "cpu": 3.3034,
+          "cuda": 5.5572
+        },
+        {
+          "cpu": 2.0567,
+          "cuda": 6.2513
+        },
+        {
+          "cpu": 4.3531,
+          "cuda": 6.1968
+        },
+        {
+          "cpu": 3.2665,
+          "cuda": 6.6316
+        },
+        {
+          "cpu": 2.6266,
+          "cuda": 5.8762
+        },
+        {
+          "cpu": 5.5866,
+          "cuda": 6.9008
+        },
+        {
+          "cpu": 3.8942,
+          "cuda": 6.5402
+        },
+        {
+          "cpu": 4.0231,
+          "cuda": 6.9057
+        },
+        {
+          "cpu": 3.5107,
+          "cuda": 6.661
+        },
+        {
+          "cpu": 4.8268,
+          "cuda": 6.8988
+        },
+        {
+          "cpu": 3.9358,
+          "cuda": 7.1806
+        },
+        {
+          "cpu": 5.5946,
+          "cuda": 6.6269
+        },
+        {
+          "cpu": 3.8957,
+          "cuda": 7.2326
+        },
+        {
+          "cpu": 6.3403,
+          "cuda": 7.2458
+        },
+        {
+          "cpu": 3.9203,
+          "cuda": 6.5431
+        },
+        {
+          "cpu": 4.8864,
+          "cuda": 7.2971
+        },
+        {
+          "cpu": 1.6615,
+          "cuda": 6.3984
+        },
+        {
+          "cpu": 3.8552,
+          "cuda": 6.9405
+        },
+        {
+          "cpu": 2.0111,
+          "cuda": 5.7242
+        },
+        {
+          "cpu": 2.284,
+          "cuda": 6.057
+        },
+        {
+          "cpu": 1.925,
+          "cuda": 5.3355
+        },
+        {
+          "cpu": 2.627,
+          "cuda": 6.0073
+        },
+        {
+          "cpu": 3.0892,
+          "cuda": 5.9495
+        },
+        {
+          "cpu": 4.9854,
+          "cuda": 7.1792
+        },
+        {
+          "cpu": 5.8474,
+          "cuda": 6.6646
+        },
+        {
+          "cpu": 5.6747,
+          "cuda": 7.1726
+        },
+        {
+          "cpu": 3.929,
+          "cuda": 5.7597
+        },
+        {
+          "cpu": 7.0226,
+          "cuda": 6.8651
+        },
+        {
+          "cpu": 3.7674,
+          "cuda": 7.0154
+        },
+        {
+          "cpu": 4.2456,
+          "cuda": 6.4252
+        },
+        {
+          "cpu": 3.1444,
+          "cuda": 6.1876
+        },
+        {
+          "cpu": 2.1215,
+          "cuda": 6.2185
+        },
+        {
+          "cpu": 9.975,
+          "cuda": 7.4512
+        },
+        {
+          "cpu": 5.2148,
+          "cuda": 7.5072
+        },
+        {
+          "cpu": 11.19,
+          "cuda": 7.897
+        },
+        {
+          "cpu": 2.7307,
+          "cuda": 7.2717
+        },
+        {
+          "cpu": 5.9331,
+          "cuda": 7.1102
+        },
+        {
+          "cpu": 2.5531,
+          "cuda": 8.7961
+        },
+        {
+          "cpu": 9.3228,
+          "cuda": 7.4995
+        },
+        {
+          "cpu": 4.7751,
+          "cuda": 8.1883
+        }
+      ]
+    }
+  ],
+  "trials": [
+    {
+      "order": [
+        "cuda",
+        "cpu"
+      ],
+      "observations": [
+        {
+          "cuda": 7.7501,
+          "cpu": 2.4038
+        },
+        {
+          "cuda": 8.0004,
+          "cpu": 4.5477
+        },
+        {
+          "cuda": 7.6335,
+          "cpu": 2.6558
+        },
+        {
+          "cuda": 8.0446,
+          "cpu": 5.1458
+        },
+        {
+          "cuda": 6.7389,
+          "cpu": 2.6801
+        },
+        {
+          "cuda": 7.0817,
+          "cpu": 4.1602
+        },
+        {
+          "cuda": 5.7294,
+          "cpu": 2.1428
+        },
+        {
+          "cuda": 5.6825,
+          "cpu": 2.7102
+        },
+        {
+          "cuda": 6.1015,
+          "cpu": 1.4961
+        },
+        {
+          "cuda": 5.7349,
+          "cpu": 2.5628
+        },
+        {
+          "cuda": 5.7404,
+          "cpu": 2.3721
+        },
+        {
+          "cuda": 5.4768,
+          "cpu": 3.6432
+        },
+        {
+          "cuda": 4.2137,
+          "cpu": 2.1467
+        },
+        {
+          "cuda": 5.9951,
+          "cpu": 2.363
+        },
+        {
+          "cuda": 4.7874,
+          "cpu": 1.5715
+        },
+        {
+          "cuda": 4.7227,
+          "cpu": 4.7978
+        },
+        {
+          "cuda": 4.339,
+          "cpu": 1.3505
+        },
+        {
+          "cuda": 5.1017,
+          "cpu": 1.8901
+        },
+        {
+          "cuda": 4.9976,
+          "cpu": 0.8744
+        },
+        {
+          "cuda": 5.3704,
+          "cpu": 1.8525
+        },
+        {
+          "cuda": 5.5643,
+          "cpu": 4.8737
+        },
+        {
+          "cuda": 5.6264,
+          "cpu": 4.6591
+        },
+        {
+          "cuda": 5.2972,
+          "cpu": 1.8628
+        },
+        {
+          "cuda": 4.8981,
+          "cpu": 1.9024
+        },
+        {
+          "cuda": 6.0026,
+          "cpu": 3.1379
+        },
+        {
+          "cuda": 5.9293,
+          "cpu": 3.2906
+        },
+        {
+          "cuda": 5.9454,
+          "cpu": 4.3439
+        },
+        {
+          "cuda": 7.5838,
+          "cpu": 6.946
+        },
+        {
+          "cuda": 7.1206,
+          "cpu": 5.2324
+        },
+        {
+          "cuda": 7.7271,
+          "cpu": 3.3765
+        },
+        {
+          "cuda": 5.7519,
+          "cpu": 4.1071
+        },
+        {
+          "cuda": 6.7338,
+          "cpu": 4.0955
+        },
+        {
+          "cuda": 6.6271,
+          "cpu": 3.5027
+        },
+        {
+          "cuda": 6.9053,
+          "cpu": 4.6198
+        },
+        {
+          "cuda": 6.6137,
+          "cpu": 3.9877
+        },
+        {
+          "cuda": 6.7793,
+          "cpu": 5.3868
+        },
+        {
+          "cuda": 6.9388,
+          "cpu": 8.0819
+        },
+        {
+          "cuda": 7.4872,
+          "cpu": 7.1805
+        },
+        {
+          "cuda": 6.6228,
+          "cpu": 1.8489
+        },
+        {
+          "cuda": 5.9564,
+          "cpu": 2.6019
+        },
+        {
+          "cuda": 5.4548,
+          "cpu": 0.8741
+        },
+        {
+          "cuda": 5.8427,
+          "cpu": 4.0358
+        },
+        {
+          "cuda": 6.5118,
+          "cpu": 1.3878
+        },
+        {
+          "cuda": 6.2706,
+          "cpu": 2.6727
+        },
+        {
+          "cuda": 5.4126,
+          "cpu": 3.7624
+        },
+        {
+          "cuda": 6.8974,
+          "cpu": 4.8449
+        },
+        {
+          "cuda": 7.2703,
+          "cpu": 5.0736
+        },
+        {
+          "cuda": 6.6355,
+          "cpu": 3.0437
+        },
+        {
+          "cuda": 6.1091,
+          "cpu": 2.9802
+        },
+        {
+          "cuda": 6.009,
+          "cpu": 5.4283
+        },
+        {
+          "cuda": 6.3637,
+          "cpu": 3.5484
+        },
+        {
+          "cuda": 5.7913,
+          "cpu": 3.2748
+        },
+        {
+          "cuda": 5.9078,
+          "cpu": 1.8592
+        },
+        {
+          "cuda": 6.2296,
+          "cpu": 4.8172
+        },
+        {
+          "cuda": 7.0071,
+          "cpu": 5.8121
+        },
+        {
+          "cuda": 6.532,
+          "cpu": 2.1478
+        },
+        {
+          "cuda": 6.3804,
+          "cpu": 5.8096
+        },
+        {
+          "cuda": 7.5739,
+          "cpu": 4.3769
+        },
+        {
+          "cuda": 7.6585,
+          "cpu": 7.3221
+        },
+        {
+          "cuda": 7.8139,
+          "cpu": 5.6014
+        },
+        {
+          "cuda": 7.5871,
+          "cpu": 12.5773
+        },
+        {
+          "cuda": 8.1526,
+          "cpu": 4.6972
+        },
+        {
+          "cuda": 8.8444,
+          "cpu": 13.0323
+        },
+        {
+          "cuda": 7.8225,
+          "cpu": 4.712
+        }
+      ]
+    },
+    {
+      "order": [
+        "cpu",
+        "cuda"
+      ],
+      "observations": [
+        {
+          "cpu": 1.372,
+          "cuda": 7.457
+        },
+        {
+          "cpu": 2.6788,
+          "cuda": 7.1244
+        },
+        {
+          "cpu": 2.2073,
+          "cuda": 6.7104
+        },
+        {
+          "cpu": 4.95,
+          "cuda": 8.8621
+        },
+        {
+          "cpu": 3.1649,
+          "cuda": 6.7825
+        },
+        {
+          "cpu": 3.8914,
+          "cuda": 6.6988
+        },
+        {
+          "cpu": 2.3678,
+          "cuda": 5.6294
+        },
+        {
+          "cpu": 2.8058,
+          "cuda": 5.6658
+        },
+        {
+          "cpu": 1.3808,
+          "cuda": 5.367
+        },
+        {
+          "cpu": 2.2795,
+          "cuda": 5.6876
+        },
+        {
+          "cpu": 2.1115,
+          "cuda": 4.9886
+        },
+        {
+          "cpu": 3.2658,
+          "cuda": 5.4754
+        },
+        {
+          "cpu": 1.0135,
+          "cuda": 4.2133
+        },
+        {
+          "cpu": 2.7863,
+          "cuda": 4.5263
+        },
+        {
+          "cpu": 1.0891,
+          "cuda": 4.3251
+        },
+        {
+          "cpu": 4.6314,
+          "cuda": 5.1708
+        },
+        {
+          "cpu": 0.7066,
+          "cuda": 4.2652
+        },
+        {
+          "cpu": 2.5515,
+          "cuda": 4.5631
+        },
+        {
+          "cpu": 0.7127,
+          "cuda": 4.4087
+        },
+        {
+          "cpu": 1.5947,
+          "cuda": 4.3865
+        },
+        {
+          "cpu": 3.6511,
+          "cuda": 5.3941
+        },
+        {
+          "cpu": 5.29,
+          "cuda": 5.6865
+        },
+        {
+          "cpu": 3.5995,
+          "cuda": 5.8053
+        },
+        {
+          "cpu": 3.7044,
+          "cuda": 5.8362
+        },
+        {
+          "cpu": 6.0412,
+          "cuda": 6.8421
+        },
+        {
+          "cpu": 2.0534,
+          "cuda": 5.9514
+        },
+        {
+          "cpu": 4.1897,
+          "cuda": 6.1238
+        },
+        {
+          "cpu": 3.116,
+          "cuda": 6.6281
+        },
+        {
+          "cpu": 2.4188,
+          "cuda": 5.8988
+        },
+        {
+          "cpu": 3.994,
+          "cuda": 6.1249
+        },
+        {
+          "cpu": 2.0721,
+          "cuda": 6.063
+        },
+        {
+          "cpu": 4.6867,
+          "cuda": 6.6321
+        },
+        {
+          "cpu": 3.2957,
+          "cuda": 6.5095
+        },
+        {
+          "cpu": 4.3063,
+          "cuda": 6.9456
+        },
+        {
+          "cpu": 3.0977,
+          "cuda": 5.3836
+        },
+        {
+          "cpu": 2.6338,
+          "cuda": 5.9219
+        },
+        {
+          "cpu": 6.8111,
+          "cuda": 7.2525
+        },
+        {
+          "cpu": 6.099,
+          "cuda": 7.2035
+        },
+        {
+          "cpu": 2.4284,
+          "cuda": 5.7933
+        },
+        {
+          "cpu": 3.1561,
+          "cuda": 5.9873
+        },
+        {
+          "cpu": 0.9774,
+          "cuda": 5.3911
+        },
+        {
+          "cpu": 2.6752,
+          "cuda": 5.9251
+        },
+        {
+          "cpu": 1.2818,
+          "cuda": 5.442
+        },
+        {
+          "cpu": 2.3982,
+          "cuda": 6.1877
+        },
+        {
+          "cpu": 3.3972,
+          "cuda": 6.0929
+        },
+        {
+          "cpu": 5.1105,
+          "cuda": 6.0778
+        },
+        {
+          "cpu": 3.3402,
+          "cuda": 6.6511
+        },
+        {
+          "cpu": 6.2146,
+          "cuda": 7.3628
+        },
+        {
+          "cpu": 4.7374,
+          "cuda": 5.7476
+        },
+        {
+          "cpu": 2.6595,
+          "cuda": 6.0556
+        },
+        {
+          "cpu": 6.2944,
+          "cuda": 6.2892
+        },
+        {
+          "cpu": 5.7627,
+          "cuda": 7.2176
+        },
+        {
+          "cpu": 1.8404,
+          "cuda": 5.9464
+        },
+        {
+          "cpu": 5.751,
+          "cuda": 6.2601
+        },
+        {
+          "cpu": 3.4493,
+          "cuda": 6.0327
+        },
+        {
+          "cpu": 1.9468,
+          "cuda": 6.4014
+        },
+        {
+          "cpu": 4.9129,
+          "cuda": 7.4948
+        },
+        {
+          "cpu": 4.1283,
+          "cuda": 6.5552
+        },
+        {
+          "cpu": 5.9203,
+          "cuda": 7.3175
+        },
+        {
+          "cpu": 5.4265,
+          "cuda": 8.267
+        },
+        {
+          "cpu": 11.1092,
+          "cuda": 8.4295
+        },
+        {
+          "cpu": 4.2948,
+          "cuda": 8.245
+        },
+        {
+          "cpu": 12.7936,
+          "cuda": 8.5735
+        },
+        {
+          "cpu": 4.967,
+          "cuda": 8.8692
+        }
+      ]
+    },
+    {
+      "order": [
+        "cuda",
+        "cpu"
+      ],
+      "observations": [
+        {
+          "cuda": 7.9482,
+          "cpu": 2.152
+        },
+        {
+          "cuda": 8.268,
+          "cpu": 3.5579
+        },
+        {
+          "cuda": 8.0949,
+          "cpu": 1.6786
+        },
+        {
+          "cuda": 7.2224,
+          "cpu": 4.7337
+        },
+        {
+          "cuda": 7.5341,
+          "cpu": 4.5694
+        },
+        {
+          "cuda": 6.8672,
+          "cpu": 3.7875
+        },
+        {
+          "cuda": 5.8487,
+          "cpu": 3.3955
+        },
+        {
+          "cuda": 5.9383,
+          "cpu": 2.7747
+        },
+        {
+          "cuda": 6.7895,
+          "cpu": 2.3813
+        },
+        {
+          "cuda": 6.787,
+          "cpu": 2.2159
+        },
+        {
+          "cuda": 5.1118,
+          "cpu": 4.2716
+        },
+        {
+          "cuda": 6.9191,
+          "cpu": 6.1205
+        },
+        {
+          "cuda": 5.0928,
+          "cpu": 0.9413
+        },
+        {
+          "cuda": 4.4197,
+          "cpu": 2.1987
+        },
+        {
+          "cuda": 4.265,
+          "cpu": 1.6532
+        },
+        {
+          "cuda": 5.6546,
+          "cpu": 4.1646
+        },
+        {
+          "cuda": 5.2749,
+          "cpu": 1.2318
+        },
+        {
+          "cuda": 6.2692,
+          "cpu": 1.7533
+        },
+        {
+          "cuda": 4.4754,
+          "cpu": 0.7274
+        },
+        {
+          "cuda": 4.9716,
+          "cpu": 1.2905
+        },
+        {
+          "cuda": 4.8987,
+          "cpu": 4.5431
+        },
+        {
+          "cuda": 5.9249,
+          "cpu": 3.9558
+        },
+        {
+          "cuda": 5.6566,
+          "cpu": 3.4282
+        },
+        {
+          "cuda": 6.2166,
+          "cpu": 3.2633
+        },
+        {
+          "cuda": 5.8954,
+          "cpu": 2.6903
+        },
+        {
+          "cuda": 6.0309,
+          "cpu": 1.9301
+        },
+        {
+          "cuda": 5.8466,
+          "cpu": 3.2804
+        },
+        {
+          "cuda": 6.783,
+          "cpu": 4.9646
+        },
+        {
+          "cuda": 6.8735,
+          "cpu": 3.476
+        },
+        {
+          "cuda": 7.1844,
+          "cpu": 4.1019
+        },
+        {
+          "cuda": 6.1337,
+          "cpu": 2.1372
+        },
+        {
+          "cuda": 6.354,
+          "cpu": 2.7679
+        },
+        {
+          "cuda": 5.9087,
+          "cpu": 3.5709
+        },
+        {
+          "cuda": 6.9381,
+          "cpu": 2.7048
+        },
+        {
+          "cuda": 6.0283,
+          "cpu": 2.7185
+        },
+        {
+          "cuda": 6.0611,
+          "cpu": 3.7692
+        },
+        {
+          "cuda": 7.5238,
+          "cpu": 4.4167
+        },
+        {
+          "cuda": 6.5579,
+          "cpu": 5.6771
+        },
+        {
+          "cuda": 5.8016,
+          "cpu": 2.1041
+        },
+        {
+          "cuda": 6.0999,
+          "cpu": 3.6211
+        },
+        {
+          "cuda": 6.6389,
+          "cpu": 1.1403
+        },
+        {
+          "cuda": 6.1888,
+          "cpu": 3.2755
+        },
+        {
+          "cuda": 5.7615,
+          "cpu": 1.3409
+        },
+        {
+          "cuda": 6.1065,
+          "cpu": 2.3972
+        },
+        {
+          "cuda": 5.3381,
+          "cpu": 1.8027
+        },
+        {
+          "cuda": 5.9671,
+          "cpu": 2.2109
+        },
+        {
+          "cuda": 6.0818,
+          "cpu": 2.5243
+        },
+        {
+          "cuda": 6.1402,
+          "cpu": 3.0139
+        },
+        {
+          "cuda": 5.781,
+          "cpu": 3.1203
+        },
+        {
+          "cuda": 6.238,
+          "cpu": 3.3188
+        },
+        {
+          "cuda": 5.7474,
+          "cpu": 3.7501
+        },
+        {
+          "cuda": 6.1998,
+          "cpu": 3.6902
+        },
+        {
+          "cuda": 6.3028,
+          "cpu": 2.2957
+        },
+        {
+          "cuda": 6.4552,
+          "cpu": 2.8391
+        },
+        {
+          "cuda": 6.2847,
+          "cpu": 3.1498
+        },
+        {
+          "cuda": 6.8945,
+          "cpu": 3.6129
+        },
+        {
+          "cuda": 7.011,
+          "cpu": 7.4603
+        },
+        {
+          "cuda": 6.9828,
+          "cpu": 2.1456
+        },
+        {
+          "cuda": 7.0984,
+          "cpu": 5.1848
+        },
+        {
+          "cuda": 6.8769,
+          "cpu": 2.4853
+        },
+        {
+          "cuda": 7.3534,
+          "cpu": 6.4643
+        },
+        {
+          "cuda": 7.4861,
+          "cpu": 2.5706
+        },
+        {
+          "cuda": 7.4272,
+          "cpu": 7.1203
+        },
+        {
+          "cuda": 7.4817,
+          "cpu": 3.2143
+        }
+      ]
+    },
+    {
+      "order": [
+        "cpu",
+        "cuda"
+      ],
+      "observations": [
+        {
+          "cpu": 1.4002,
+          "cuda": 7.001
+        },
+        {
+          "cpu": 2.3263,
+          "cuda": 7.8708
+        },
+        {
+          "cpu": 1.6124,
+          "cuda": 6.5857
+        },
+        {
+          "cpu": 3.1092,
+          "cuda": 7.2115
+        },
+        {
+          "cpu": 3.0244,
+          "cuda": 6.9697
+        },
+        {
+          "cpu": 3.9713,
+          "cuda": 6.9958
+        },
+        {
+          "cpu": 2.846,
+          "cuda": 6.3254
+        },
+        {
+          "cpu": 3.2541,
+          "cuda": 6.1384
+        },
+        {
+          "cpu": 1.7098,
+          "cuda": 5.7928
+        },
+        {
+          "cpu": 2.9262,
+          "cuda": 6.1795
+        },
+        {
+          "cpu": 2.801,
+          "cuda": 5.3905
+        },
+        {
+          "cpu": 4.221,
+          "cuda": 6.0444
+        },
+        {
+          "cpu": 1.8464,
+          "cuda": 4.4286
+        },
+        {
+          "cpu": 2.5525,
+          "cuda": 4.6136
+        },
+        {
+          "cpu": 1.0375,
+          "cuda": 4.3423
+        },
+        {
+          "cpu": 3.3023,
+          "cuda": 4.6878
+        },
+        {
+          "cpu": 0.8639,
+          "cuda": 4.363
+        },
+        {
+          "cpu": 2.0416,
+          "cuda": 4.8741
+        },
+        {
+          "cpu": 1.2571,
+          "cuda": 4.7046
+        },
+        {
+          "cpu": 1.6699,
+          "cuda": 6.1678
+        },
+        {
+          "cpu": 2.6769,
+          "cuda": 4.8619
+        },
+        {
+          "cpu": 2.6299,
+          "cuda": 5.0625
+        },
+        {
+          "cpu": 2.0797,
+          "cuda": 4.9457
+        },
+        {
+          "cpu": 3.0672,
+          "cuda": 5.1787
+        },
+        {
+          "cpu": 3.3426,
+          "cuda": 6.5222
+        },
+        {
+          "cpu": 5.0066,
+          "cuda": 8.2293
+        },
+        {
+          "cpu": 5.7325,
+          "cuda": 6.3101
+        },
+        {
+          "cpu": 3.1695,
+          "cuda": 8.648
+        },
+        {
+          "cpu": 2.4286,
+          "cuda": 5.568
+        },
+        {
+          "cpu": 2.7931,
+          "cuda": 6.1665
+        },
+        {
+          "cpu": 1.9173,
+          "cuda": 6.1593
+        },
+        {
+          "cpu": 2.3953,
+          "cuda": 6.0552
+        },
+        {
+          "cpu": 2.1772,
+          "cuda": 5.9985
+        },
+        {
+          "cpu": 2.4968,
+          "cuda": 6.3326
+        },
+        {
+          "cpu": 2.6316,
+          "cuda": 5.9616
+        },
+        {
+          "cpu": 3.2363,
+          "cuda": 5.9261
+        },
+        {
+          "cpu": 4.8563,
+          "cuda": 6.1594
+        },
+        {
+          "cpu": 3.8145,
+          "cuda": 6.5562
+        },
+        {
+          "cpu": 2.598,
+          "cuda": 5.7289
+        },
+        {
+          "cpu": 3.2452,
+          "cuda": 6.5754
+        },
+        {
+          "cpu": 1.053,
+          "cuda": 5.618
+        },
+        {
+          "cpu": 2.6036,
+          "cuda": 6.8831
+        },
+        {
+          "cpu": 1.598,
+          "cuda": 5.6747
+        },
+        {
+          "cpu": 2.6277,
+          "cuda": 6.3164
+        },
+        {
+          "cpu": 1.9271,
+          "cuda": 5.4008
+        },
+        {
+          "cpu": 2.5131,
+          "cuda": 6.816
+        },
+        {
+          "cpu": 2.9028,
+          "cuda": 6.0398
+        },
+        {
+          "cpu": 3.0586,
+          "cuda": 5.9927
+        },
+        {
+          "cpu": 3.2036,
+          "cuda": 7.5217
+        },
+        {
+          "cpu": 3.3711,
+          "cuda": 6.3059
+        },
+        {
+          "cpu": 4.041,
+          "cuda": 5.9293
+        },
+        {
+          "cpu": 4.98,
+          "cuda": 6.4015
+        },
+        {
+          "cpu": 2.3292,
+          "cuda": 6.9245
+        },
+        {
+          "cpu": 3.7081,
+          "cuda": 6.6543
+        },
+        {
+          "cpu": 3.6604,
+          "cuda": 6.4778
+        },
+        {
+          "cpu": 3.3381,
+          "cuda": 6.4567
+        },
+        {
+          "cpu": 6.7361,
+          "cuda": 6.7198
+        },
+        {
+          "cpu": 2.7796,
+          "cuda": 6.739
+        },
+        {
+          "cpu": 6.3011,
+          "cuda": 7.3145
+        },
+        {
+          "cpu": 3.9983,
+          "cuda": 7.2904
+        },
+        {
+          "cpu": 6.9251,
+          "cuda": 7.1277
+        },
+        {
+          "cpu": 3.4335,
+          "cuda": 7.4415
+        },
+        {
+          "cpu": 7.7676,
+          "cuda": 7.7934
+        },
+        {
+          "cpu": 3.0365,
+          "cuda": 7.729
+        }
+      ]
+    },
+    {
+      "order": [
+        "cuda",
+        "cpu"
+      ],
+      "observations": [
+        {
+          "cuda": 7.1493,
+          "cpu": 1.5571
+        },
+        {
+          "cuda": 7.3578,
+          "cpu": 2.7974
+        },
+        {
+          "cuda": 6.8877,
+          "cpu": 1.7269
+        },
+        {
+          "cuda": 7.4002,
+          "cpu": 3.0691
+        },
+        {
+          "cuda": 6.8374,
+          "cpu": 3.4989
+        },
+        {
+          "cuda": 7.0889,
+          "cpu": 4.1075
+        },
+        {
+          "cuda": 6.0623,
+          "cpu": 2.7267
+        },
+        {
+          "cuda": 6.087,
+          "cpu": 2.6211
+        },
+        {
+          "cuda": 6.0463,
+          "cpu": 1.4844
+        },
+        {
+          "cuda": 6.9536,
+          "cpu": 2.6706
+        },
+        {
+          "cuda": 5.1647,
+          "cpu": 2.5506
+        },
+        {
+          "cuda": 5.565,
+          "cpu": 3.402
+        },
+        {
+          "cuda": 4.1573,
+          "cpu": 1.1718
+        },
+        {
+          "cuda": 4.5977,
+          "cpu": 2.586
+        },
+        {
+          "cuda": 4.4212,
+          "cpu": 1.2388
+        },
+        {
+          "cuda": 4.6137,
+          "cpu": 2.9128
+        },
+        {
+          "cuda": 4.569,
+          "cpu": 0.7954
+        },
+        {
+          "cuda": 4.7525,
+          "cpu": 2.44
+        },
+        {
+          "cuda": 5.3686,
+          "cpu": 0.873
+        },
+        {
+          "cuda": 4.7665,
+          "cpu": 1.7246
+        },
+        {
+          "cuda": 5.0475,
+          "cpu": 4.0914
+        },
+        {
+          "cuda": 5.1867,
+          "cpu": 3.4252
+        },
+        {
+          "cuda": 4.7685,
+          "cpu": 1.9473
+        },
+        {
+          "cuda": 4.9396,
+          "cpu": 2.7428
+        },
+        {
+          "cuda": 6.1753,
+          "cpu": 4.0534
+        },
+        {
+          "cuda": 6.267,
+          "cpu": 2.3644
+        },
+        {
+          "cuda": 5.9356,
+          "cpu": 3.3486
+        },
+        {
+          "cuda": 7.1446,
+          "cpu": 2.9587
+        },
+        {
+          "cuda": 5.4143,
+          "cpu": 2.0941
+        },
+        {
+          "cuda": 5.8786,
+          "cpu": 2.4096
+        },
+        {
+          "cuda": 5.5109,
+          "cpu": 1.798
+        },
+        {
+          "cuda": 5.6964,
+          "cpu": 1.977
+        },
+        {
+          "cuda": 5.6627,
+          "cpu": 1.6799
+        },
+        {
+          "cuda": 6.4754,
+          "cpu": 2.2549
+        },
+        {
+          "cuda": 5.4618,
+          "cpu": 2.3193
+        },
+        {
+          "cuda": 5.7156,
+          "cpu": 2.5436
+        },
+        {
+          "cuda": 5.8638,
+          "cpu": 3.894
+        },
+        {
+          "cuda": 6.6961,
+          "cpu": 3.2769
+        },
+        {
+          "cuda": 5.625,
+          "cpu": 2.0939
+        },
+        {
+          "cuda": 6.004,
+          "cpu": 2.9182
+        },
+        {
+          "cuda": 5.5947,
+          "cpu": 1.0602
+        },
+        {
+          "cuda": 5.9831,
+          "cpu": 2.3257
+        },
+        {
+          "cuda": 6.415,
+          "cpu": 1.8933
+        },
+        {
+          "cuda": 6.7203,
+          "cpu": 3.538
+        },
+        {
+          "cuda": 5.8339,
+          "cpu": 2.231
+        },
+        {
+          "cuda": 6.377,
+          "cpu": 3.3243
+        },
+        {
+          "cuda": 5.9468,
+          "cpu": 3.1858
+        },
+        {
+          "cuda": 6.0372,
+          "cpu": 3.2433
+        },
+        {
+          "cuda": 5.926,
+          "cpu": 3.7271
+        },
+        {
+          "cuda": 6.7132,
+          "cpu": 4.2747
+        },
+        {
+          "cuda": 6.0532,
+          "cpu": 5.3642
+        },
+        {
+          "cuda": 6.3887,
+          "cpu": 4.8883
+        },
+        {
+          "cuda": 6.4011,
+          "cpu": 2.4753
+        },
+        {
+          "cuda": 6.5538,
+          "cpu": 3.1017
+        },
+        {
+          "cuda": 6.6665,
+          "cpu": 3.9156
+        },
+        {
+          "cuda": 6.7661,
+          "cpu": 5.8449
+        },
+        {
+          "cuda": 7.7317,
+          "cpu": 7.1598
+        },
+        {
+          "cuda": 6.7568,
+          "cpu": 2.237
+        },
+        {
+          "cuda": 6.6988,
+          "cpu": 7.4363
+        },
+        {
+          "cuda": 7.1398,
+          "cpu": 3.2678
+        },
+        {
+          "cuda": 7.1461,
+          "cpu": 6.7074
+        },
+        {
+          "cuda": 8.0984,
+          "cpu": 2.2603
+        },
+        {
+          "cuda": 7.2902,
+          "cpu": 6.1382
+        },
+        {
+          "cuda": 7.3266,
+          "cpu": 2.5389
+        }
+      ]
+    },
+    {
+      "order": [
+        "cpu",
+        "cuda"
+      ],
+      "observations": [
+        {
+          "cpu": 1.6629,
+          "cuda": 6.9276
+        },
+        {
+          "cpu": 2.227,
+          "cuda": 6.9337
+        },
+        {
+          "cpu": 1.5059,
+          "cuda": 6.8978
+        },
+        {
+          "cpu": 3.7299,
+          "cuda": 7.2672
+        },
+        {
+          "cpu": 3.4975,
+          "cuda": 8.5503
+        },
+        {
+          "cpu": 4.1372,
+          "cuda": 7.2276
+        },
+        {
+          "cpu": 4.1329,
+          "cuda": 6.3079
+        },
+        {
+          "cpu": 2.8091,
+          "cuda": 5.9008
+        },
+        {
+          "cpu": 1.4639,
+          "cuda": 5.7952
+        },
+        {
+          "cpu": 2.612,
+          "cuda": 5.8387
+        },
+        {
+          "cpu": 2.8045,
+          "cuda": 5.2723
+        },
+        {
+          "cpu": 4.2239,
+          "cuda": 5.8484
+        },
+        {
+          "cpu": 1.1607,
+          "cuda": 4.2868
+        },
+        {
+          "cpu": 2.6984,
+          "cuda": 4.8996
+        },
+        {
+          "cpu": 1.2308,
+          "cuda": 4.6367
+        },
+        {
+          "cpu": 3.9704,
+          "cuda": 5.0704
+        },
+        {
+          "cpu": 0.7985,
+          "cuda": 4.3212
+        },
+        {
+          "cpu": 1.6727,
+          "cuda": 4.6129
+        },
+        {
+          "cpu": 0.6901,
+          "cuda": 4.5052
+        },
+        {
+          "cpu": 1.69,
+          "cuda": 4.6568
+        },
+        {
+          "cpu": 2.5887,
+          "cuda": 4.8358
+        },
+        {
+          "cpu": 2.7576,
+          "cuda": 5.266
+        },
+        {
+          "cpu": 2.0066,
+          "cuda": 4.5443
+        },
+        {
+          "cpu": 1.8449,
+          "cuda": 4.7404
+        },
+        {
+          "cpu": 2.8226,
+          "cuda": 5.5485
+        },
+        {
+          "cpu": 2.2418,
+          "cuda": 6.2251
+        },
+        {
+          "cpu": 3.7734,
+          "cuda": 6.2475
+        },
+        {
+          "cpu": 2.9839,
+          "cuda": 6.3552
+        },
+        {
+          "cpu": 1.9336,
+          "cuda": 5.4059
+        },
+        {
+          "cpu": 2.5183,
+          "cuda": 5.8543
+        },
+        {
+          "cpu": 2.0547,
+          "cuda": 6.2762
+        },
+        {
+          "cpu": 2.956,
+          "cuda": 7.4946
+        },
+        {
+          "cpu": 1.9855,
+          "cuda": 5.6859
+        },
+        {
+          "cpu": 2.2194,
+          "cuda": 6.0991
+        },
+        {
+          "cpu": 2.188,
+          "cuda": 6.0129
+        },
+        {
+          "cpu": 3.37,
+          "cuda": 5.9495
+        },
+        {
+          "cpu": 3.9008,
+          "cuda": 5.9998
+        },
+        {
+          "cpu": 3.7129,
+          "cuda": 6.4606
+        },
+        {
+          "cpu": 2.2358,
+          "cuda": 5.6991
+        },
+        {
+          "cpu": 3.2662,
+          "cuda": 6.2401
+        },
+        {
+          "cpu": 1.0603,
+          "cuda": 5.6908
+        },
+        {
+          "cpu": 2.1093,
+          "cuda": 6.4582
+        },
+        {
+          "cpu": 1.733,
+          "cuda": 5.8993
+        },
+        {
+          "cpu": 3.6063,
+          "cuda": 6.7611
+        },
+        {
+          "cpu": 2.0419,
+          "cuda": 5.6379
+        },
+        {
+          "cpu": 2.4193,
+          "cuda": 6.424
+        },
+        {
+          "cpu": 3.0644,
+          "cuda": 5.8769
+        },
+        {
+          "cpu": 3.5775,
+          "cuda": 6.2099
+        },
+        {
+          "cpu": 3.4255,
+          "cuda": 6.0331
+        },
+        {
+          "cpu": 3.6442,
+          "cuda": 6.0698
+        },
+        {
+          "cpu": 3.1084,
+          "cuda": 5.519
+        },
+        {
+          "cpu": 3.6793,
+          "cuda": 5.9208
+        },
+        {
+          "cpu": 2.124,
+          "cuda": 6.1843
+        },
+        {
+          "cpu": 4.0429,
+          "cuda": 6.7352
+        },
+        {
+          "cpu": 3.1681,
+          "cuda": 6.3294
+        },
+        {
+          "cpu": 2.2222,
+          "cuda": 6.1611
+        },
+        {
+          "cpu": 4.603,
+          "cuda": 7.049
+        },
+        {
+          "cpu": 2.212,
+          "cuda": 6.4416
+        },
+        {
+          "cpu": 6.2293,
+          "cuda": 6.8253
+        },
+        {
+          "cpu": 2.6168,
+          "cuda": 7.0038
+        },
+        {
+          "cpu": 6.1747,
+          "cuda": 6.8022
+        },
+        {
+          "cpu": 2.251,
+          "cuda": 6.8024
+        },
+        {
+          "cpu": 7.8174,
+          "cuda": 8.2502
+        },
+        {
+          "cpu": 3.2277,
+          "cuda": 7.3869
+        }
+      ]
+    },
+    {
+      "order": [
+        "cuda",
+        "cpu"
+      ],
+      "observations": [
+        {
+          "cuda": 6.7404,
+          "cpu": 1.1968
+        },
+        {
+          "cuda": 6.9596,
+          "cpu": 2.5429
+        },
+        {
+          "cuda": 6.6159,
+          "cpu": 1.4597
+        },
+        {
+          "cuda": 7.204,
+          "cpu": 3.0383
+        },
+        {
+          "cuda": 6.9839,
+          "cpu": 3.6205
+        },
+        {
+          "cuda": 7.069,
+          "cpu": 4.2076
+        },
+        {
+          "cuda": 8.0099,
+          "cpu": 5.8309
+        },
+        {
+          "cuda": 8.004,
+          "cpu": 6.1557
+        },
+        {
+          "cuda": 7.6857,
+          "cpu": 2.3657
+        },
+        {
+          "cuda": 6.2291,
+          "cpu": 2.612
+        },
+        {
+          "cuda": 5.9346,
+          "cpu": 2.86
+        },
+        {
+          "cuda": 7.5787,
+          "cpu": 3.818
+        },
+        {
+          "cuda": 4.4763,
+          "cpu": 1.1312
+        },
+        {
+          "cuda": 4.8059,
+          "cpu": 2.7071
+        },
+        {
+          "cuda": 4.5453,
+          "cpu": 1.2017
+        },
+        {
+          "cuda": 4.8625,
+          "cpu": 2.976
+        },
+        {
+          "cuda": 4.6824,
+          "cpu": 0.9906
+        },
+        {
+          "cuda": 4.9744,
+          "cpu": 1.815
+        },
+        {
+          "cuda": 4.7153,
+          "cpu": 0.9432
+        },
+        {
+          "cuda": 4.563,
+          "cpu": 1.662
+        },
+        {
+          "cuda": 4.5585,
+          "cpu": 2.5257
+        },
+        {
+          "cuda": 4.7119,
+          "cpu": 2.7458
+        },
+        {
+          "cuda": 4.7582,
+          "cpu": 2.4391
+        },
+        {
+          "cuda": 4.8786,
+          "cpu": 2.0123
+        },
+        {
+          "cuda": 5.5754,
+          "cpu": 3.0641
+        },
+        {
+          "cuda": 5.979,
+          "cpu": 1.9686
+        },
+        {
+          "cuda": 5.8101,
+          "cpu": 3.2805
+        },
+        {
+          "cuda": 6.4876,
+          "cpu": 3.8953
+        },
+        {
+          "cuda": 5.4782,
+          "cpu": 2.0395
+        },
+        {
+          "cuda": 5.9681,
+          "cpu": 2.5485
+        },
+        {
+          "cuda": 5.7505,
+          "cpu": 1.759
+        },
+        {
+          "cuda": 5.8794,
+          "cpu": 2.565
+        },
+        {
+          "cuda": 5.9763,
+          "cpu": 1.8225
+        },
+        {
+          "cuda": 5.9227,
+          "cpu": 3.2502
+        },
+        {
+          "cuda": 5.5044,
+          "cpu": 1.8949
+        },
+        {
+          "cuda": 5.6788,
+          "cpu": 2.5326
+        },
+        {
+          "cuda": 6.1766,
+          "cpu": 3.5719
+        },
+        {
+          "cuda": 6.3144,
+          "cpu": 2.9895
+        },
+        {
+          "cuda": 5.4644,
+          "cpu": 1.9428
+        },
+        {
+          "cuda": 6.0361,
+          "cpu": 2.7421
+        },
+        {
+          "cuda": 5.8245,
+          "cpu": 0.8647
+        },
+        {
+          "cuda": 6.6653,
+          "cpu": 2.356
+        },
+        {
+          "cuda": 5.8964,
+          "cpu": 1.4428
+        },
+        {
+          "cuda": 6.1355,
+          "cpu": 2.3092
+        },
+        {
+          "cuda": 5.4228,
+          "cpu": 1.9033
+        },
+        {
+          "cuda": 6.0139,
+          "cpu": 2.5671
+        },
+        {
+          "cuda": 6.1616,
+          "cpu": 2.9573
+        },
+        {
+          "cuda": 6.3692,
+          "cpu": 4.0999
+        },
+        {
+          "cuda": 6.0226,
+          "cpu": 4.2821
+        },
+        {
+          "cuda": 7.8695,
+          "cpu": 4.1891
+        },
+        {
+          "cuda": 6.644,
+          "cpu": 5.5306
+        },
+        {
+          "cuda": 6.1235,
+          "cpu": 3.5046
+        },
+        {
+          "cuda": 6.0341,
+          "cpu": 1.9603
+        },
+        {
+          "cuda": 6.2763,
+          "cpu": 3.0127
+        },
+        {
+          "cuda": 6.1195,
+          "cpu": 3.2167
+        },
+        {
+          "cuda": 6.8882,
+          "cpu": 3.2803
+        },
+        {
+          "cuda": 7.3894,
+          "cpu": 5.1573
+        },
+        {
+          "cuda": 6.5074,
+          "cpu": 2.8465
+        },
+        {
+          "cuda": 6.7557,
+          "cpu": 5.0758
+        },
+        {
+          "cuda": 6.9727,
+          "cpu": 2.6729
+        },
+        {
+          "cuda": 6.86,
+          "cpu": 7.4635
+        },
+        {
+          "cuda": 7.2201,
+          "cpu": 2.522
+        },
+        {
+          "cuda": 7.4,
+          "cpu": 6.3931
+        },
+        {
+          "cuda": 7.2722,
+          "cpu": 2.5334
+        }
+      ]
+    },
+    {
+      "order": [
+        "cpu",
+        "cuda"
+      ],
+      "observations": [
+        {
+          "cpu": 1.3675,
+          "cuda": 13.0674
+        },
+        {
+          "cpu": 2.5875,
+          "cuda": 7.2386
+        },
+        {
+          "cpu": 1.3517,
+          "cuda": 6.4951
+        },
+        {
+          "cpu": 2.3515,
+          "cuda": 7.2288
+        },
+        {
+          "cpu": 3.075,
+          "cuda": 6.5076
+        },
+        {
+          "cpu": 3.9502,
+          "cuda": 6.8385
+        },
+        {
+          "cpu": 2.5299,
+          "cuda": 5.844
+        },
+        {
+          "cpu": 3.0679,
+          "cuda": 5.8307
+        },
+        {
+          "cpu": 1.5176,
+          "cuda": 5.4325
+        },
+        {
+          "cpu": 2.5589,
+          "cuda": 5.7259
+        },
+        {
+          "cpu": 2.2161,
+          "cuda": 5.0237
+        },
+        {
+          "cpu": 3.1346,
+          "cuda": 5.6351
+        },
+        {
+          "cpu": 0.9544,
+          "cuda": 3.9826
+        },
+        {
+          "cpu": 2.6114,
+          "cuda": 4.5008
+        },
+        {
+          "cpu": 1.4295,
+          "cuda": 4.2324
+        },
+        {
+          "cpu": 2.3987,
+          "cuda": 4.4442
+        },
+        {
+          "cpu": 0.7175,
+          "cuda": 4.1278
+        },
+        {
+          "cpu": 2.032,
+          "cuda": 4.7082
+        },
+        {
+          "cpu": 0.779,
+          "cuda": 5.014
+        },
+        {
+          "cpu": 1.47,
+          "cuda": 5.4907
+        },
+        {
+          "cpu": 2.39,
+          "cuda": 5.1404
+        },
+        {
+          "cpu": 3.1146,
+          "cuda": 4.8434
+        },
+        {
+          "cpu": 2.8281,
+          "cuda": 4.9345
+        },
+        {
+          "cpu": 2.3657,
+          "cuda": 5.0288
+        },
+        {
+          "cpu": 3.5227,
+          "cuda": 6.1818
+        },
+        {
+          "cpu": 2.485,
+          "cuda": 7.2568
+        },
+        {
+          "cpu": 5.9745,
+          "cuda": 6.4769
+        },
+        {
+          "cpu": 3.46,
+          "cuda": 7.6315
+        },
+        {
+          "cpu": 2.4043,
+          "cuda": 5.6764
+        },
+        {
+          "cpu": 4.6116,
+          "cuda": 6.2265
+        },
+        {
+          "cpu": 2.1106,
+          "cuda": 5.588
+        },
+        {
+          "cpu": 2.2022,
+          "cuda": 5.8211
+        },
+        {
+          "cpu": 1.7083,
+          "cuda": 5.7269
+        },
+        {
+          "cpu": 2.4454,
+          "cuda": 6.5885
+        },
+        {
+          "cpu": 2.614,
+          "cuda": 5.9441
+        },
+        {
+          "cpu": 3.2668,
+          "cuda": 5.8789
+        },
+        {
+          "cpu": 4.6985,
+          "cuda": 6.2463
+        },
+        {
+          "cpu": 3.8491,
+          "cuda": 6.3648
+        },
+        {
+          "cpu": 1.8694,
+          "cuda": 5.564
+        },
+        {
+          "cpu": 2.8568,
+          "cuda": 6.9823
+        },
+        {
+          "cpu": 1.0332,
+          "cuda": 5.5104
+        },
+        {
+          "cpu": 3.2643,
+          "cuda": 6.3597
+        },
+        {
+          "cpu": 1.2895,
+          "cuda": 5.6262
+        },
+        {
+          "cpu": 2.538,
+          "cuda": 6.345
+        },
+        {
+          "cpu": 1.7686,
+          "cuda": 5.4164
+        },
+        {
+          "cpu": 2.2691,
+          "cuda": 6.3515
+        },
+        {
+          "cpu": 2.7909,
+          "cuda": 5.9862
+        },
+        {
+          "cpu": 6.5637,
+          "cuda": 6.4554
+        },
+        {
+          "cpu": 5.1631,
+          "cuda": 7.0861
+        },
+        {
+          "cpu": 5.152,
+          "cuda": 5.9741
+        },
+        {
+          "cpu": 3.9438,
+          "cuda": 6.2125
+        },
+        {
+          "cpu": 7.043,
+          "cuda": 7.1968
+        },
+        {
+          "cpu": 2.2172,
+          "cuda": 6.0583
+        },
+        {
+          "cpu": 2.929,
+          "cuda": 6.6154
+        },
+        {
+          "cpu": 6.1347,
+          "cuda": 7.2579
+        },
+        {
+          "cpu": 4.2806,
+          "cuda": 6.5959
+        },
+        {
+          "cpu": 10.0174,
+          "cuda": 8.0721
+        },
+        {
+          "cpu": 2.2274,
+          "cuda": 6.5828
+        },
+        {
+          "cpu": 7.0215,
+          "cuda": 7.0356
+        },
+        {
+          "cpu": 4.1148,
+          "cuda": 7.2773
+        },
+        {
+          "cpu": 5.8391,
+          "cuda": 6.9603
+        },
+        {
+          "cpu": 2.8855,
+          "cuda": 7.1718
+        },
+        {
+          "cpu": 6.7811,
+          "cuda": 7.6678
+        },
+        {
+          "cpu": 3.0012,
+          "cuda": 7.3936
+        }
+      ]
+    },
+    {
+      "order": [
+        "cuda",
+        "cpu"
+      ],
+      "observations": [
+        {
+          "cuda": 7.6568,
+          "cpu": 2.2787
+        },
+        {
+          "cuda": 7.7193,
+          "cpu": 5.0283
+        },
+        {
+          "cuda": 7.3446,
+          "cpu": 2.3357
+        },
+        {
+          "cuda": 7.2588,
+          "cpu": 4.5467
+        },
+        {
+          "cuda": 8.3593,
+          "cpu": 5.6808
+        },
+        {
+          "cuda": 8.2986,
+          "cpu": 3.5092
+        },
+        {
+          "cuda": 5.746,
+          "cpu": 2.5915
+        },
+        {
+          "cuda": 6.2112,
+          "cpu": 6.0734
+        },
+        {
+          "cuda": 7.4418,
+          "cpu": 2.5538
+        },
+        {
+          "cuda": 6.0195,
+          "cpu": 4.8896
+        },
+        {
+          "cuda": 5.2288,
+          "cpu": 2.4707
+        },
+        {
+          "cuda": 5.8599,
+          "cpu": 5.1753
+        },
+        {
+          "cuda": 4.2017,
+          "cpu": 1.0795
+        },
+        {
+          "cuda": 4.5535,
+          "cpu": 2.8225
+        },
+        {
+          "cuda": 4.2515,
+          "cpu": 1.0992
+        },
+        {
+          "cuda": 4.554,
+          "cpu": 3.5876
+        },
+        {
+          "cuda": 5.8726,
+          "cpu": 1.2938
+        },
+        {
+          "cuda": 4.5116,
+          "cpu": 1.911
+        },
+        {
+          "cuda": 4.6891,
+          "cpu": 1.4914
+        },
+        {
+          "cuda": 4.6481,
+          "cpu": 2.1037
+        },
+        {
+          "cuda": 5.0029,
+          "cpu": 4.547
+        },
+        {
+          "cuda": 6.1239,
+          "cpu": 5.0876
+        },
+        {
+          "cuda": 6.3191,
+          "cpu": 1.9609
+        },
+        {
+          "cuda": 4.8496,
+          "cpu": 2.2618
+        },
+        {
+          "cuda": 5.5343,
+          "cpu": 5.277
+        },
+        {
+          "cuda": 6.8839,
+          "cpu": 5.2838
+        },
+        {
+          "cuda": 7.3506,
+          "cpu": 6.5991
+        },
+        {
+          "cuda": 6.6634,
+          "cpu": 2.7438
+        },
+        {
+          "cuda": 5.3914,
+          "cpu": 2.9
+        },
+        {
+          "cuda": 5.7407,
+          "cpu": 2.5817
+        },
+        {
+          "cuda": 5.5422,
+          "cpu": 3.7895
+        },
+        {
+          "cuda": 7.2765,
+          "cpu": 3.9104
+        },
+        {
+          "cuda": 5.6955,
+          "cpu": 2.0554
+        },
+        {
+          "cuda": 6.1619,
+          "cpu": 3.1583
+        },
+        {
+          "cuda": 7.4862,
+          "cpu": 2.3367
+        },
+        {
+          "cuda": 5.9774,
+          "cpu": 3.0442
+        },
+        {
+          "cuda": 6.2962,
+          "cpu": 6.2121
+        },
+        {
+          "cuda": 6.6479,
+          "cpu": 7.7262
+        },
+        {
+          "cuda": 6.1048,
+          "cpu": 2.4575
+        },
+        {
+          "cuda": 6.8178,
+          "cpu": 5.5559
+        },
+        {
+          "cuda": 5.5756,
+          "cpu": 0.9572
+        },
+        {
+          "cuda": 5.9868,
+          "cpu": 3.6963
+        },
+        {
+          "cuda": 6.9308,
+          "cpu": 1.4589
+        },
+        {
+          "cuda": 6.2107,
+          "cpu": 2.8244
+        },
+        {
+          "cuda": 5.4219,
+          "cpu": 1.7743
+        },
+        {
+          "cuda": 5.9875,
+          "cpu": 2.5497
+        },
+        {
+          "cuda": 5.8759,
+          "cpu": 5.5227
+        },
+        {
+          "cuda": 7.3202,
+          "cpu": 2.708
+        },
+        {
+          "cuda": 6.3335,
+          "cpu": 3.4523
+        },
+        {
+          "cuda": 6.1379,
+          "cpu": 4.8211
+        },
+        {
+          "cuda": 6.145,
+          "cpu": 5.4583
+        },
+        {
+          "cuda": 6.2617,
+          "cpu": 7.3332
+        },
+        {
+          "cuda": 7.3891,
+          "cpu": 3.89
+        },
+        {
+          "cuda": 7.6653,
+          "cpu": 5.3
+        },
+        {
+          "cuda": 7.6771,
+          "cpu": 5.6826
+        },
+        {
+          "cuda": 7.7058,
+          "cpu": 4.1364
+        },
+        {
+          "cuda": 6.7623,
+          "cpu": 8.0385
+        },
+        {
+          "cuda": 6.7222,
+          "cpu": 2.9905
+        },
+        {
+          "cuda": 6.9368,
+          "cpu": 8.4867
+        },
+        {
+          "cuda": 6.8976,
+          "cpu": 2.9593
+        },
+        {
+          "cuda": 7.2623,
+          "cpu": 11.664
+        },
+        {
+          "cuda": 8.287,
+          "cpu": 3.9491
+        },
+        {
+          "cuda": 8.2973,
+          "cpu": 7.1834
+        },
+        {
+          "cuda": 7.2617,
+          "cpu": 3.8416
+        }
+      ]
+    },
+    {
+      "order": [
+        "cpu",
+        "cuda"
+      ],
+      "observations": [
+        {
+          "cpu": 1.2485,
+          "cuda": 6.839
+        },
+        {
+          "cpu": 2.2761,
+          "cuda": 7.2386
+        },
+        {
+          "cpu": 1.872,
+          "cuda": 6.8415
+        },
+        {
+          "cpu": 3.0039,
+          "cuda": 7.514
+        },
+        {
+          "cpu": 5.7734,
+          "cuda": 7.7892
+        },
+        {
+          "cpu": 7.0977,
+          "cuda": 6.8589
+        },
+        {
+          "cpu": 2.6652,
+          "cuda": 6.8176
+        },
+        {
+          "cpu": 5.2763,
+          "cuda": 6.7942
+        },
+        {
+          "cpu": 1.3869,
+          "cuda": 5.5385
+        },
+        {
+          "cpu": 3.2305,
+          "cuda": 6.001
+        },
+        {
+          "cpu": 2.6322,
+          "cuda": 5.2667
+        },
+        {
+          "cpu": 4.5306,
+          "cuda": 6.0056
+        },
+        {
+          "cpu": 1.2544,
+          "cuda": 4.6398
+        },
+        {
+          "cpu": 5.901,
+          "cuda": 6.2162
+        },
+        {
+          "cpu": 1.8117,
+          "cuda": 5.9319
+        },
+        {
+          "cpu": 2.4452,
+          "cuda": 4.8802
+        },
+        {
+          "cpu": 1.321,
+          "cuda": 5.5353
+        },
+        {
+          "cpu": 2.0717,
+          "cuda": 5.0687
+        },
+        {
+          "cpu": 0.7384,
+          "cuda": 4.6305
+        },
+        {
+          "cpu": 2.9303,
+          "cuda": 6.2391
+        },
+        {
+          "cpu": 4.0586,
+          "cuda": 4.7217
+        },
+        {
+          "cpu": 4.5496,
+          "cuda": 6.1063
+        },
+        {
+          "cpu": 3.7165,
+          "cuda": 6.0943
+        },
+        {
+          "cpu": 2.4844,
+          "cuda": 5.9786
+        },
+        {
+          "cpu": 6.069,
+          "cuda": 6.9434
+        },
+        {
+          "cpu": 4.1591,
+          "cuda": 7.4203
+        },
+        {
+          "cpu": 3.5815,
+          "cuda": 5.8277
+        },
+        {
+          "cpu": 2.9565,
+          "cuda": 6.6019
+        },
+        {
+          "cpu": 4.1889,
+          "cuda": 5.5563
+        },
+        {
+          "cpu": 3.0978,
+          "cuda": 6.1993
+        },
+        {
+          "cpu": 2.8073,
+          "cuda": 5.662
+        },
+        {
+          "cpu": 2.3853,
+          "cuda": 6.1715
+        },
+        {
+          "cpu": 2.1501,
+          "cuda": 5.8572
+        },
+        {
+          "cpu": 4.7634,
+          "cuda": 7.7375
+        },
+        {
+          "cpu": 4.913,
+          "cuda": 7.4596
+        },
+        {
+          "cpu": 6.6364,
+          "cuda": 7.6107
+        },
+        {
+          "cpu": 5.1818,
+          "cuda": 7.1093
+        },
+        {
+          "cpu": 6.377,
+          "cuda": 7.5738
+        },
+        {
+          "cpu": 3.818,
+          "cuda": 6.0708
+        },
+        {
+          "cpu": 3.1393,
+          "cuda": 6.0303
+        },
+        {
+          "cpu": 0.9407,
+          "cuda": 5.371
+        },
+        {
+          "cpu": 2.8602,
+          "cuda": 5.9943
+        },
+        {
+          "cpu": 2.9788,
+          "cuda": 6.8721
+        },
+        {
+          "cpu": 4.9968,
+          "cuda": 7.735
+        },
+        {
+          "cpu": 4.0286,
+          "cuda": 6.7892
+        },
+        {
+          "cpu": 4.8405,
+          "cuda": 7.4617
+        },
+        {
+          "cpu": 5.0852,
+          "cuda": 7.3065
+        },
+        {
+          "cpu": 5.8309,
+          "cuda": 7.3303
+        },
+        {
+          "cpu": 3.7025,
+          "cuda": 7.0742
+        },
+        {
+          "cpu": 4.9262,
+          "cuda": 7.4809
+        },
+        {
+          "cpu": 7.1125,
+          "cuda": 6.027
+        },
+        {
+          "cpu": 3.6534,
+          "cuda": 5.803
+        },
+        {
+          "cpu": 1.8624,
+          "cuda": 5.9348
+        },
+        {
+          "cpu": 2.5422,
+          "cuda": 6.1554
+        },
+        {
+          "cpu": 3.1936,
+          "cuda": 6.2934
+        },
+        {
+          "cpu": 2.3284,
+          "cuda": 6.1598
+        },
+        {
+          "cpu": 5.1959,
+          "cuda": 6.5397
+        },
+        {
+          "cpu": 3.4378,
+          "cuda": 6.7138
+        },
+        {
+          "cpu": 10.5766,
+          "cuda": 7.4312
+        },
+        {
+          "cpu": 2.5629,
+          "cuda": 6.8128
+        },
+        {
+          "cpu": 6.2803,
+          "cuda": 7.0009
+        },
+        {
+          "cpu": 2.3065,
+          "cuda": 6.8725
+        },
+        {
+          "cpu": 6.5506,
+          "cuda": 8.4256
+        },
+        {
+          "cpu": 3.6428,
+          "cuda": 7.4388
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "conditional": {
+      "cpuTotalMedianMillis": 100.39,
+      "cudaTotalMedianMillis": 195.35885000000002,
+      "medianPairedShorteningPercent": -96.19642079675754,
+      "fasterPairs": 0,
+      "batches": 32
+    },
+    "weight": {
+      "cpuTotalMedianMillis": 103.60794999999999,
+      "cudaTotalMedianMillis": 204.86235,
+      "medianPairedShorteningPercent": -96.4374070152051,
+      "fasterPairs": 0,
+      "batches": 32
+    }
+  },
+  "note": "Recorded calls from a real CPU filter prefix, without hypothesis replication. Original NumPy _loglik_batch method bodies are compiled unchanged from the pinned source; cached design and packed arrays are prepared before clocks. Scalar-weight captures validate against original scalar outputs but CPU timings use the existing batched method, not the scalar proposal loop. Host concatenation into two payloads is excluded with the other input packing. CUDA durations include two uploads, fused FP64 evaluation, one output readback and stream synchronization. Imports/JIT, packing, parity, output checks and serialization are excluded. Shared warm workspace; alternating policies; no live graph, proposal generation, RNG, resampling, FIX decisions, ensemble coordination or full positioning speedup is measured."
+}
