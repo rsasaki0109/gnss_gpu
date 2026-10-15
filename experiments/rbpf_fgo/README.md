@@ -18,6 +18,72 @@ archived copy.
 | `wp13m_lambda_diag.py` | finite-guarded MLAMBDA used by the backbone |
 | `relabel_nb9_pos.py` | report floor: relabels fixes with fewer than `nb` resolved ambiguities as float |
 
+## Reusing basin IDs during posterior aggregation (2026-10-16)
+
+The posterior computes each particle's canonical basin ID once and reuses it
+for mass grouping, first-representative selection and tracked MAP output,
+including optional tracking variants. The canonical-ID function is unchanged.
+Hypotheses remain read-only between grouping and tracked output; IDs are local
+to this step and are recomputed after particle or epoch changes. Scalar mass
+accumulation order, stable ties, first representative identity and non-empty
+tracking's `bool(H)` behavior are preserved.
+
+Tokyo run1's 600-epoch prefix supplies **24 actual aggregation inputs and
+1,536 particle visits**, N=64, K=12, seed 20260710. Captured H, normalized
+weights and tracked states retain their original order/count. No hypotheses
+or states are synthesized, duplicated or expanded for performance measurement.
+
+| Wall-time replay scope | Baseline median ms | Candidate median ms | Paired reduction median | Paired range | Improved pairs |
+|---|---:|---:|---:|---:|---:|
+| Basin grouping, ranking and representatives | 83.69 | 52.58 | **35.37%** | 19.73–40.59% | **10/10** |
+| Grouping plus tracked-output selection and weighted means | 210.49 | 105.77 | **49.63%** | 37.50–53.48% | **10/10** |
+
+Canonical-ID calls fall **3,072 → 1,536** in the first scope and
+**4,608 → 1,536** in the second. Both include ID construction, ordered mass
+sums, ranking, first representatives and output construction. The second
+also includes MAP/non-empty tracked-output selection and weighted means.
+**Conditional top-position solves and cluster-state publication are excluded
+from both replay scopes.** Their production statements are unchanged and run
+in pipeline controls. Weight normalization is outside the clocks because
+normalized weights are captured inputs. These results do not establish full
+posterior, full-filter, full-route or GPU speed gains. Percentages are medians
+of individual paired reductions, distinct from ratios of per-policy medians;
+do not combine them with previous study percentages.
+
+Each policy retains the actual epoch/particle order. Policies run adjacent
+within epoch windows, alternating the first policy with trial and epoch.
+Two full warmups per source/stage are excluded. Imports, loading, decode,
+validation and hash checks stay outside the clocks. Windows, Python 3.12.10,
+NumPy 2.4.6, one OpenBLAS/OMP thread; local jobs/checks finish before timing,
+with no overlapping edits, scans, tests or builds.
+
+All observed mass/ranking/representative/tracked-output bytes match both
+sources. First representative object identity and unchanged input bytes are
+also checked. The baseline observer matches the frozen PR #245 control.
+Candidate TRACK=2 600 epochs and TRACK=1 350 epochs match their controls:
+position bytes and all 90 arrays, zero exclusions. These runs are correctness
+evidence only. The full suite has 5,921 passed / 3,778 skipped; 151 new cases
+cover all tracking modes, missing states/variants, gauge-equivalent H, empty
+groups, stable ties, zero/unequal mass, first representative identity, large
+integers and H changes/reordering on repeated calls. CI includes these cases.
+
+To reproduce with fresh directories, save the baseline from `5dab2b1` and
+forward the WP56 flags/environment from `benchmark_shared_moves_cpu.py`:
+
+```bash
+python capture_posterior_ids.py --source BASELINE.py --output NEW_CAPTURE \
+  --tc-src tc/src -- 1 --max-ep 600 --out-dir NEW_RUN [WP56 flags]
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python benchmark_posterior_ids.py \
+  --manifest NEW_CAPTURE/manifest.json --baseline BASELINE.py \
+  --candidate rbpf_fgo.py --output NEW_REPLAY.json --pairs 10
+```
+
+The observer inserts input/output callbacks around unchanged original
+posterior statements, including live conditional solves. Its elapsed time is
+not speed evidence. Preserve completed controllers and records. See the
+[raw trials](../../benchmarks/rbpf_posterior_ids_tokyo_prefix_20261016.json)
+and [independent audit](../../benchmarks/rbpf_posterior_ids_audit_20261016.json).
+
 ## Reusing DD arrays within component agreement (2026-10-16)
 
 The component-agreement phase reuses its already computed per-particle DD

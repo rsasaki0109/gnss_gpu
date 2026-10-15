@@ -1782,6 +1782,33 @@ partial gateは各sideの採用subsetと元のungated joint GPU costを独立に
 12*nDD sharedを保ち512DDも48KiB内。H2D/allocation/launch/API/既定設定、common joint/個別mixed gates/BVH/signalを維持。
 raw/device/patch/completionを `benchmarks/pf_dd_mixed_joint_gate_*_20261013.json`、`benchmarks/RESULTS.md` に記録。
 
+## D-211: posterior集計で粒子ごとのbasin IDを再利用 (2026-10-16)
+
+状態: 採用（basin/追跡出力の集計のみ、条件付き位置推定と全体速度は対象外）
+
+重み集計で一度計算した粒子basin IDを、最初の代表H選択とtracked MAP出力で再利用する。
+track variantsも同じIDを参照。canonical関数本体は変更しない。Hが不変の区間内でのみ
+使い、粒子変更や次epochへ持ち越さない。scalar重み加算順、stable tie、最初の代表Hの
+object identity、非空trackedのbool(H)（空groupとの違い）を維持。
+
+Tokyo run1 600epochの24実集計入力、64粒子×24=1536訪問、K12/seed20260710。
+実H/正規化重み/tracked stateを同じ順序・件数で記録し、合成・複製・水増しなし。
+ID呼出はbasin集計3072→1536、trackedを含む集計4608→1536。
+2warmup後10交互pair測定。basin集計83.69065→52.58025ms（各policy中央値）、
+paired短縮中央値35.37%、10/10改善、範囲19.73–40.59%。
+tracked出力の選択/加重平均まで含む集計210.485→105.7719ms、paired短縮中央値49.63%、
+10/10改善、範囲37.50–53.48%。
+両scopeは条件付きtop位置推定/cluster publicationを除外し、正規化重みは記録済み入力。
+そのproduction計算は変えずpipeline照合で実行。posterior全体/全filter/全経路/GPUへ
+一般化せず、過去の短縮率との合成もしない。
+
+epoch内で旧新を隣接実行し、epochとtrialで先行側を交互化。source bytesを固定、
+他local job/check終了後に計測し、計時中の編集/test/build/scanなし。
+観測したmass/ranking/代表H/tracked出力bytesと、observer/候補TRACK2 600epoch・
+候補TRACK1 350epochの位置bytes/全90配列がcontrolと一致、除外0。
+5921 passed/3778 skipped、追加151回帰case。記録:
+benchmarks/rbpf_posterior_ids_{tokyo_prefix,audit}_20261016.json、実験README。
+
 ## D-210: 成分一致度判定のDDを同じphase内で再利用 (2026-10-16)
 
 状態: 採用（DD配列生成のみ、成分一致度全体の安定した改善は未確認）

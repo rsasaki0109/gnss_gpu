@@ -1,0 +1,345 @@
+{
+  "schemaVersion": 1,
+  "parity": {
+    "schemaVersion": 1,
+    "baselineCommit": "5dab2b1cbc2a6334d2017e39efd2aa0f87df1769",
+    "baseline": {
+      "name": "rbpf_fgo_original.py",
+      "bytes": 159656,
+      "sha256": "9e9248d81ced47345698ba70a74c36e0ee4f51c5185324e360b525b3c99a8088"
+    },
+    "candidate": {
+      "name": "rbpf_fgo_candidate.py",
+      "bytes": 159730,
+      "sha256": "c3293f398b01b0101903f3959c05b1246c8f8b16ee26c6fd8cbb2f0a1eddc736"
+    },
+    "captureManifest": {
+      "name": "manifest.json",
+      "bytes": 7746996,
+      "sha256": "13306042970742e99cc9c16d55870768005dcdd6757fbaaba14229974e60646f"
+    },
+    "sourceLibraries": [
+      {
+        "name": "gnss.py",
+        "bytes": 41184,
+        "sha256": "a8702c83c1f3cde8ad60d67a42bb326103b81f7a8a1a64ff4dcf6aa9221785a4"
+      },
+      {
+        "name": "gtsam.pyd",
+        "bytes": 16236032,
+        "sha256": "76d018af6634358e5245c25e6676864abefa56044e3b5862b3361b78128f18a3"
+      }
+    ],
+    "originalInputs": [
+      {
+        "name": "rover.obs",
+        "bytes": 90593655,
+        "sha256": "97e7b370d381a64760cd07d251bcf5df2dc2b3b6dd2444323ff8d6f35e4689e5"
+      },
+      {
+        "name": "base.obs",
+        "bytes": 35794907,
+        "sha256": "2624939cd82cdbd839a32ccb4d22f9f846e7613a934b45539b5f98e8c31e37f8"
+      },
+      {
+        "name": "base.nav",
+        "bytes": 815565,
+        "sha256": "6a8fcef262ae62854f971cf383ee17c19fddd7d49071effc0f94c156b923d4b7"
+      },
+      {
+        "name": "imu.csv",
+        "bytes": 22469390,
+        "sha256": "bba039063ebcfde1f3be5e5c8c4a86e522064a8873a2310a5ed142e820acc091"
+      },
+      {
+        "name": "reference.csv",
+        "bytes": 1658813,
+        "sha256": "8e468a6a959cd47144f4ad1f1dc0129e7ee160011f4d236e4ffdb63b203373e9"
+      }
+    ],
+    "epochs": 24,
+    "particleVisits": 1536,
+    "configuredParticles": [
+      64
+    ],
+    "stages": {
+      "basins": {
+        "canonicalCalls": {
+          "baseline": 3072,
+          "candidate": 1536
+        },
+        "epochCanonicalCalls": [
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          },
+          {
+            "baseline": 128,
+            "candidate": 64
+          }
+        ]
+      },
+      "aggregation": {
+        "canonicalCalls": {
+          "baseline": 4608,
+          "candidate": 1536
+        },
+        "epochCanonicalCalls": [
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          },
+          {
+            "baseline": 192,
+            "candidate": 64
+          }
+        ]
+      }
+    },
+    "pipeline": [
+      {
+        "mode": "observer-track2",
+        "epochs": 600,
+        "exactArrays": 90,
+        "excluded": [],
+        "position": {
+          "name": "run1.pos",
+          "bytes": 87241,
+          "sha256": "8a221393fff79b71ce6e64972292b3e76a6b90ced0fccf31f37379deacee85cd"
+        }
+      },
+      {
+        "mode": "candidate-track2",
+        "epochs": 600,
+        "exactArrays": 90,
+        "excluded": [],
+        "position": {
+          "name": "run1.pos",
+          "bytes": 87241,
+          "sha256": "8a221393fff79b71ce6e64972292b3e76a6b90ced0fccf31f37379deacee85cd"
+        }
+      },
+      {
+        "mode": "candidate-track1",
+        "epochs": 350,
+        "exactArrays": 90,
+        "excluded": [],
+        "position": {
+          "name": "run1.pos",
+          "bytes": 50991,
+          "sha256": "8b8ffdd0a0bd8698997a0768c7cc0a9c38e8e2fd8b4be355964ff7cad9307cc1"
+        }
+      }
+    ],
+    "note": "Actual normalized weights, H and tracked states only. Observed ordered basin masses/ranking/representatives and tracked-output bytes match both exact source bodies. First representative object identity and unchanged input bytes checked. Canonical-ID function AST unchanged. Observer and candidate TRACK2 600, candidate TRACK1 350 match frozen same-source controls, position bytes and all 90 arrays, zero exclusions. Every capture/controller/dependency and raw data/library hash rechecked without importing research libraries. Conditional top solves/cluster publication run in pipeline controls but are excluded from replay timing. Correctness timings are not speed evidence."
+  },
+  "replayRecord": {
+    "name": "replay.json",
+    "bytes": 83606,
+    "sha256": "7e7ca58ff3296bd1e2bafc5ded3e7d1c8820bedc342e6cddb4b998906a68a85e"
+  },
+  "summary": {
+    "basins": {
+      "canonicalCalls": {
+        "baseline": 3072,
+        "candidate": 1536
+      },
+      "baselineMedianMs": 83.69065,
+      "candidateMedianMs": 52.58025,
+      "medianReductionPercent": 35.370131188642304,
+      "improvedPairs": 10,
+      "minimumReductionPercent": 19.726459949827902,
+      "maximumReductionPercent": 40.59021134417794
+    },
+    "aggregation": {
+      "canonicalCalls": {
+        "baseline": 4608,
+        "candidate": 1536
+      },
+      "baselineMedianMs": 210.485,
+      "candidateMedianMs": 105.77189999999999,
+      "medianReductionPercent": 49.629715313015225,
+      "improvedPairs": 10,
+      "minimumReductionPercent": 37.502955646237744,
+      "maximumReductionPercent": 53.47856508383908
+    }
+  },
+  "scope": "Actual basin grouping and tracked-output aggregation inputs, original particle order/count. Basins includes canonical IDs, ordered mass sums, ranking, first representatives and output construction. Aggregation also includes MAP/non-empty tracked-output selection and weighted means. Conditional top-position solves and cluster-state publication excluded from both scopes; their production statements remain unchanged and are exercised in pipeline controls. Normalized weights are captured inputs. Two warmups excluded. Adjacent epoch windows alternate first policy by epoch/trial. Loading/decode/validation excluded. No synthetic/expanded hypotheses or persistent ID cache. Not full posterior, full-filter, full-route or GPU latency.",
+  "note": "Independent sums, medians, epoch/particle/canonical-call counts, alternating orders, source/controller/dependency hashes and full pipeline parity checked. All local jobs/checks completed before timing; no edits, scans, tests or builds overlap timing. Conditional top-position solves and cluster publication explicitly excluded from replay. No full-posterior, full-filter, full-route or GPU speed claim."
+}

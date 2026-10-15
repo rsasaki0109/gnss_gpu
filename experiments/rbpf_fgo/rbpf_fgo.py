@@ -2132,14 +2132,15 @@ class RbpfFgo:
         w = np.exp(logw)
         w /= w.sum()
         masses = OrderedDict()
+        basin_ids = []
+        rep = {}                # basin id -> first representative H
         for i, p in enumerate(self.particles):
             bid = _canon_basin_id(p.H)
+            basin_ids.append(bid)
             masses[bid] = masses.get(bid, 0.0) + float(w[i])
+            rep.setdefault(bid, p.H)
         ranked = sorted(masses.items(), key=lambda kv: -kv[1])
         out['n_basins'] = len(ranked)
-        rep = {}                # basin id -> a representative H
-        for p in self.particles:
-            rep.setdefault(_canon_basin_id(p.H), p.H)
 
         top = []
         next_cluster_states = {}
@@ -2172,7 +2173,7 @@ class RbpfFgo:
                     st_ = p_.state if v == 0 else (
                         p_.vstates[v - 1] if len(p_.vstates) >= v else None)
                     if (st_ is not None and ranked
-                            and _canon_basin_id(p_.H) == ranked[0][0]):
+                            and basin_ids[i_] == ranked[0][0]):
                         xs.append(st_.x)
                         ws.append(float(w[i_]))
                 if xs and sum(ws) > 0:
@@ -2185,12 +2186,13 @@ class RbpfFgo:
         if cfg.track:
             # WP43: tracked beliefs of the MAP basin and of every non-empty
             # particle (mass-weighted), recorded for output studies
-            for key, sel in (('trk_map', lambda p_: _canon_basin_id(p_.H)
+            # H is unchanged since the posterior grouping above.
+            for key, sel in (('trk_map', lambda i_, p_: basin_ids[i_]
                               == ranked[0][0]),
-                             ('trk_mix', lambda p_: bool(p_.H))):
+                             ('trk_mix', lambda i_, p_: bool(p_.H))):
                 xs, ws = [], []
                 for i_, p_ in enumerate(self.particles):
-                    if p_.state is not None and ranked and sel(p_):
+                    if p_.state is not None and ranked and sel(i_, p_):
                         xs.append(p_.state.x)
                         ws.append(float(w[i_]))
                 if xs and sum(ws) > 0:
