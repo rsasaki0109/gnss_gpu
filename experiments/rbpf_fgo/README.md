@@ -18,6 +18,69 @@ archived copy.
 | `wp13m_lambda_diag.py` | finite-guarded MLAMBDA used by the backbone |
 | `relabel_nb9_pos.py` | report floor: relabels fixes with fewer than `nb` resolved ambiguities as float |
 
+## Sharing scalar move priors within an epoch (2026-10-16)
+
+The scalar proposal path (`track != 1`) reuses normalized log-prior vectors
+within its current epoch. Empty/nonempty hypotheses and available extension/
+shrink moves determine at most five ordered prior vectors; consensus, adopt
+and spawn entries are already shared throughout that phase. The first use
+per class executes the original array construction, division and logarithm.
+Later particles reuse that vector while retaining their own likelihoods,
+weights and random choice. No cache crosses an epoch or configuration change.
+
+Tokyo run1's 600-epoch prefix supplies **1,536 actual move distributions in
+24 sampled steps**, N=64, K=12, seed 20260710. Prior normalization/log calls
+fall **1,536 → 31**. Every observed availability key maps to an identical
+ordered prior vector within its epoch. Original epoch/particle/move order
+and count are retained, without synthetic or expanded inputs.
+
+| Wall-time replay scope | Baseline median ms | Candidate median ms | Paired reduction median | Paired range | Improved pairs |
+|---|---:|---:|---:|---:|---:|
+| Numeric move distribution with recorded likelihoods | 58.6870 | 41.9453 | **28.04%** | 19.42–37.52% | **10/10** |
+
+Clocks include availability-key construction, a fresh epoch cache, prior
+vector/normalization/log, recorded-score combination, max/exp/sum, log-weight
+addition and probability normalization. Per-call input log-weight reset and
+the extraction helper call are included. Move generation, likelihood scoring,
+RNG sampling, loading/decode and validation are excluded. This establishes
+an improvement in the numeric distribution replay, without a live full-
+proposal, full-filter, full-route or GPU latency claim. Do not combine its
+percentage with earlier studies. Paired reduction medians differ from ratios
+of per-policy medians.
+
+Policies run adjacent within epoch windows, alternating first policy with
+epoch and trial. Two full warmups per source are excluded. Windows,
+Python 3.12.10, NumPy 2.4.6, one OpenBLAS/OMP thread. All local jobs/checks
+finish before timing; no edits, scans, tests or builds overlap the clocks.
+
+The observer wraps the original RNG probability argument and returns the
+same array unchanged. It adds no probability division, likelihood, structural
+move or RNG calls. Actual probability dtype/shape/bytes and post-update
+log-weight bytes match both exact source blocks. Raw H/structural results/
+prior/likelihood inputs remain unchanged. Removing only the prior cache/key
+assignments and restoring the original prior expression makes the entire
+production AST equal to baseline. Fresh observer/candidate TRACK=2 600 epochs
+and candidate TRACK=1 350 epochs match frozen controls: position bytes and
+all 90 arrays, zero exclusions. Full suite: **6,264 passed / 3,778 skipped**;
+73 new cases cover all availability classes, distinct extension/shrink
+priors, repeated shared entries, zero/subnormal priors, weights, move choices,
+RNG state and configuration changes between epochs.
+
+For fresh captures, save scalar baseline `605db04` and forward the WP56
+flags/environment from `benchmark_shared_moves_cpu.py`:
+
+```bash
+python capture_move_priors.py --source BASELINE.py --output NEW_CAPTURE \
+  --tc-src tc/src -- 1 --max-ep 600 --out-dir NEW_RUN [WP56 flags]
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python benchmark_move_priors.py \
+  --manifest NEW_CAPTURE/manifest.json --baseline BASELINE.py \
+  --candidate rbpf_fgo.py --output NEW_REPLAY.json --pairs 10
+```
+
+Observer elapsed time is correctness evidence only. Preserve completed
+controllers and records. See the [raw trials](../../benchmarks/rbpf_move_priors_tokyo_prefix_20261016.json)
+and [independent audit](../../benchmarks/rbpf_move_priors_audit_20261016.json).
+
 ## Matching held integers in feedback (2026-10-16)
 
 `_feedback` prepares a temporary matrix of truncated DD values when its

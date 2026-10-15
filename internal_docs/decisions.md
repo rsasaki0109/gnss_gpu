@@ -1782,6 +1782,34 @@ partial gateは各sideの採用subsetと元のungated joint GPU costを独立に
 12*nDD sharedを保ち512DDも48KiB内。H2D/allocation/launch/API/既定設定、common joint/個別mixed gates/BVH/signalを維持。
 raw/device/patch/completionを `benchmarks/pf_dd_mixed_joint_gate_*_20261013.json`、`benchmarks/RESULTS.md` に記録。
 
+## D-216: scalar移動候補の事前確率をepoch内で共有 (2026-10-16)
+
+状態: 採用（記録済み尤度による分布の数値計算。全提案/全体速度は未計測）
+
+track != 1のscalar提案で、H空/非空・extend/shrink有無ごとに正規化済みlog priorを再利用。
+最大5種類、共有consensus/adopt/spawnの順序・件数はphase中一定。初回は元の配列生成/
+除算/logをそのまま実行し、粒子ごとの尤度/重み/乱数抽選は維持。epochを越えるcacheなし。
+
+Tokyo run1 600epochから24 sampled steps・1536実移動分布、N64/K12/seed20260710。
+元のepoch/粒子/move順序・件数で合成/複製/水増しなし。prior正規化/log呼出1536→31。
+各epochの実availability keyごとにprior vectorが完全一致することを確認。
+2warmup後10交互pair、分布数値計算58.68695→41.9453ms（各policy中央値）、
+paired短縮中央値28.04%、10/10改善、範囲19.42–37.52%。
+
+キー生成/fresh epoch cache/prior配列・除算・log/記録尤度加算/max・exp・sum/
+log weight更新/確率正規化と、入力log weight reset/helper呼出を計時に含める。
+候補生成/尤度計算/RNG抽選/loading/decode/validationは対象外。
+live全提案/全filter/全経路/GPUの利得へ一般化せず、過去比率と合成しない。
+epoch内旧新隣接、epoch/trialで先行側交互化。source/controller bytes固定。
+他local job/check完了後に計測し、計時中の編集/test/build/scanなし。
+
+observerは元のRNG確率引数を同じ配列のまま返し、追加除算/尤度/構造move/RNG呼出なし。
+旧新/観測値の確率dtype/shape/bytesと更新後log weight bytesが一致、入力bytes不変。
+cache/key除去と元のprior式復元後にproduction全ASTがbaselineと一致。
+observer/候補TRACK2 600・候補TRACK1 350epochはcontrolと位置bytes/全90配列一致、除外0。
+6264 passed/3778 skipped、追加73case。記録:
+benchmarks/rbpf_move_priors_{tokyo_prefix,audit}_20261016.json、実験README。
+
 ## D-215: feedbackのDD整数一致判定を配列でまとめる (2026-10-16)
 
 状態: 採用（記録したgraph遷移によるpolicy replay。live graph/全体速度は未計測）

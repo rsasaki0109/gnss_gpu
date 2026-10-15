@@ -2104,24 +2104,33 @@ class RbpfFgo:
             for Hs in spawn_H:
                 shared_moves.append((cfg.p_spawn / len(spawn_H), LL(Hs),
                                      Hs, 'spawn'))
+        move_logpri = {}
         for p in (self.particles if cfg.track != 1 else ()):
             moves = []           # (logprior, loglik, H, tag)
+            prior_key = 0
             ll_s = LL(p.H)
             if p.H:
+                prior_key = 1
                 moves.append((cfg.p_survive, ll_s, p.H, 'survive'))
                 H_ext, H_shr = self._move_pair(p.H, prob)
                 if H_ext is not None:
+                    prior_key |= 2
                     moves.append((cfg.p_extend, LL(H_ext), H_ext, 'extend'))
                 if H_shr is not None:
+                    prior_key |= 4
                     moves.append((cfg.p_shrink, LL(H_shr), H_shr, 'shrink'))
                 moves.append((cfg.p_release, ll_empty, {}, 'release'))
             else:
                 moves.append((cfg.p_survive + cfg.p_extend + cfg.p_shrink
                               + cfg.p_release, ll_s, p.H, 'stay'))
             moves.extend(shared_moves)
-            pri = np.array([mv[0] for mv in moves], dtype=float)
-            pri /= pri.sum()     # renormalize over available moves
-            lam_arr = np.log(pri) + np.array([mv[1] for mv in moves])
+            logpri = move_logpri.get(prior_key)
+            if logpri is None:
+                pri = np.array([mv[0] for mv in moves], dtype=float)
+                pri /= pri.sum()     # renormalize over available moves
+                logpri = np.log(pri)
+                move_logpri[prior_key] = logpri
+            lam_arr = logpri + np.array([mv[1] for mv in moves])
             mx = float(np.max(lam_arr))
             wsum = np.exp(lam_arr - mx)
             tot = float(np.sum(wsum))

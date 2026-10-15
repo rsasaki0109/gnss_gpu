@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "parity": {
+    "schemaVersion": 1,
+    "baselineCommit": "605db04d850252097dc6704c1021b3ca7f4f5009",
+    "baseline": {
+      "name": "rbpf_fgo_original.py",
+      "bytes": 162538,
+      "sha256": "d38f95153a30123cf4ed9c0db939710d1f384e727ad3ab6427c42bc7b0968706"
+    },
+    "candidate": {
+      "name": "rbpf_fgo_candidate.py",
+      "bytes": 162865,
+      "sha256": "63f5087bad9a98070a5c7fe242a2a21d4b0dd742b31b0f1b54e017a728c9dbf5"
+    },
+    "captureManifest": {
+      "name": "manifest.json",
+      "bytes": 19925,
+      "sha256": "e06ceaeb91c19690ed82c0b8ec97c7ab943d062a5deff2b521e2de988d9a40a9"
+    },
+    "sourceLibraries": [
+      {
+        "name": "gnss.py",
+        "bytes": 41184,
+        "sha256": "a8702c83c1f3cde8ad60d67a42bb326103b81f7a8a1a64ff4dcf6aa9221785a4"
+      },
+      {
+        "name": "gtsam.pyd",
+        "bytes": 16236032,
+        "sha256": "76d018af6634358e5245c25e6676864abefa56044e3b5862b3361b78128f18a3"
+      }
+    ],
+    "originalInputs": [
+      {
+        "name": "rover.obs",
+        "bytes": 90593655,
+        "sha256": "97e7b370d381a64760cd07d251bcf5df2dc2b3b6dd2444323ff8d6f35e4689e5"
+      },
+      {
+        "name": "base.obs",
+        "bytes": 35794907,
+        "sha256": "2624939cd82cdbd839a32ccb4d22f9f846e7613a934b45539b5f98e8c31e37f8"
+      },
+      {
+        "name": "base.nav",
+        "bytes": 815565,
+        "sha256": "6a8fcef262ae62854f971cf383ee17c19fddd7d49071effc0f94c156b923d4b7"
+      },
+      {
+        "name": "imu.csv",
+        "bytes": 22469390,
+        "sha256": "bba039063ebcfde1f3be5e5c8c4a86e522064a8873a2310a5ed142e820acc091"
+      },
+      {
+        "name": "reference.csv",
+        "bytes": 1658813,
+        "sha256": "8e468a6a959cd47144f4ad1f1dc0129e7ee160011f4d236e4ffdb63b203373e9"
+      }
+    ],
+    "epochs": 24,
+    "particleVisits": 1536,
+    "priorNormalizations": {
+      "baseline": 1536,
+      "candidate": 31
+    },
+    "unchangedDownstreamAst": true,
+    "configuredParticles": [
+      64
+    ],
+    "pipeline": [
+      {
+        "mode": "observer-track2",
+        "epochs": 600,
+        "exactArrays": 90,
+        "excluded": [],
+        "position": {
+          "name": "run1.pos",
+          "bytes": 87241,
+          "sha256": "8a221393fff79b71ce6e64972292b3e76a6b90ced0fccf31f37379deacee85cd"
+        }
+      },
+      {
+        "mode": "candidate-track2",
+        "epochs": 600,
+        "exactArrays": 90,
+        "excluded": [],
+        "position": {
+          "name": "run1.pos",
+          "bytes": 87241,
+          "sha256": "8a221393fff79b71ce6e64972292b3e76a6b90ced0fccf31f37379deacee85cd"
+        }
+      },
+      {
+        "mode": "candidate-track1",
+        "epochs": 350,
+        "exactArrays": 90,
+        "excluded": [],
+        "position": {
+          "name": "run1.pos",
+          "bytes": 50991,
+          "sha256": "8b8ffdd0a0bd8698997a0768c7cc0a9c38e8e2fd8b4be355964ff7cad9307cc1"
+        }
+      }
+    ],
+    "note": "Actual scalar move distributions only. Full post-update log-weight and original RNG probability-array dtype/shape/bytes match baseline/candidate exact source blocks and observed outputs. Raw H/structural results/prior/likelihood inputs unchanged. Every actual availability key maps to one identical prior vector within its epoch; no cache crosses epochs. Original RNG probability expression wrapped by a callback returning the same array, without extra likelihood/structural/probability division/RNG calls. Entire production AST matches after removing only local prior cache/key assignments and restoring original prior/log expression. Fresh observer/candidate TRACK2 600 and candidate TRACK1 350 match frozen controls, position bytes and all 90 arrays, zero exclusions. Raw data/library/source/controller hashes checked without research imports. Replay includes availability-key construction and numeric move distributions; likelihood/move generation/RNG sampling excluded. Correctness timing is not speed evidence."
+  },
+  "replayRecord": {
+    "name": "replay.json",
+    "bytes": 35579,
+    "sha256": "6f6ee62ca15f121ad0f2b5ac5b4e7c18ae52a7c1d488f23dac2c530b083b9a77"
+  },
+  "summary": {
+    "baselineMedianMs": 58.686949999999996,
+    "candidateMedianMs": 41.9453,
+    "medianReductionPercent": 28.03905468947773,
+    "improvedPairs": 10,
+    "minimumReductionPercent": 19.424567707490404,
+    "maximumReductionPercent": 37.518483128042746
+  },
+  "scope": "Actual scalar move distributions in original epoch/particle/move order/count. Includes new availability-key construction, fresh epoch cache, prior vector/normalization/log, recorded-score combination, max/exp/sum, log-weight addition and probability normalization. Per-call input log-weight reset and helper call included. Move generation, likelihood scoring, RNG sampling, loading/decode/validation excluded. Two warmups excluded; adjacent epoch windows alternate first policy by epoch/trial. No synthetic/expanded inputs or cache across epochs. Not live full-proposal, full-filter, route or GPU latency.",
+  "note": "Independent sums, medians, epoch/particle/prior-normalization counts, alternating orders and source/controller hashes checked. All local jobs/checks completed before timing; no edits, scans, tests or builds overlap timing. Availability-key construction, fresh epoch cache, all numeric distribution operations and input log-weight binding included. Move generation, likelihood scoring and RNG sampling excluded. No live full-proposal, full-filter, full-route or GPU speed claim."
+}
