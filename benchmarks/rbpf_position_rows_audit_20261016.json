@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "parity": {
+    "schemaVersion": 1,
+    "baselineCommit": "97e5eb9d4bff3d784d41936b87f9fd055364de10",
+    "baseline": {
+      "name": "rbpf_fgo_original.py",
+      "bytes": 159730,
+      "sha256": "c3293f398b01b0101903f3959c05b1246c8f8b16ee26c6fd8cbb2f0a1eddc736"
+    },
+    "candidate": {
+      "name": "rbpf_fgo_candidate.py",
+      "bytes": 161406,
+      "sha256": "5b9d18d809506cb84baf48eb6e9c295983146bafc6024e41dccb5714f7cf094a"
+    },
+    "captureManifest": {
+      "name": "manifest.json",
+      "bytes": 750573,
+      "sha256": "55709a7014bf99657375c5f810c66dce1518bb3878327d38f93675a087ceefec"
+    },
+    "sourceLibraries": [
+      {
+        "name": "gnss.py",
+        "bytes": 41184,
+        "sha256": "a8702c83c1f3cde8ad60d67a42bb326103b81f7a8a1a64ff4dcf6aa9221785a4"
+      },
+      {
+        "name": "gtsam.pyd",
+        "bytes": 16236032,
+        "sha256": "76d018af6634358e5245c25e6676864abefa56044e3b5862b3361b78128f18a3"
+      }
+    ],
+    "originalInputs": [
+      {
+        "name": "rover.obs",
+        "bytes": 90593655,
+        "sha256": "97e7b370d381a64760cd07d251bcf5df2dc2b3b6dd2444323ff8d6f35e4689e5"
+      },
+      {
+        "name": "base.obs",
+        "bytes": 35794907,
+        "sha256": "2624939cd82cdbd839a32ccb4d22f9f846e7613a934b45539b5f98e8c31e37f8"
+      },
+      {
+        "name": "base.nav",
+        "bytes": 815565,
+        "sha256": "6a8fcef262ae62854f971cf383ee17c19fddd7d49071effc0f94c156b923d4b7"
+      },
+      {
+        "name": "imu.csv",
+        "bytes": 22469390,
+        "sha256": "bba039063ebcfde1f3be5e5c8c4a86e522064a8873a2310a5ed142e820acc091"
+      },
+      {
+        "name": "reference.csv",
+        "bytes": 1658813,
+        "sha256": "8e468a6a959cd47144f4ad1f1dc0129e7ee160011f4d236e4ffdb63b203373e9"
+      }
+    ],
+    "epochs": 24,
+    "lsCalls": 126,
+    "configuredParticles": [
+      64
+    ],
+    "pipeline": [
+      {
+        "mode": "observer-track2",
+        "epochs": 600,
+        "exactArrays": 90,
+        "excluded": [],
+        "position": {
+          "name": "run1.pos",
+          "bytes": 87241,
+          "sha256": "8a221393fff79b71ce6e64972292b3e76a6b90ced0fccf31f37379deacee85cd"
+        }
+      },
+      {
+        "mode": "candidate-track2",
+        "epochs": 600,
+        "exactArrays": 90,
+        "excluded": [],
+        "position": {
+          "name": "run1.pos",
+          "bytes": 87241,
+          "sha256": "8a221393fff79b71ce6e64972292b3e76a6b90ced0fccf31f37379deacee85cd"
+        }
+      },
+      {
+        "mode": "candidate-track1",
+        "epochs": 350,
+        "exactArrays": 90,
+        "excluded": [],
+        "position": {
+          "name": "run1.pos",
+          "bytes": 50991,
+          "sha256": "8b8ffdd0a0bd8698997a0768c7cc0a9c38e8e2fd8b4be355964ff7cad9307cc1"
+        }
+      }
+    ],
+    "note": "Actual LS calls only. All row residual/sigma/J/group bytes, group count, solution, minimum information and covariance bytes match both exact sources and observed outputs. Input H/DD/problem/state bytes unchanged. Fresh observer/candidate TRACK2 600 and candidate TRACK1 350 match frozen same-source controls, position bytes and all 90 arrays, zero exclusions. Raw data/library and source/controller hashes rechecked without importing research libraries. LS replay uses recorded resolved cluster states, excluding live lookup. Correctness timing is not speed evidence."
+  },
+  "replayRecord": {
+    "name": "replay.json",
+    "bytes": 83070,
+    "sha256": "cc978188efddcbc534d58970bb372da4bf5fb4f0ffce32e5cdf3b755f23bc054"
+  },
+  "summary": {
+    "rows": {
+      "baselineMedianMs": 31.26005,
+      "candidateMedianMs": 10.48385,
+      "medianReductionPercent": 66.7198344716507,
+      "improvedPairs": 10,
+      "minimumReductionPercent": 65.1302573561926,
+      "maximumReductionPercent": 68.59497341545499
+    },
+    "ls": {
+      "baselineMedianMs": 101.65225000000001,
+      "candidateMedianMs": 76.7569,
+      "medianReductionPercent": 25.136836171346218,
+      "improvedPairs": 10,
+      "minimumReductionPercent": 18.32432844808092,
+      "maximumReductionPercent": 29.16402326516182
+    }
+  },
+  "scope": "Actual conditional-position LS calls, original epoch/call order/count. Rows includes finite-CP selection, residual/sigma/J copies, group order and sqrt(beta). LS also includes robust solve, information and covariance with recorded resolved cluster states; live cluster lookup and conditional cache/outer wrapper are excluded. Two warmups excluded. Adjacent epoch windows alternate first policy with epoch/trial. Loading/decode/validation excluded. No synthetic/expanded calls or persistent H cache. Not full-filter, full-route or GPU latency.",
+  "note": "Independent sums, medians, epoch/call counts, alternating orders, source/controller hashes and full pipeline parity checked. All local jobs/checks completed before timing; no edits, scans, tests or builds overlap timing. LS uses recorded resolved cluster states, excluding live lookup, conditional cache and outer wrapper. No full-filter, full-route or GPU speed claim."
+}

@@ -18,6 +18,65 @@ archived copy.
 | `wp13m_lambda_diag.py` | finite-guarded MLAMBDA used by the backbone |
 | `relabel_nb9_pos.py` | report floor: relabels fixes with fewer than `nb` resolved ambiguities as float |
 
+## Bulk preparation of conditional-position rows (2026-10-16)
+
+`_position_rows` prepares FP64 conditional-position inputs with NumPy: keep
+code rows and finite held carrier rows in their original order, calculate
+carrier residuals/sigma, copy Jacobian rows and assign nuisance groups by
+first retained carrier occurrence. Other numeric dtypes retain the original
+scalar preparation and promotion rules. The robust solve, information,
+covariance, conditional cache and cluster lookup are unchanged. Outputs are
+fresh arrays; no hypothesis-dependent data persists across calls.
+
+Tokyo run1's 600-epoch prefix supplies **126 actual LS calls inside 24 sampled
+steps**, N=64, K=12, seed 20260710. Raw problems, DDs and resolved cluster
+states retain their actual epoch/call order/count. No hypotheses or calls
+are synthesized, duplicated or expanded for performance measurement.
+
+| Wall-time replay scope | Baseline median ms | Candidate median ms | Paired reduction median | Paired range | Improved pairs |
+|---|---:|---:|---:|---:|---:|
+| Position-row preparation, including copies and sqrt(beta) | 31.26 | 10.48 | **66.72%** | 65.13–68.59% | **10/10** |
+| LS evaluator with recorded resolved cluster state | 101.65 | 76.76 | **25.14%** | 18.32–29.16% | **10/10** |
+
+The LS scope includes preparation, robust solution, minimum information and
+covariance. **Live cluster lookup, conditional cache and its outer wrapper
+are excluded.** These results do not establish full-filter, full-route or
+GPU speed gains. Percentages are medians of paired reductions, distinct
+from ratios of per-policy medians; do not combine them with earlier results.
+
+Each policy retains actual epoch/call order. Policies run adjacent within
+epoch windows, alternating the first policy with epoch and trial. Two full
+warmups per source/stage are excluded. Imports, loading, decode, validation
+and hash checks stay outside the clocks. Windows, Python 3.12.10, NumPy 2.4.6,
+one OpenBLAS/OMP thread; local jobs/checks finish before timing, with no
+overlapping edits, scans, tests or builds.
+
+All recorded residual/sigma/J/group bytes, group counts, solutions, minimum
+information and covariance match both exact source bodies; inputs remain
+unchanged. The baseline observer matches the frozen PR #246 control.
+Candidate TRACK=2 600 epochs and TRACK=1 350 epochs match their controls:
+position bytes and all 90 arrays, zero exclusions. These runs are correctness
+evidence only. The full suite has 5,988 passed / 3,778 skipped; 67 new cases
+cover FP64/FP32 and mixed dtype promotion, empty/code-only/carrier-only rows,
+missing and nonfinite values, group/row order, sigma scaling, recorded prior
+variants, robust solves and changed DD/observations on repeated calls.
+
+To reproduce with fresh directories, save the baseline from `97e5eb9` and
+forward the WP56 flags/environment from `benchmark_shared_moves_cpu.py`:
+
+```bash
+python capture_position_rows.py --source BASELINE.py --output NEW_CAPTURE \
+  --tc-src tc/src -- 1 --max-ep 600 --out-dir NEW_RUN [WP56 flags]
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python benchmark_position_rows.py \
+  --manifest NEW_CAPTURE/manifest.json --baseline BASELINE.py \
+  --candidate rbpf_fgo.py --output NEW_REPLAY.json --pairs 10
+```
+
+The observer records actual LS calls and returns original results unchanged.
+Its elapsed time is not speed evidence. Preserve completed controllers and
+records. See the [raw trials](../../benchmarks/rbpf_position_rows_tokyo_prefix_20261016.json)
+and [independent audit](../../benchmarks/rbpf_position_rows_audit_20261016.json).
+
 ## Reusing basin IDs during posterior aggregation (2026-10-16)
 
 The posterior computes each particle's canonical basin ID once and reuses it

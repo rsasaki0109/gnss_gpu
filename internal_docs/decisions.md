@@ -1782,6 +1782,30 @@ partial gateは各sideの採用subsetと元のungated joint GPU costを独立に
 12*nDD sharedを保ち512DDも48KiB内。H2D/allocation/launch/API/既定設定、common joint/個別mixed gates/BVH/signalを維持。
 raw/device/patch/completionを `benchmarks/pf_dd_mixed_joint_gate_*_20261013.json`、`benchmarks/RESULTS.md` に記録。
 
+## D-212: 条件付き位置推定のFP64行準備をまとめて計算 (2026-10-16)
+
+状態: 採用（行準備と記録済みstateによるLS evaluator、全体速度は未計測）
+
+_position_rowsで既定FP64入力の有限保持CP行選択、残差/sigma/J準備をNumPyで行う。
+保持行順と最初のCP出現順によるnuisance group番号を維持し、他のdtypeは従来scalarと
+同じ計算・promotionを保つ。robust solve/info/covariance/conditional cache/cluster検索は
+変えず、出力はfresh arrayとし仮説依存cacheを増やさない。
+
+Tokyo run1 600epochの24sample stepから126実LS callを記録（N64/K12/seed20260710）。
+実問題/DD/resolved stateを元の順序・件数でreplayし、合成・複製・水増しなし。
+2warmup後10交互pair測定。行準備31.26005→10.48385ms（各policy中央値）、
+paired短縮中央値66.72%、10/10改善、範囲65.13–68.59%。
+記録済みresolved cluster stateによるLS evaluatorは101.65225→76.7569ms、
+paired短縮中央値25.14%、10/10改善、範囲18.32–29.16%。
+LSは行準備/robust solve/最小info/covarianceを含み、live cluster検索/conditional cache/
+outer wrapperは除外。全filter/全経路/GPUへ一般化せず、過去の比率とも合成しない。
+
+epoch内で旧新を隣接実行し、epochとtrialで先行側を交互化。source bytes固定、
+他local job/check終了後に計測、計時中の編集/test/build/scanなし。
+全行bytes/group数/解/info/covarianceと、observer/候補TRACK2 600epoch・候補TRACK1
+350epochの位置bytes/全90配列がcontrolと一致、除外0。5988 passed/3778 skipped、
+追加67回帰case。記録: benchmarks/rbpf_position_rows_{tokyo_prefix,audit}_20261016.json、実験README。
+
 ## D-211: posterior集計で粒子ごとのbasin IDを再利用 (2026-10-16)
 
 状態: 採用（basin/追跡出力の集計のみ、条件付き位置推定と全体速度は対象外）

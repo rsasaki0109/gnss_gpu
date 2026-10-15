@@ -2941,20 +2941,35 @@ class RbpfFgo:
         self._conditional_cache[bid] = out
         return out[:3]
 
-    def _ls_offset(self, H, prob, dd):
-        """Robust epoch-local LS offset for hypothesis H (same row model
-        as _loglik; returns ((3+G,) solution, min_info) or None).
+    def _position_rows(self, prob, dd, sb):
+        """Prepare position rows, preserving scalar fallback dtype promotion."""
+        names = ('rows_v0', 'rows_sig', 'rows_J', 'rows_lam', 'rows_bmeas')
+        if (isinstance(dd, np.ndarray) and dd.ndim == 1 and dd.dtype == np.float64
+                and all(isinstance(getattr(prob, n), np.ndarray)
+                        and getattr(prob, n).dtype == np.float64 for n in names)
+                and isinstance(prob.rows_iscp, np.ndarray)
+                and prob.rows_iscp.dtype == np.bool_
+                and isinstance(prob.rows_pair, np.ndarray)
+                and prob.rows_pair.dtype.kind in 'iu'):
+            cp = np.flatnonzero(prob.rows_iscp)
+            held = cp[np.isfinite(dd[prob.rows_pair[cp]])]
+            keep = ~prob.rows_iscp
+            keep[held] = True
+            rows = np.flatnonzero(keep)
+            if not len(rows):
+                return None
+            local = np.searchsorted(rows, held)
+            v, sig = prob.rows_v0[rows], prob.rows_sig[rows]
+            v[local] = prob.rows_lam[held] * (
+                prob.rows_bmeas[held] - dd[prob.rows_pair[held]])
+            sig[local] = sig[local] / sb
+            grp = np.full(len(rows), -1, dtype=int)
+            groups = {}
+            for ri, r in zip(local, held):
+                g = prob.pairs[prob.rows_pair[r]][0]
+                grp[ri] = groups.setdefault(g, len(groups))
+            return v, sig, prob.rows_J[rows], grp, len(groups)
 
-        WP18 (failure mode b): min_info = smallest eigenvalue [1/m^2] of
-        the DATA-ONLY position information at the final Huber weights --
-        the Schur complement of the group-nuisance block of Aw'Aw (group
-        prior kept on the nuisances, POSITION prior removed). On the
-        7.08m blow-up epoch the position was prior-dominated along one
-        direction (shared degenerate geometry, which is also why the
-        DDPR cross-check missed it), so this is the discriminant the
-        output guard thresholds on."""
-        cfg = self.cfg
-        sb = math.sqrt(cfg.beta)
         rows_v, rows_sig, rows_J, grp = [], [], [], []
         grp_index = {}
         for r in range(len(prob.rows_v0)):
@@ -2976,9 +2991,27 @@ class RbpfFgo:
             rows_J.append(prob.rows_J[r])
         if not rows_v:
             return None
-        v = np.asarray(rows_v)
-        sig = np.asarray(rows_sig)
-        J = np.asarray(rows_J)
+        return (np.asarray(rows_v), np.asarray(rows_sig), np.asarray(rows_J),
+                np.asarray(grp, dtype=int), len(grp_index))
+
+    def _ls_offset(self, H, prob, dd):
+        """Robust epoch-local LS offset for hypothesis H (same row model
+        as _loglik; returns ((3+G,) solution, min_info) or None).
+
+        WP18 (failure mode b): min_info = smallest eigenvalue [1/m^2] of
+        the DATA-ONLY position information at the final Huber weights --
+        the Schur complement of the group-nuisance block of Aw'Aw (group
+        prior kept on the nuisances, POSITION prior removed). On the
+        7.08m blow-up epoch the position was prior-dominated along one
+        direction (shared degenerate geometry, which is also why the
+        DDPR cross-check missed it), so this is the discriminant the
+        output guard thresholds on."""
+        cfg = self.cfg
+        sb = math.sqrt(cfg.beta)
+        prepared = self._position_rows(prob, dd, sb)
+        if prepared is None:
+            return None
+        v, sig, J, grp, G = prepared
         centre = np.zeros(3)
         state = self._cluster_state(H)
         Pprior = prob.Ppos
@@ -2989,7 +3022,6 @@ class RbpfFgo:
                 centre = np.zeros(3)
                 Pprior = prob.Ppos
         v = v - J @ centre
-        G = len(grp_index)
         A = J / sig[:, None]
         if G:
             C = np.zeros((len(v), G))
