@@ -18,6 +18,71 @@ archived copy.
 | `wp13m_lambda_diag.py` | finite-guarded MLAMBDA used by the backbone |
 | `relabel_nb9_pos.py` | report floor: relabels fixes with fewer than `nb` resolved ambiguities as float |
 
+## Reusing component DDs in feedback (2026-10-16)
+
+`step` passes its component-agreement DD arrays to `_feedback` while the
+particle hypotheses remain unchanged. Feedback reuses those arrays for its
+held-integer mass decisions. Its optional trailing `dd_all=None` argument
+preserves legacy calls and empty-MAP fallback: missing arrays are computed
+at the original point in feedback. No DD cache persists across maintenance,
+particle changes, resampling or epochs. Release/commit policy is unchanged.
+
+Actual Tokyo run1 inputs provide **24 feedback calls, 1,536 particle visits
+and 5 graph events**, N=64, K=12, seed 20260710, from the 600-epoch prefix.
+The observer checks that already available component DD bytes equal every
+DD recomputed by the original feedback and that H stays unchanged. Feedback
+DD calls fall **1,536 → 0** in these recorded cases. Original call/particle/
+pair order and count are retained, without synthetic or expanded hypotheses.
+
+| Wall-time replay scope | Baseline median ms | Candidate median ms | Paired reduction median | Paired range | Improved pairs |
+|---|---:|---:|---:|---:|---:|
+| Feedback policy with recorded graph transitions | 87.78 | 69.33 | **17.61%** | 13.20–27.62% | **10/10** |
+
+**This is policy replay, not live GTSAM graph/feedback latency.** Real graph
+methods run unchanged in the observer and pipeline controls. Replay replaces
+them with recorded transitions of the graph fields read by feedback, with
+transition playback included in the clocks. Before timing, graph call
+arguments/order and before/after states are checked against the recording.
+Fresh state restoration, existing component DD preparation, imports, loading,
+decode and output validation stay outside the clocks. The original component
+calculation is unchanged. No full-filter, full-route or GPU speed gain is
+established. Percentages are medians of paired reductions, distinct from
+ratios of per-policy medians; do not combine them with earlier results.
+
+Each policy retains actual epoch/particle order. Policies run adjacent
+within epoch windows, alternating first policy with trial and epoch. Two
+full warmups per source are excluded. Windows, Python 3.12.10, NumPy 2.4.6,
+one OpenBLAS/OMP thread; local jobs/checks finish before timing, with no
+overlapping edits, scans, tests or builds.
+
+Policy return, every feedback-owned field and projected graph state match
+the observed results. Particle H, weights and supplied DDs stay unchanged.
+The policy and step ASTs match the baseline after removing only the optional
+DD parameter, recomputation guard and call keyword. The observer matches
+the frozen PR #247 control. Candidate TRACK=2 600 epochs and TRACK=1 350
+epochs match their controls: position bytes and all 90 arrays, zero
+exclusions. These runs exercise the real graph methods and supply correctness
+evidence only. The full suite has 6,047 passed / 3,778 skipped; 59 new cases
+cover release/commit, carry protection, support/DDPR resets, dual/witness/
+commit gates, missing/empty/large DDs, legacy freshness, snapshot types and
+in-place committed-dictionary identity during transition playback.
+
+To reproduce with fresh directories, save the baseline from `6a7af5e` and
+forward the WP56 flags/environment from `benchmark_shared_moves_cpu.py`:
+
+```bash
+python capture_feedback_dd.py --source BASELINE.py --output NEW_CAPTURE \
+  --tc-src tc/src -- 1 --max-ep 600 --out-dir NEW_RUN [WP56 flags]
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python benchmark_feedback_dd.py \
+  --manifest NEW_CAPTURE/manifest.json --baseline BASELINE.py \
+  --candidate rbpf_fgo.py --output NEW_REPLAY.json --pairs 10
+```
+
+The observer calls original feedback/graph methods and returns original
+values unchanged. Its elapsed time is not speed evidence. Preserve completed
+controllers and records. See the [raw trials](../../benchmarks/rbpf_feedback_dd_tokyo_prefix_20261016.json)
+and [independent audit](../../benchmarks/rbpf_feedback_dd_audit_20261016.json).
+
 ## Bulk preparation of conditional-position rows (2026-10-16)
 
 `_position_rows` prepares FP64 conditional-position inputs with NumPy: keep

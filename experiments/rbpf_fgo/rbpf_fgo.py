@@ -1541,7 +1541,7 @@ class RbpfFgo:
 
     def _feedback(self, rtk, prob, w, dd_map, used_pairs,
                   rep_dpr=float('nan'), ddpr_qual=float('nan'),
-                  witness_chi=float('nan')):
+                  witness_chi=float('nan'), dd_all=None):
         """Close the loop: fold gamma-gated consensus DD integers back
         into the shared graph as conditioned holds (the WP13r COND_HOLD
         machinery: `rtk._committed` + `_inject_hold` one-time tight
@@ -1625,7 +1625,10 @@ class RbpfFgo:
                                                cfg.spawn_epochs)
                     self.spawn_events += 1
 
-        dd_all = [self._pair_dd(p.H, prob) for p in self.particles]
+        # The caller may supply its component-agreement DDs: particle H
+        # stays unchanged until the maintenance/resampling passes.
+        if dd_all is None:
+            dd_all = [self._pair_dd(p.H, prob) for p in self.particles]
 
         # ---- release pass: per held pair, posterior mass on the HELD DD
         group_held = {}
@@ -2431,7 +2434,7 @@ class RbpfFgo:
             out['nheld'] = self._feedback(
                 rtk, prob, w, dd_map, used_pairs,
                 rep_dpr=out['rep_dpr'], ddpr_qual=out['ddpr_qual'],
-                witness_chi=out['witness_chi'])
+                witness_chi=out['witness_chi'], dd_all=dd_all)
 
         # ---- resample
         picks, ess = self._maybe_resample(logw)

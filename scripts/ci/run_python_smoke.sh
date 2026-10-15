@@ -41,6 +41,7 @@ pytest -q \
   tests/test_rbpf_agreement_dd.py \
   tests/test_rbpf_posterior_ids.py \
   tests/test_rbpf_position_rows.py \
+  tests/test_rbpf_feedback_dd.py \
   tests/test_cross_domain_validation.py \
   tests/test_ambiguity_basin_pf.py \
   tests/test_audit_ppc_basin_fgo_candidate_supply.py \
