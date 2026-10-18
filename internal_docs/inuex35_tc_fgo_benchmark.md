@@ -1332,6 +1332,78 @@ its 21.2 pp (best candidate median 2.35 m).
 **Operational note.** The cloud container was reclaimed while idle and
 killed the running members; long runs need a live watcher.
 
+### WP61 (2026-10-18): 3D-map candidate scoring (negative)
+
+**Question.** Nagoya 2's 375 s canyon (555996–556371 s) has no candidate
+within 0.5 m. Can PLATEAU-predicted LOS / NLOS states and reflection delays
+score candidate positions well enough to find one? Everything below is
+`wp61_3dma.py` on 1 Hz epochs (base epochs), first band, GLONASS excluded.
+
+**At the ground truth** (`truth`, `summary`). Each satellite is traced for
+LOS, and for NLOS the shortest valid single-bounce path on a PLATEAU wall
+is found (`plateau_reflect.py`, walls within 60 m). DD code residuals to the
+highest LOS satellite of each system:
+
+| DD code residual at truth | Nagoya 2 canyon | the other five runs |
+|---|---:|---:|
+| NLOS share (map) | 63% | 20–34% |
+| map-LOS satellites, median abs residual | 0.68 m | 0.31–0.60 m |
+| map-NLOS with a reflection: median residual / median predicted extra path | 18.1 / 17.7 m | 3.8–15.9 / 15.2–21.9 m |
+| correlation, residual vs predicted extra path | 0.42 | 0.18–0.56 |
+| map-NLOS without a reflection: median residual | 13.7 m | 1.2–8.5 m |
+
+The map's LOS states are reliable; the predicted delays are not. On the
+other runs they run 1.4–5.6× the measured error (diffraction and paths the
+LOD model lacks).
+
+**Densities** (`calib`, Tokyo 1–3 at truth, applied to Nagoya). Residual
+minus a per-epoch clock and per-system bias (stable: Galileo 2.7 m, BeiDou
+−1.7 to −1.8 m against GPS, all three runs): LOS 10/50/90% −0.5 / 0.0 /
+0.5 m; NLOS −1.0 / 2.0 / 28.0 m; NLOS minus the predicted extra path
+−27.5 / −6.5 / 9.5 m. C/N0 medians LOS 34–47, NLOS 26–35 dB-Hz by
+elevation band.
+
+**Candidate scoring** (`grid`). For each epoch, a horizontal grid of
+candidates ±12 m around the real-time output (the 86.25% ensemble) at the
+output's height. Each candidate has its own LOS set; the receiver clock is
+the best of a ±3 m search around the median LOS residual; the per-system
+biases are estimated before the canyon at the output (causal). The score is
+the sum of −log densities; the best candidate is reported.
+
+| Nagoya 2 canyon, 376 epochs | horizontal error median | < 1 m | < 2 m | median E / N |
+|---|---:|---:|---:|---:|
+| real-time output | 1.85 m | 24.5% | 52.1% | −1.33 / 0.27 m |
+| code residual by class, 0.5 m grid | 1.97 m | 17.0% | 51.3% | −0.01 / 1.34 m |
+| + C/N0, 1 m grid | 1.83 m | 19.1% | 55.9% | 0.07 / 1.33 m |
+| + C/N0, last 5 epochs summed | 1.98 m | 19.1% | 51.1% | −0.01 / 1.34 m |
+| reflection delay for NLOS with a path | 1.91 m | 14.1% | 53.5% | −0.43 / 1.11 m |
+| C/N0 + reflection, 5 epochs | 1.99 m | 15.4% | 50.8% | −0.08 / 1.33 m |
+| code residual, grid centred on the truth | 1.80 m | 17.3% | 57.2% | 0.00 / 1.50 m |
+
+No variant beats the output. Even centred on the truth the best candidate
+is 1.8 m off. Every variant is about 1.3–1.5 m north of the truth with
+east unbiased, whatever the street direction. That points to a
+registration offset between PLATEAU and the reference frame, not tested
+further.
+
+**As a selector feature** (`selloss`). The ensemble's choice loses 3.3 pp
+against an oracle choice among its 28 candidates (89.5%). Split by the
+distance from the output to the nearest candidate within 0.5 m (pp of run
+distance, mean of the six runs): < 0.5 m 1.43, 0.5–1 m 1.10, 1–1.5 m 0.30,
+1.5–2 m 0.22, 2–3 m 0.14, > 3 m 0.09. A score that resolves 1.5–2 m can
+reach at most the last three, 0.45 pp.
+
+**Carrier at the truth** (`carrier`). A < 0.5 m position in the canyon needs
+carrier phase. Map-LOS satellites: median 7 of 19 (after the canyon: 14 of
+20). LOS DD carrier pairs: median 3 with one reference per system, 2 of
+them continuous for 10 s (residual change < 3 cm between epochs); epochs
+with 4 / 5 such pairs: 23% / 11%. One reference shared by GPS, Galileo and
+QZSS (same L1 / E1 wavelength): 4 pairs, 41% / 16%. After the canyon: 9
+pairs, 72% / 70%.
+
+**Outcome.** Not adopted (D-060). `plateau_reflect.py` and `wp61_3dma.py`
+stay as tools.
+
 
 ## Target numbers (their README, Tokyo PPC, full length, defaults, NF=3)
 

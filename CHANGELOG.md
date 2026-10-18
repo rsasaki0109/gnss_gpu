@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **RB-FGO-PF WP61, negative** (`experiments/rbpf_fgo/wp61_3dma.py`,
+  `plateau_reflect.py`): scoring candidate positions by their PLATEAU
+  LOS / NLOS states, C/N0 and single-bounce wall-reflection delays does not
+  beat the real-time output in Nagoya 2's canyon (best candidate 1.8–2.0 m
+  median horizontal error vs 1.85 m; 1.8 m even centred on the truth).
+  Map-LOS satellites are reliable (0.3–0.7 m median code error at the
+  truth); the predicted reflection delays are not (correlation 0.18–0.56).
+  Not adopted. D-060.
 - **RB-FGO-PF WP60** (`experiments/rbpf_fgo/`, map-aided, off by default):
   NLOS satellites from the PLATEAU 3D city model, traced every epoch from the
   IMU-predicted antenna position (`NLOS_ONLINE=1`, `NLOS_TRI_NPZ`; CPU tracer
