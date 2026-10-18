@@ -1,8 +1,8 @@
 # RB-FGO-PF technical report: integer-ambiguity particle filtering on a shared factor graph
 
-Status as of WP60 (2026-10-14). Code: [`experiments/rbpf_fgo/`](../experiments/rbpf_fgo/README.md).
+Status as of WP61 (2026-10-18; WP61 is a negative result). Code: [`experiments/rbpf_fgo/`](../experiments/rbpf_fgo/README.md).
 Run-by-run record: [`internal_docs/inuex35_tc_fgo_benchmark.md`](../internal_docs/inuex35_tc_fgo_benchmark.md).
-Decisions: D-040 to D-059 in [`internal_docs/decisions.md`](../internal_docs/decisions.md).
+Decisions: D-040 to D-060 in [`internal_docs/decisions.md`](../internal_docs/decisions.md).
 
 ## Summary
 
@@ -611,6 +611,26 @@ benchmark record:
   holds more firmly: the satellites the map removes include those that
   disagreed with it. The ensemble label therefore uses only the map-free
   members.
+- **3D-map candidate scoring (WP61).** In Nagoya 2's canyon, a grid of
+  candidates around the real-time output was scored by how well each
+  candidate's PLATEAU LOS / NLOS states fit the code residuals. Variants
+  added C/N0 and the delay of the shortest single-bounce wall reflection
+  (`plateau_reflect.py`), with densities calibrated on Tokyo. The best
+  candidate is 1.8–2.0 m off (median, horizontal), against 1.85 m for the
+  output, and 1.8 m even with the grid centred on the truth.
+  - **What holds up.** The map's LOS states are reliable: at the truth,
+    map-LOS satellites are within 0.3–0.7 m (median), map-NLOS ones 14–18 m
+    off in the canyon.
+  - **What does not.** The predicted reflection delays are poor
+    (correlation 0.18–0.56 with the measured error, 1.4–5.6× too large
+    outside the canyon).
+  - **As a selector feature.** Of the ensemble's 3.3 pp loss against an
+    oracle choice, only 0.45 pp lies where the right candidate is more than
+    1.5 m from the output.
+  - **Carrier.** At the truth the canyon has 7 of 19 satellites in line of
+    sight. That leaves a median of 3 LOS carrier pairs per epoch (4 with a
+    reference shared by GPS, Galileo and QZSS), too few for carrier
+    positioning.
 
 ## Limits
 
@@ -684,9 +704,10 @@ benchmark record:
    mosaic-X5.
 5. Nagoya 2's 375 s street canyon (21% of its distance), where no member is
    within 0.5 m even with the map (best candidate median 2.35 m): 60–75%
-   of the satellites are NLOS there, so the float needs another constraint
-   (map-aided pseudorange corrections, or carrier from the few line-of-sight
-   satellites held across slips).
+   of the satellites are NLOS there. Map-aided code scoring stops at
+   1.8–2.0 m (WP61). What is left is carrier from the 7 line-of-sight
+   satellites, with one reference shared across GPS, Galileo and QZSS: at
+   the truth, 41% of canyon epochs have 4 pairs continuous for 10 s.
 6. Training the ensemble choice and the height bias on runs outside the six
    scored ones (the PPC2024 training runs), for a like-for-like comparison.
 
@@ -745,6 +766,24 @@ python rt_ensemble.py --data-root .../PPC-Dataset --select learned --shift \
 
 The geoid height is the EGM96 value over each run (Tokyo 36.2–36.4 m,
 Nagoya 37.2–37.3 m).
+
+WP61 (3D-map candidate scoring, not adopted), after the ensemble above is run
+with `--save ens_out`:
+
+```bash
+D=.../PPC-Dataset
+for c in tokyo nagoya; do for r in 1 2 3; do
+  python wp61_3dma.py --data-root $D sd --run $c $r
+  python wp61_3dma.py --data-root $D truth --run $c $r --tri plateau/tri_$c$r.npz
+done; done
+python wp61_3dma.py summary --name nagoya2 --window 555996 556371
+python wp61_3dma.py calib --rows tokyo1 tokyo2 tokyo3 --name tokyo
+python wp61_3dma.py --data-root $D grid --run nagoya 2 --tri plateau/tri_nagoya2.npz \
+    --window 555996 556371 --calib tokyo --ens-out ens_out --cn0   # --refl, --acc 5, --center truth
+python wp61_3dma.py --data-root $D carrier --run nagoya 2 --tri plateau/tri_nagoya2.npz \
+    --window 555996 556371 --cross-system
+python wp61_3dma.py --data-root $D selloss --ens-out ens_out
+```
 
 `RBPF_SHIP=wp55`, `wp50`, `wp48`, `wp47`, `wp46`, `wp45` and `wp43` reproduce the
 earlier releases.

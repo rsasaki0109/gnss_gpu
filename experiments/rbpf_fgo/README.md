@@ -239,6 +239,16 @@ WP56 output is unchanged.
 
 Results and the negative findings are in the technical report (WP59, WP60).
 
+## WP61 study (2026-10-18, negative)
+
+Whether PLATEAU-predicted LOS / NLOS states and reflection delays locate the
+antenna better than the real-time output. Nothing in the filter uses these.
+
+| file | role |
+|---|---|
+| `plateau_reflect.py` | shortest valid single-bounce path per receiver and satellite on PLATEAU walls (image method on vertical wall triangles, both legs checked against the `GridTracer` mesh); `python plateau_reflect.py` runs a self-test |
+| `wp61_3dma.py` | the study: `sd` (1 Hz single-difference cache), `truth` (map LOS, reflection, residual at the ground truth), `summary`, `calib` (error and C/N0 densities from other runs), `grid` (candidate scoring around the real-time output), `carrier` (LOS carrier continuity), `selloss` (ensemble selector loss by candidate distance) |
+
 ## Checking the copy
 
 `check_frozen_copy.py` compares the shipped mode, resolved-ambiguity count
