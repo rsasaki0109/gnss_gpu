@@ -1,0 +1,20 @@
+{
+  "verified": true,
+  "report_sha256": "bb0233aa0c5840978d9c7289d33b8d758b7e1f77b19d9a414c273ffc44d7bb1f",
+  "functional_tests": 76,
+  "all200_PF_return_states_exact": true,
+  "all24_continuous_trajectories_and_final_states_exact": true,
+  "all_three_device_functions_unchanged": true,
+  "CUDA_checkers_error_free": true,
+  "full_PF_same_GPU_passes": 2,
+  "full_PF_GPU_vs_CPU_joint_passes": 1,
+  "actual_RTK_speed_gate": false,
+  "actual_RTK_cache_valid": true,
+  "first_performance_sets_only": true,
+  "prior_reports": 124,
+  "prior_archives": 61,
+  "prior_archive_files": 13032,
+  "production_changes": [],
+  "product_adoption": false,
+  "default_changed": false
+}

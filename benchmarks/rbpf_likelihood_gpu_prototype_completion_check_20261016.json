@@ -1,0 +1,172 @@
+{
+  "timestamp_utc": "2026-10-16T00:42:38.655420+00:00",
+  "verified": true,
+  "prototype_implemented": true,
+  "product_adoption": false,
+  "report": {
+    "path": "benchmarks/rbpf_likelihood_gpu_prototype_20261016.json",
+    "sha256": "6a6591cff2c515a31e02691032b6b20709064d56203264b5934010e7c8c48e07"
+  },
+  "audit_sha256": "a164dcea04a6723a8b3b076b5d97094e1afaf5cdc6ee122dc41b0bfedd772a8a",
+  "production_changes": [],
+  "current_N64_default_gpu_gate_passed": false,
+  "timed_calls": 2520,
+  "candidate_comparisons": 1440,
+  "AA_comparisons": 540,
+  "same_numeric_source_and_SASS": true,
+  "all_GPU_transport_output_bits_identical": true,
+  "original_NumPy_bits_identical": false,
+  "near_tie_cases": 7,
+  "all_near_tie_rankings_preserved": true,
+  "unique_test_cases": 72,
+  "suites": {
+    "separate": {
+      "passed": 65,
+      "warnings": 1,
+      "record_sha256": "5fb391c685067856c61093e2ad5d4588dcd373bf5eb174f5a5b4e470106c6ed2",
+      "plan_sha256": "da08d191d92981c29ce9abe85096bd62434fca5f4df342f5c1b007d5119f34f2",
+      "log_sha256": "4af94883edac38df5e9ab831450c2be5d8de997094dd427d777431238baf1229"
+    },
+    "pinned": {
+      "passed": 72,
+      "warnings": 1,
+      "record_sha256": "1f5a3ac96bc1e3e2e6f39b45d2c4c2d31bd07ed9e6b5a3f5ab242f587f142c6c",
+      "plan_sha256": "b2519b26ec08a4de4aaa2fb03d91dfd8fe7e3b43c7648691d3450067ce45cc0c",
+      "log_sha256": "950b9181e5628617b6e258d08f74ad048dc86f6a47f500decb708d579620d51c"
+    },
+    "pageable": {
+      "passed": 72,
+      "warnings": 1,
+      "record_sha256": "d263e31424a705fb4b34ddd6739d4c07140902fb56a804459546af3316ea0530",
+      "plan_sha256": "21e4b1f0da9b7cb3fbe321b7f9e2bff7e362c6609e75c189292e0060665c2542",
+      "log_sha256": "8e6b0460a3458704e2b5ea683e544c672e2f4c10e5d81fe473f63adcffbe7b2e"
+    }
+  },
+  "sanitizers": {
+    "separate/memcheck": {
+      "passed": 16,
+      "warnings": 1,
+      "summary": [
+        "========= LEAK SUMMARY: 0 bytes leaked in 0 allocations",
+        "========= ERROR SUMMARY: 0 errors"
+      ],
+      "record_sha256": "d93db7f12500b41088d029406f6ecff8c328a4001f07f44b169a9a5a017c3403",
+      "job_sha256": "231a9ae472c6533dab9680e6a5cf4c95dac037fa77e7c2d4d6494556b50fa59e",
+      "report_sha256": "3ef41833580c07952672569330729d3a908130c68e7a514d721c5b0a3ddbd7d6",
+      "test_log_sha256": "059d3499add64e3cd10ad3c7103621a80c116196e931909ce0e2a1df0e26a498"
+    },
+    "pageable/memcheck": {
+      "passed": 16,
+      "warnings": 1,
+      "summary": [
+        "========= LEAK SUMMARY: 0 bytes leaked in 0 allocations",
+        "========= ERROR SUMMARY: 0 errors"
+      ],
+      "record_sha256": "c912103b2ef155b170d1fb1182aec5bbcf46055bb38bf6b136371047408ad129",
+      "job_sha256": "d67a96f330d8aac3ea33e2107f64768a03ee3b7fa137dc63e3a911066339c8c3",
+      "report_sha256": "3ef41833580c07952672569330729d3a908130c68e7a514d721c5b0a3ddbd7d6",
+      "test_log_sha256": "ab3335bfe7b77f0275b1476788ce1c265927addcea04ebc3ddb402765d6ce7f8"
+    },
+    "pageable/racecheck": {
+      "passed": 16,
+      "warnings": 1,
+      "summary": [
+        "========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)"
+      ],
+      "record_sha256": "e6feb26be7a8eba79fd6a23e2368c20eeefd866b510051c5caa73295c130f413",
+      "job_sha256": "b564dcbf9e747533a500fc06dc2dcbcb1838d51871ca1b0d34a0c86ccc5f02b3",
+      "report_sha256": "c69d09b31a66173faf98f267db57c7eb988035ce364fa0f0f184ffc933c541a7",
+      "test_log_sha256": "fcd05c649f0b19986b36ee32e399f6acfc6173c0232a8edc5b6144bee56f4d1c"
+    },
+    "pageable/synccheck": {
+      "passed": 16,
+      "warnings": 1,
+      "summary": [
+        "========= ERROR SUMMARY: 0 errors"
+      ],
+      "record_sha256": "1be7d947d66c3e37116b6c8b0f74e4e3c2952e13c99c73b967f5b7ff062cdcb6",
+      "job_sha256": "8e381494ba11f2658dea2591dbff74d2c0b1ac1b3b1e9c645d25a6e2cbb01887",
+      "report_sha256": "adba10db853bd67fe9009b776eefe7b61210d2cbe3eee029ba6fa188978b5832",
+      "test_log_sha256": "ab3335bfe7b77f0275b1476788ce1c265927addcea04ebc3ddb402765d6ce7f8"
+    }
+  },
+  "precision": {
+    "native_cpu": {
+      "LL": 6.821210263296962e-13,
+      "conditional": 4.218847493575595e-15,
+      "normal": 7.457856554538012e-11,
+      "inverse_normal": 1.1102230246251565e-16,
+      "logdet": 2.842170943040401e-14
+    },
+    "gpu": {
+      "LL": 6.821210263296962e-13,
+      "conditional": 4.218847493575595e-15,
+      "normal": 7.457856554538012e-11,
+      "inverse_normal": 1.1102230246251565e-16,
+      "logdet": 2.842170943040401e-14
+    }
+  },
+  "production_sources_unchanged": 36,
+  "installed_extensions_unchanged": 5,
+  "PF_build_PE_unchanged": true,
+  "previous_reports_preserved": {
+    "benchmarks/double_geometry_gpu_20261016.json": "948b8797191d7c351e2710bec4578c749ea8893f6656f3f0e8cbe96fdbeabc7d",
+    "benchmarks/double_geometry_completion_check_20261016.json": "73c2f397ef645200090ae51346a9b9000d400767cc092d17a8ffe564553354e7",
+    "benchmarks/double_predicates_rejected_20261016.json": "309c46bed95ebc240657d54f591ea1b345575959ba2804c70ba8a5ca96a02f89",
+    "benchmarks/double_predicates_rejected_completion_check_20261016.json": "254bbf04216c7d24d602b42f530887b9fa93abb8e9f4760900e551e2ac43928b",
+    "benchmarks/diffraction_loss_rejected_20261016.json": "68680726625e1ddc840e6dabc4afb1cb02f90ac2547f21045687960b743faa8f",
+    "benchmarks/diffraction_loss_rejected_completion_check_20261016.json": "3dea35c50471c13fb0b18879fd9244d0e8447a83af8615d34f52ec16a577c4ec",
+    "benchmarks/composite_geometry_gpu_20261016.json": "d62537d0cf6fadcc546d7f4de78ac466829ffdde1b38a8b068cc36daab318747",
+    "benchmarks/composite_geometry_completion_check_20261016.json": "c1d2a40ed0144701fa8844dea1abf0116b308bd48749f56aa1fd2e495cf30203",
+    "benchmarks/pf_certified_division_rejected_20261016.json": "a9bef86816e1e420f9d9ecf8074bbf9c7a27d4510030798fd3d03accb823bfba",
+    "benchmarks/pf_certified_division_completion_check_20261016.json": "79bf4bff65429c904aeac6defff8f070d539d7c4179db9bc6a466340e86dfeeb",
+    "benchmarks/rbpf_fgo_gpu_feasibility_20261016.json": "feb4eeb242ce40f06975e4f1bb03c6b6610915aafb1a1d9737f4a1ccf12517de",
+    "benchmarks/rbpf_fgo_gpu_feasibility_completion_check_20261016.json": "17653b9558bcb84d144342ff40ee34a8cef3ea46d2880afd28613e40a3c60598"
+  },
+  "previous_archives_verified": {
+    "composite_geometry_candidate": {
+      "files": 305,
+      "manifest_sha256": "c5a0d912f148921b170b05f8eb1f4c0a0fa774ed62e4e278f2b672bf8b441b6e"
+    },
+    "pf_certified_division_rejected_20261016": {
+      "files": 94,
+      "manifest_sha256": "bdae75c0d2e7587e98dc2f6dfc86ca6d533d4604f25aee93c2398a68a0d24b05"
+    },
+    "rbpf_fgo_gpu_feasibility_20261016": {
+      "files": 149,
+      "manifest_sha256": "6854719596359dd1129e3c19bc74fef0f30830132d0f728e2b4667ae32c0f1ab"
+    },
+    "rbpf_likelihood_batch_unmeasured_build_20261016": {
+      "files": 6,
+      "manifest_sha256": "78031ed465852444a588f0cc5baac9de6f56e51ffd937098a1722524b1724e8c"
+    },
+    "rbpf_likelihood_batch_initial_test_failure_20261016": {
+      "files": 6,
+      "manifest_sha256": "630bf395601375e58187f1501c7e2c1188911eac1b5158b0c9ae55e0df72965a"
+    }
+  },
+  "new_real_data_positioning_or_whole_RBPF_claim": false,
+  "public_text_files_checked": 2920,
+  "public_device_product_names_absent": true,
+  "Ruff_compile_line_endings_diff_check_passed": true,
+  "lint_exception": "F811 only for tests/test_rbpf_likelihood_packed_probe.py: imported pytest scorer fixture is intentionally used as test parameter. No measured source was edited for this lint warning.",
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  },
+  "failed_AA_conditions": {
+    "separate": [
+      "rows64/groups4/unique128",
+      "rows128/groups8/unique21",
+      "rows128/groups8/unique128"
+    ],
+    "pinned": [
+      "rows128/groups8/unique21",
+      "rows128/groups8/unique64"
+    ],
+    "transport": [
+      "rows128/groups8/unique16",
+      "rows128/groups8/unique512"
+    ]
+  }
+}

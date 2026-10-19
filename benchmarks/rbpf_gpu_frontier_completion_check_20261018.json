@@ -1,0 +1,18 @@
+{
+  "verified": true,
+  "report_sha256": "34fb38f30613416d8ba11240a8526ca476394cb545c08287d8a3a3c57aa43783",
+  "functional_tests": 14,
+  "all200_saved_rows_verified": true,
+  "possible_single_batches": 57,
+  "definitely_incomplete_batches": 140,
+  "pending": 4166,
+  "ready_ceiling": 3280,
+  "later_minimum": 886,
+  "triage_pass": false,
+  "new_estimator_runs": 0,
+  "new_GPU_launches": 0,
+  "new_timings": 0,
+  "speed_gain_established": false,
+  "production_changes": [],
+  "default_changed": false
+}

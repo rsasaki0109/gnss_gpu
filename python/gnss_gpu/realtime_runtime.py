@@ -7,9 +7,13 @@ import time
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from enum import Enum
+from types import BuiltinFunctionType
 from typing import Callable, Protocol
 
 import numpy as np
+
+# Reject allocator wrappers already present when this module is imported.
+_MIGRATION_WEIGHTS_EMPTY = np.empty if isinstance(np.empty, BuiltinFunctionType) else None
 
 
 class RuntimeMode(str, Enum):
@@ -428,6 +432,7 @@ class PersistentParticleRuntimePool:
                     source_state is not None and target_state is not None and source_count > 0)
         states = None if resident else np.asarray(source.get_particle_states(), dtype=np.float64)
         reuse_allowed = None
+        private_weights = False
         uniform_try = getattr(target, "_pf_device_try_gather_uniform_weights", None)
         state_type = getattr(source, "_pf_device_uniform_scan_state_type", None)
         getter = getattr(source, "_pf_device_uniform_scan_getter", None)
@@ -453,6 +458,11 @@ class PersistentParticleRuntimePool:
                 if reuse_allowed and uniform_try(target_state, source_state):
                     PersistentParticleRuntimePool._set_migration_log_weights(target, target.n_particles)
                     return
+                # This exact getter allocates a fresh array; the paired native
+                # readout does not retain it. Allocator replacement stays eager.
+                # Uniform migrations return before these additional checks.
+                private_weights = (isinstance(getter, BuiltinFunctionType) and
+                                   np.empty is _MIGRATION_WEIGHTS_EMPTY)
         log_weights = np.asarray(source.get_log_weights(), dtype=np.float64)
         finite = np.isfinite(log_weights)
         reuse = log_weights.ndim == 1 and log_weights.size >= 65536
@@ -461,9 +471,12 @@ class PersistentParticleRuntimePool:
                 reuse_allowed = PersistentParticleRuntimePool._migration_numpy_reuse_allowed()
             reuse = reuse_allowed
         if reuse and np.all(finite):
-            # A private copy preserves caller-owned weights, including views.
+            # Native readout storage is already private. All other getters keep
+            # the private copy, including caller-owned arrays and views.
             # All-finite input makes the original floor/where work redundant.
-            weights = log_weights.copy()
+            owns_weights = (private_weights and log_weights.flags.owndata and
+                            log_weights.flags.writeable and log_weights.flags.c_contiguous)
+            weights = log_weights if owns_weights else log_weights.copy()
             maximum = float(np.max(weights))
             if (weights[0] == maximum and weights[weights.size // 2] == maximum and
                     weights[-1] == maximum and float(np.min(weights)) == maximum):

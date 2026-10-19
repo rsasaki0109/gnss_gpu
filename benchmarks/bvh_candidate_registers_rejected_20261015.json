@@ -1,0 +1,1548 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-15T08:24:21.542322+00:00",
+  "adopted": false,
+  "decision": "Reject:77..78 to64 registers/thread adds56 stack bytes/thread; whole public trace changes only-0.14..+0.02%, far below5% gate. No accuracy relaxation or candidate/particle/RNG/model change.",
+  "baseline_reference": "benchmarks/bvh_medium_ray_chunks_gpu_20261015.json",
+  "source_sha256": {
+    "baseline": {
+      "src/raytrace/bvh.cu": "641ea052a1a2fde9424773f000db8d86ec473d558f61485aeae004d7acd4eaed",
+      "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+      "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+      "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+      "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+    },
+    "candidate": {
+      "src/raytrace/bvh.cu": "34782cf7f3e47a6242568347b421771c581c46f73597beef8e5af73b9ee914f0",
+      "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+      "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+      "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+      "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+    }
+  },
+  "source_normalized_lf_sha256": {
+    "baseline": {
+      "src/raytrace/bvh.cu": "a76464c816136a1b6e6ccc3f4262b7ad86ad792b32bbf6159dae95545cf464c0",
+      "include/gnss_gpu/bvh.h": "14029304fd6b0e63100900f2c66c9e8154358abca71ec3015aa893f5d782db8d",
+      "python/gnss_gpu/_bvh_bindings.cpp": "855b052fe467b0604044c09e3a8506ecb734beb13e6d2f11a3848b0f45ced8f3",
+      "python/gnss_gpu/bvh.py": "d049cdb693723b389b56aa20bb22ace2727c0a51059a42284abedf1091dc20e8",
+      "python/gnss_gpu/urban_signal_sim.py": "4ec72c2f863f1d3217907a6e002396431fc4b5204d76077a799613fca48bc366"
+    },
+    "candidate": {
+      "src/raytrace/bvh.cu": "e19cfe675a6a18852cb7af8d35bb0d60a28bccaf678869115906d7102e328d3b",
+      "include/gnss_gpu/bvh.h": "14029304fd6b0e63100900f2c66c9e8154358abca71ec3015aa893f5d782db8d",
+      "python/gnss_gpu/_bvh_bindings.cpp": "855b052fe467b0604044c09e3a8506ecb734beb13e6d2f11a3848b0f45ced8f3",
+      "python/gnss_gpu/bvh.py": "d049cdb693723b389b56aa20bb22ace2727c0a51059a42284abedf1091dc20e8",
+      "python/gnss_gpu/urban_signal_sim.py": "4ec72c2f863f1d3217907a6e002396431fc4b5204d76077a799613fca48bc366"
+    }
+  },
+  "extension_sha256": {
+    "baseline": "0f2e099d9e95c7453feaea2fd664a4b5105ed1ec33b73eb3cb4ab37ad0b7b555",
+    "candidate": "ba349b6ce93a9ff045b8ead244f9df97485bbea6d00d7dce6d4e76af61bbc068"
+  },
+  "performance_gate": "At least5% whole public trace reduction in primary targets with4/5 improving rounds and exact outputs, no material cold/control regression. Early3x3 gate before broad validation/sanitizers.",
+  "dispatch": "Only existing bounded large epoch groups use a duplicate candidate kernel with launch_bounds(128,8). All ten original GPU functions and all other dispatches retained.",
+  "semantics": "Exact same source expressions, FP64/full candidates/ordinals/tie rules/reduction/128-thread launch. Compiler register allocation is the only intended change; do not accept without bit checks.",
+  "device_code": {
+    "existing_GPU_functions": 10,
+    "new_GPU_functions": 2,
+    "all_existing_normalized_SASS_bodies_identical": true,
+    "all_existing_resource_counts_identical": true,
+    "baseline_resources": {
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb0ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 78,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 78,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb1EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 77,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii": {
+        "registers": 25,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25reflection_mirrors_kernelEPKdPKNS_8TriangleEPKiPKNS_16ReflectionNormalEPNS_16ReflectionMirrorEi": {
+        "registers": 30,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu30multipath_cached_serial_kernelEPKdS1_PKiPKNS_16ReflectionNormalEPKNS_8TriangleEPdSA_iii": {
+        "registers": 85,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25reflection_normals_kernelEPKNS_8TriangleEPKiPNS_16ReflectionNormalEi": {
+        "registers": 36,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii": {
+        "registers": 90,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      }
+    },
+    "candidate_resources": {
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb0ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 78,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 78,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb1EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 77,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu35multipath_compact_candidates_kernelILb1ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 64,
+        "stack_bytes": 56,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu35multipath_compact_candidates_kernelILb1ELb1EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 64,
+        "stack_bytes": 56,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii": {
+        "registers": 25,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25reflection_mirrors_kernelEPKdPKNS_8TriangleEPKiPKNS_16ReflectionNormalEPNS_16ReflectionMirrorEi": {
+        "registers": 30,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu30multipath_cached_serial_kernelEPKdS1_PKiPKNS_16ReflectionNormalEPKNS_8TriangleEPdSA_iii": {
+        "registers": 85,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25reflection_normals_kernelEPKNS_8TriangleEPKiPNS_16ReflectionNormalEi": {
+        "registers": 36,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii": {
+        "registers": 90,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      }
+    },
+    "normalized_body_sha256": {
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb0ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": "408d155aa283c7943a1d1c2dcfd97a24121d8a93f8c261d368ed0e1072888645",
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": "33ffeda1472ce61605d146684de9af42bbd8ad5af23e50777a8f97b84d13c370",
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb1EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": "549dd5440483debb80be07f4da9184aec7d4db17007ca082a38923421850eb4d",
+      "_ZN8gnss_gpu35multipath_compact_candidates_kernelILb1ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": "a93d326a66daa14a3dbc368f591a2158f3023c85e8a4a25fd3a90145f9e01512",
+      "_ZN8gnss_gpu35multipath_compact_candidates_kernelILb1ELb1EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": "b4b3774fa6264324824cf6c4b0fffe41db2127e21c9d59265b52453ca1feabba",
+      "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii": "ac36c4fea909ca1b067b131ead0e807a54c106ebf0c461356758cc5b6d6ab915",
+      "_ZN8gnss_gpu25reflection_mirrors_kernelEPKdPKNS_8TriangleEPKiPKNS_16ReflectionNormalEPNS_16ReflectionMirrorEi": "091fbf16ae7589c15f53ae37e0aa0735fd200bfd5f1cffb484b457103b5e58a7",
+      "_ZN8gnss_gpu30multipath_cached_serial_kernelEPKdS1_PKiPKNS_16ReflectionNormalEPKNS_8TriangleEPdSA_iii": "1cf0fe86e5f31ee697995cc91af7eee4d961a96c5bd2d6a4064c3a4509a4ec68",
+      "_ZN8gnss_gpu25reflection_normals_kernelEPKNS_8TriangleEPKiPNS_16ReflectionNormalEi": "b9822fdcd81636a436a075c4a8fc87689a25aa676632d84065675e5beba93617",
+      "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii": "4e8ae452c1eba3d84027f7eb7600c65dfb6ae0fe2b67d9be0fc4dc54397c5f5a",
+      "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii": "d12d67b93f6b9e8dad02078a0e2c703fae7520fee4c3d4a56a50d9dd0f6fed42",
+      "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii": "b0de8f220b77b975c30e402f1db956b9700d7cecd2f034ad234a83bf4e5e9087"
+    },
+    "new_functions": [
+      "_ZN8gnss_gpu35multipath_compact_candidates_kernelILb1ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE",
+      "_ZN8gnss_gpu35multipath_compact_candidates_kernelILb1ELb1EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE"
+    ],
+    "patch": {
+      "path": "benchmarks/probes/bvh_candidate_registers_20261015.patch",
+      "sha256": "eef4b7d182b9c81d92eceaee8b2c2acd111f357851cdc06b7f66e7ead8d5fea1",
+      "files": {
+        "src/raytrace/bvh.cu": {
+          "baseline_sha256": "641ea052a1a2fde9424773f000db8d86ec473d558f61485aeae004d7acd4eaed",
+          "candidate_sha256": "34782cf7f3e47a6242568347b421771c581c46f73597beef8e5af73b9ee914f0",
+          "reconstructs_crlf_bytes": true
+        }
+      }
+    },
+    "source_record_sha256": "df24d3d1c725bb745163050889a176a8dc0908dbf8ea9e480337515a2c8dde7c"
+  },
+  "patch": {
+    "path": "benchmarks/probes/bvh_candidate_registers_20261015.patch",
+    "sha256": "eef4b7d182b9c81d92eceaee8b2c2acd111f357851cdc06b7f66e7ead8d5fea1",
+    "files": {
+      "src/raytrace/bvh.cu": {
+        "baseline_sha256": "641ea052a1a2fde9424773f000db8d86ec473d558f61485aeae004d7acd4eaed",
+        "candidate_sha256": "34782cf7f3e47a6242568347b421771c581c46f73597beef8e5af73b9ee914f0",
+        "reconstructs_crlf_bytes": true
+      }
+    }
+  },
+  "measurements": {
+    "schema_version": 1,
+    "early_gate_only": true,
+    "method": "Own process pinned to one allowed CPU, normal priority; separate actual extensions in one process; serial alternating complete synchronized operations; nonexclusive host.",
+    "rounds": 3,
+    "repeats": 3,
+    "source_sha256": {
+      "baseline": {
+        "src/raytrace/bvh.cu": "641ea052a1a2fde9424773f000db8d86ec473d558f61485aeae004d7acd4eaed",
+        "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+        "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+        "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+        "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+      },
+      "candidate": {
+        "src/raytrace/bvh.cu": "34782cf7f3e47a6242568347b421771c581c46f73597beef8e5af73b9ee914f0",
+        "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+        "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+        "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+        "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+      }
+    },
+    "extension_sha256": {
+      "baseline": "0f2e099d9e95c7453feaea2fd664a4b5105ed1ec33b73eb3cb4ab37ad0b7b555",
+      "candidate": "ba349b6ce93a9ff045b8ead244f9df97485bbea6d00d7dce6d4e76af61bbc068"
+    },
+    "helper_sha256": {
+      "dist/bench_bvh_candidate_registers_gate_20261015.py": "7661aba6bb8867d82066b8eb507ef4a1e13c8c10bc4d299e3640827434062d17",
+      "benchmarks/bench_raytrace.py": "44c1a925eef00c2c7577106f4c5cd7f670e1796304075b4d83829c3a53ee2100",
+      "benchmarks/bench_bvh_multipath_compare.py": "ad3311b0a427ba5cc2e9442d58e078203145a1a41da09d44b773874a1f122c46",
+      "benchmarks/bench_bvh_resident_compare.py": "f2bd01a0ff9d18cf7a4d0fe254ac2bdf9d80ecccecc74ce0f081683ed67b02f7",
+      "benchmarks/bench_bvh_combined_compare.py": "7f166d08584fa4d2c6f5eec42f1dd0365d5494d6f7fe3740c642bbad70f0e71f",
+      "benchmarks/bench_bvh_build_compare.py": "653a9e3c0307b0ff98da06b6999d0d2abfbdd9e514c0d310c66264765dd8f218",
+      "benchmarks/bench_bvh_normal_compare.py": "937bddc1bbf377c1af3d7f7bc071bf16a57ebe50685178b9b5790f77c8fb06fb",
+      "benchmarks/bench_bvh_mirror_compare.py": "aaeb318c1e397fa0f85d290be40a379dc33392bc88d09ca8dfbe2bf4b910480a",
+      "benchmarks/bench_bvh_serial_cache_compare.py": "497619a17bf0ccab99f2fdadd0fe6f88ea6a4b01791438c7679f49a728ab83df",
+      "benchmarks/bench_bvh_large_parallel_compare.py": "8605e96c3e6d9e738fe58be55091c43d3bfdac54bfdd8a2778dcb8c3a3e07980"
+    },
+    "measurements": {
+      "triangles4096/epochs513/satellites32/warm_multipath": {
+        "baseline_ms": 71.317,
+        "candidate_ms": 71.3785,
+        "speedup": 0.9991383960156068,
+        "round_medians_ms": {
+          "baseline": [
+            71.317,
+            71.2487,
+            71.3327
+          ],
+          "candidate": [
+            71.3565,
+            71.3785,
+            71.4002
+          ]
+        },
+        "samples_ms": {
+          "baseline": [
+            [
+              71.1954,
+              71.5695,
+              71.317
+            ],
+            [
+              71.2487,
+              71.1672,
+              71.2602
+            ],
+            [
+              71.5275,
+              71.2356,
+              71.3327
+            ]
+          ],
+          "candidate": [
+            [
+              71.3001,
+              71.4448,
+              71.3565
+            ],
+            [
+              71.3785,
+              71.2954,
+              71.4524
+            ],
+            [
+              71.4612,
+              71.4002,
+              71.3004
+            ]
+          ]
+        },
+        "output_sha256": "99e054869ab86afbcc8635e38ec77846cfb35e5a9685a296b0321ae5dba2409d",
+        "all_timed_outputs_identical": true,
+        "input_sha256": "2387441466f0f7191b90cfd01b3402f10d6ac1c5493f599405be9f551fa360f4"
+      },
+      "triangles4096/epochs513/satellites32/public_warm_trace": {
+        "baseline_ms": 72.3818,
+        "candidate_ms": 72.4153,
+        "speedup": 0.9995373905790627,
+        "round_medians_ms": {
+          "baseline": [
+            72.3818,
+            72.8358,
+            72.3181
+          ],
+          "candidate": [
+            72.3933,
+            72.4153,
+            72.5118
+          ]
+        },
+        "samples_ms": {
+          "baseline": [
+            [
+              72.2858,
+              72.4677,
+              72.3818
+            ],
+            [
+              72.8358,
+              72.3232,
+              72.8586
+            ],
+            [
+              72.3181,
+              72.2954,
+              72.3847
+            ]
+          ],
+          "candidate": [
+            [
+              72.3749,
+              72.4012,
+              72.3933
+            ],
+            [
+              72.3104,
+              72.4153,
+              72.4839
+            ],
+            [
+              72.5118,
+              72.9314,
+              72.4351
+            ]
+          ]
+        },
+        "output_sha256": "2173ad2046161316029070f2733448cbc7d28a30e5c2c5eb808c303f63f37319",
+        "all_timed_outputs_identical": true,
+        "input_sha256": "2387441466f0f7191b90cfd01b3402f10d6ac1c5493f599405be9f551fa360f4"
+      },
+      "triangles4096/epochs513/satellites32/native_cold_trace_close": {
+        "baseline_ms": 75.116,
+        "candidate_ms": 74.6085,
+        "speedup": 1.006802174015025,
+        "round_medians_ms": {
+          "baseline": [
+            75.116,
+            75.0949,
+            76.4115
+          ],
+          "candidate": [
+            76.362,
+            74.6085,
+            74.3242
+          ]
+        },
+        "samples_ms": {
+          "baseline": [
+            [
+              74.1878,
+              75.116,
+              76.6474
+            ],
+            [
+              74.7248,
+              75.0949,
+              75.1191
+            ],
+            [
+              77.2871,
+              75.1564,
+              76.4115
+            ]
+          ],
+          "candidate": [
+            [
+              77.2995,
+              76.362,
+              74.3229
+            ],
+            [
+              74.9009,
+              74.6085,
+              74.438
+            ],
+            [
+              74.4115,
+              74.3242,
+              74.293
+            ]
+          ]
+        },
+        "output_sha256": "8ac0b7e43cba9f41de06a8206974f36642aa02a8f79091108efde8e63339cb50",
+        "all_timed_outputs_identical": true,
+        "input_sha256": "2387441466f0f7191b90cfd01b3402f10d6ac1c5493f599405be9f551fa360f4"
+      },
+      "triangles4096/epochs513/satellites32/unchanged_warm_los": {
+        "baseline_ms": 1.2891,
+        "candidate_ms": 1.3099,
+        "speedup": 0.9841209252614702,
+        "round_medians_ms": {
+          "baseline": [
+            1.3133,
+            1.2891,
+            1.2809
+          ],
+          "candidate": [
+            1.2721,
+            1.3099,
+            1.3218
+          ]
+        },
+        "samples_ms": {
+          "baseline": [
+            [
+              1.2961,
+              1.3921,
+              1.3133
+            ],
+            [
+              1.2225,
+              1.3572,
+              1.2891
+            ],
+            [
+              1.6769,
+              1.2809,
+              1.2299
+            ]
+          ],
+          "candidate": [
+            [
+              1.2923,
+              1.2721,
+              1.2638
+            ],
+            [
+              1.2766,
+              1.4184,
+              1.3099
+            ],
+            [
+              1.3827,
+              1.3218,
+              1.3126
+            ]
+          ]
+        },
+        "output_sha256": "f6084adbc71ce676c18a670855359f2aa60e9c9ab5c81d7c83b4a4d0bb43f8fe",
+        "all_timed_outputs_identical": true,
+        "input_sha256": "2387441466f0f7191b90cfd01b3402f10d6ac1c5493f599405be9f551fa360f4"
+      },
+      "triangles4096/epochs513/satellites32/memory": {
+        "baseline": 14373336,
+        "candidate": 14373336,
+        "extra_bytes": 0
+      },
+      "triangles4096/epochs1366/satellites12/warm_multipath": {
+        "baseline_ms": 70.9704,
+        "candidate_ms": 70.771,
+        "speedup": 1.0028175382571958,
+        "round_medians_ms": {
+          "baseline": [
+            70.9704,
+            70.8875,
+            71.6359
+          ],
+          "candidate": [
+            70.6181,
+            70.771,
+            71.8007
+          ]
+        },
+        "samples_ms": {
+          "baseline": [
+            [
+              70.6183,
+              70.9704,
+              71.3495
+            ],
+            [
+              70.7048,
+              70.8875,
+              71.5356
+            ],
+            [
+              71.6359,
+              71.1529,
+              71.6992
+            ]
+          ],
+          "candidate": [
+            [
+              70.6181,
+              70.5932,
+              71.3256
+            ],
+            [
+              70.6589,
+              70.771,
+              70.8176
+            ],
+            [
+              71.9098,
+              71.8007,
+              71.1881
+            ]
+          ]
+        },
+        "output_sha256": "78f0e5e7d04caf11649290df5d63aeadeead6cce31e941c53a789921406e6ce4",
+        "all_timed_outputs_identical": true,
+        "input_sha256": "a5fe891317e4771719d77027d33c06f60e278b5faa4695feb31f8c81a0f22e6d"
+      },
+      "triangles4096/epochs1366/satellites12/public_warm_trace": {
+        "baseline_ms": 71.8155,
+        "candidate_ms": 71.9157,
+        "speedup": 0.9986067020136076,
+        "round_medians_ms": {
+          "baseline": [
+            71.7474,
+            71.8155,
+            71.9701
+          ],
+          "candidate": [
+            71.9157,
+            71.9215,
+            71.9133
+          ]
+        },
+        "samples_ms": {
+          "baseline": [
+            [
+              72.3744,
+              71.7474,
+              71.6821
+            ],
+            [
+              71.8155,
+              71.8859,
+              71.8013
+            ],
+            [
+              71.8604,
+              71.9701,
+              72.4979
+            ]
+          ],
+          "candidate": [
+            [
+              71.8573,
+              71.9157,
+              72.6388
+            ],
+            [
+              72.2305,
+              71.8587,
+              71.9215
+            ],
+            [
+              71.9133,
+              71.8422,
+              72.0387
+            ]
+          ]
+        },
+        "output_sha256": "f45c8718b19037bb3f492d15818d1a89ca7705a34621bac349818dfa9259fba9",
+        "all_timed_outputs_identical": true,
+        "input_sha256": "a5fe891317e4771719d77027d33c06f60e278b5faa4695feb31f8c81a0f22e6d"
+      },
+      "triangles4096/epochs1366/satellites12/native_cold_trace_close": {
+        "baseline_ms": 75.5754,
+        "candidate_ms": 74.8234,
+        "speedup": 1.0100503318480583,
+        "round_medians_ms": {
+          "baseline": [
+            75.5754,
+            75.2865,
+            76.3587
+          ],
+          "candidate": [
+            75.4619,
+            74.7123,
+            74.8234
+          ]
+        },
+        "samples_ms": {
+          "baseline": [
+            [
+              75.5754,
+              75.5373,
+              76.7672
+            ],
+            [
+              75.2865,
+              75.1151,
+              79.9773
+            ],
+            [
+              75.0594,
+              76.3587,
+              77.5792
+            ]
+          ],
+          "candidate": [
+            [
+              74.9055,
+              75.4619,
+              78.8418
+            ],
+            [
+              78.9963,
+              74.7123,
+              74.3604
+            ],
+            [
+              75.6527,
+              74.8155,
+              74.8234
+            ]
+          ]
+        },
+        "output_sha256": "33c5fd21e631aeed35ff033b41b2be85ba253b9534fff7ebaec8b2afa3a8d2a2",
+        "all_timed_outputs_identical": true,
+        "input_sha256": "a5fe891317e4771719d77027d33c06f60e278b5faa4695feb31f8c81a0f22e6d"
+      },
+      "triangles4096/epochs1366/satellites12/unchanged_warm_los": {
+        "baseline_ms": 0.7971,
+        "candidate_ms": 0.8134,
+        "speedup": 0.9799606589623802,
+        "round_medians_ms": {
+          "baseline": [
+            0.8077,
+            0.7971,
+            0.7887
+          ],
+          "candidate": [
+            0.9036,
+            0.8134,
+            0.8057
+          ]
+        },
+        "samples_ms": {
+          "baseline": [
+            [
+              0.7675,
+              0.849,
+              0.8077
+            ],
+            [
+              0.7971,
+              0.7589,
+              0.7984
+            ],
+            [
+              0.7869,
+              0.7944,
+              0.7887
+            ]
+          ],
+          "candidate": [
+            [
+              0.7633,
+              1.2383,
+              0.9036
+            ],
+            [
+              0.827,
+              0.8134,
+              0.7979
+            ],
+            [
+              0.7774,
+              0.8057,
+              0.9011
+            ]
+          ]
+        },
+        "output_sha256": "c0d448551431df1b9203df3cfcf3f33308884457f0f9587d8404609b9860b550",
+        "all_timed_outputs_identical": true,
+        "input_sha256": "a5fe891317e4771719d77027d33c06f60e278b5faa4695feb31f8c81a0f22e6d"
+      },
+      "triangles4096/epochs1366/satellites12/memory": {
+        "baseline": 35330960,
+        "candidate": 35330960,
+        "extra_bytes": 0
+      },
+      "triangles12000/epochs513/satellites32/warm_multipath": {
+        "baseline_ms": 208.3457,
+        "candidate_ms": 208.5597,
+        "speedup": 0.998973914903023,
+        "round_medians_ms": {
+          "baseline": [
+            208.3457,
+            208.3556,
+            208.2686
+          ],
+          "candidate": [
+            208.5597,
+            208.594,
+            208.4501
+          ]
+        },
+        "samples_ms": {
+          "baseline": [
+            [
+              208.3457,
+              208.5155,
+              208.3111
+            ],
+            [
+              208.3556,
+              208.3351,
+              208.5139
+            ],
+            [
+              208.4172,
+              208.2686,
+              208.1886
+            ]
+          ],
+          "candidate": [
+            [
+              208.5597,
+              208.613,
+              208.5024
+            ],
+            [
+              208.6094,
+              208.3994,
+              208.594
+            ],
+            [
+              208.4895,
+              208.4353,
+              208.4501
+            ]
+          ]
+        },
+        "output_sha256": "bfe932506d6777bb8e0aa1b60b88ed875c7bec64f5f22f90d36149f323641f06",
+        "all_timed_outputs_identical": true,
+        "input_sha256": "f08ef0dc4de3a431790bd9d4d3dbd944111a5a769ce795844e06e1974fc3ae4f"
+      },
+      "triangles12000/epochs513/satellites32/public_warm_trace": {
+        "baseline_ms": 210.6508,
+        "candidate_ms": 210.7673,
+        "speedup": 0.9994472577102804,
+        "round_medians_ms": {
+          "baseline": [
+            210.7027,
+            210.5442,
+            210.6508
+          ],
+          "candidate": [
+            210.8193,
+            210.762,
+            210.7673
+          ]
+        },
+        "samples_ms": {
+          "baseline": [
+            [
+              210.6559,
+              210.7027,
+              210.7583
+            ],
+            [
+              210.438,
+              210.5442,
+              210.6588
+            ],
+            [
+              210.6558,
+              210.6017,
+              210.6508
+            ]
+          ],
+          "candidate": [
+            [
+              210.9051,
+              210.8193,
+              210.7749
+            ],
+            [
+              210.62,
+              210.762,
+              210.7888
+            ],
+            [
+              210.7673,
+              210.6923,
+              210.8741
+            ]
+          ]
+        },
+        "output_sha256": "76d8908960f56bb070239347a43fc42fada4a6ce14edc2323f241d83523de2c1",
+        "all_timed_outputs_identical": true,
+        "input_sha256": "f08ef0dc4de3a431790bd9d4d3dbd944111a5a769ce795844e06e1974fc3ae4f"
+      },
+      "triangles12000/epochs513/satellites32/native_cold_trace_close": {
+        "baseline_ms": 215.286,
+        "candidate_ms": 215.8794,
+        "speedup": 0.9972512430551502,
+        "round_medians_ms": {
+          "baseline": [
+            218.1729,
+            215.0073,
+            215.286
+          ],
+          "candidate": [
+            215.2295,
+            218.7966,
+            215.8794
+          ]
+        },
+        "samples_ms": {
+          "baseline": [
+            [
+              218.1729,
+              216.3292,
+              220.4998
+            ],
+            [
+              215.0073,
+              214.8917,
+              215.3483
+            ],
+            [
+              215.286,
+              216.3923,
+              215.2238
+            ]
+          ],
+          "candidate": [
+            [
+              215.8571,
+              215.2295,
+              215.15
+            ],
+            [
+              214.6796,
+              218.7966,
+              219.7575
+            ],
+            [
+              215.4815,
+              215.8794,
+              217.8778
+            ]
+          ]
+        },
+        "output_sha256": "dc0c30358cd977d55b2971a16a7d7a5893afc304b44ac2cc70e9eefecc42a04f",
+        "all_timed_outputs_identical": true,
+        "input_sha256": "f08ef0dc4de3a431790bd9d4d3dbd944111a5a769ce795844e06e1974fc3ae4f"
+      },
+      "triangles12000/epochs513/satellites32/unchanged_warm_los": {
+        "baseline_ms": 2.5651,
+        "candidate_ms": 2.5391,
+        "speedup": 1.0102398487653106,
+        "round_medians_ms": {
+          "baseline": [
+            2.6222,
+            2.5476,
+            2.5651
+          ],
+          "candidate": [
+            2.5607,
+            2.5059,
+            2.5391
+          ]
+        },
+        "samples_ms": {
+          "baseline": [
+            [
+              2.893,
+              2.6222,
+              2.5672
+            ],
+            [
+              2.5128,
+              2.5476,
+              2.6172
+            ],
+            [
+              2.5651,
+              2.479,
+              2.6106
+            ]
+          ],
+          "candidate": [
+            [
+              2.5607,
+              2.5467,
+              2.9622
+            ],
+            [
+              2.5443,
+              2.4839,
+              2.5059
+            ],
+            [
+              2.5391,
+              2.5237,
+              2.6184
+            ]
+          ]
+        },
+        "output_sha256": "056f5fb69f7a503fe44982878201bff324b07e85c0dec4769e95f657f173f497",
+        "all_timed_outputs_identical": true,
+        "input_sha256": "f08ef0dc4de3a431790bd9d4d3dbd944111a5a769ce795844e06e1974fc3ae4f"
+      },
+      "triangles12000/epochs513/satellites32/memory": {
+        "baseline": 36400216,
+        "candidate": 36400216,
+        "extra_bytes": 0
+      },
+      "triangles12000/epochs1366/satellites12/warm_multipath": {
+        "baseline_ms": 210.3458,
+        "candidate_ms": 210.2657,
+        "speedup": 1.0003809465832991,
+        "round_medians_ms": {
+          "baseline": [
+            210.3458,
+            210.3107,
+            212.6598
+          ],
+          "candidate": [
+            210.2657,
+            210.0995,
+            210.3261
+          ]
+        },
+        "samples_ms": {
+          "baseline": [
+            [
+              210.3458,
+              210.4005,
+              210.3434
+            ],
+            [
+              210.2925,
+              210.3107,
+              211.123
+            ],
+            [
+              210.5763,
+              212.6598,
+              213.2594
+            ]
+          ],
+          "candidate": [
+            [
+              210.2657,
+              210.3863,
+              210.0708
+            ],
+            [
+              210.2079,
+              210.0995,
+              210.0901
+            ],
+            [
+              210.3261,
+              210.1381,
+              210.8036
+            ]
+          ]
+        },
+        "output_sha256": "880e512f726e6a63e44da6359fd7d774e3465aed304796292a4e9efb27ea48f2",
+        "all_timed_outputs_identical": true,
+        "input_sha256": "8db126f92ab50b40c3bae39f1bd801418146ae375fbae74addc5f5e323a99940"
+      },
+      "triangles12000/epochs1366/satellites12/public_warm_trace": {
+        "baseline_ms": 212.0703,
+        "candidate_ms": 212.0246,
+        "speedup": 1.0002155410268432,
+        "round_medians_ms": {
+          "baseline": [
+            212.0703,
+            212.8618,
+            211.9579
+          ],
+          "candidate": [
+            211.9364,
+            212.2764,
+            212.0246
+          ]
+        },
+        "samples_ms": {
+          "baseline": [
+            [
+              212.0703,
+              213.7754,
+              212.044
+            ],
+            [
+              212.2657,
+              213.2805,
+              212.8618
+            ],
+            [
+              212.3392,
+              211.9579,
+              211.8668
+            ]
+          ],
+          "candidate": [
+            [
+              211.8155,
+              211.9364,
+              213.5718
+            ],
+            [
+              212.2764,
+              212.8609,
+              212.0297
+            ],
+            [
+              212.1175,
+              212.0246,
+              211.799
+            ]
+          ]
+        },
+        "output_sha256": "d1ba4684dbc05261dbef620975a50b1ef48f4023cfca58e213f2efdfe67daffd",
+        "all_timed_outputs_identical": true,
+        "input_sha256": "8db126f92ab50b40c3bae39f1bd801418146ae375fbae74addc5f5e323a99940"
+      },
+      "triangles12000/epochs1366/satellites12/native_cold_trace_close": {
+        "baseline_ms": 222.4369,
+        "candidate_ms": 218.9087,
+        "speedup": 1.0161172214717826,
+        "round_medians_ms": {
+          "baseline": [
+            221.1661,
+            223.4648,
+            222.4369
+          ],
+          "candidate": [
+            220.7507,
+            218.1168,
+            218.9087
+          ]
+        },
+        "samples_ms": {
+          "baseline": [
+            [
+              221.1661,
+              222.6183,
+              217.7771
+            ],
+            [
+              230.4953,
+              223.4648,
+              218.2337
+            ],
+            [
+              222.4369,
+              225.1241,
+              217.1564
+            ]
+          ],
+          "candidate": [
+            [
+              218.9212,
+              223.4213,
+              220.7507
+            ],
+            [
+              227.8968,
+              218.1168,
+              217.9587
+            ],
+            [
+              218.4425,
+              218.9087,
+              224.2928
+            ]
+          ]
+        },
+        "output_sha256": "7649ab4bd8a0be0630d139b495eee256ec53ed1dc04211ddf345b7eeaaaebbad",
+        "all_timed_outputs_identical": true,
+        "input_sha256": "8db126f92ab50b40c3bae39f1bd801418146ae375fbae74addc5f5e323a99940"
+      },
+      "triangles12000/epochs1366/satellites12/unchanged_warm_los": {
+        "baseline_ms": 1.8505,
+        "candidate_ms": 1.8812,
+        "speedup": 0.9836806293854986,
+        "round_medians_ms": {
+          "baseline": [
+            1.8238,
+            1.9005,
+            1.8505
+          ],
+          "candidate": [
+            2.4644,
+            1.8812,
+            1.8579
+          ]
+        },
+        "samples_ms": {
+          "baseline": [
+            [
+              1.8448,
+              1.8012,
+              1.8238
+            ],
+            [
+              1.8931,
+              2.7602,
+              1.9005
+            ],
+            [
+              1.8211,
+              1.8942,
+              1.8505
+            ]
+          ],
+          "candidate": [
+            [
+              1.849,
+              2.532,
+              2.4644
+            ],
+            [
+              1.9283,
+              1.8812,
+              1.8173
+            ],
+            [
+              1.822,
+              1.8579,
+              2.4044
+            ]
+          ]
+        },
+        "output_sha256": "9e382ec27789a7b39944eac24acdce3f33163f197b2ae199eff3c7531d044e55",
+        "all_timed_outputs_identical": true,
+        "input_sha256": "8db126f92ab50b40c3bae39f1bd801418146ae375fbae74addc5f5e323a99940"
+      },
+      "triangles12000/epochs1366/satellites12/memory": {
+        "baseline": 36419088,
+        "candidate": 36419088,
+        "extra_bytes": 0
+      }
+    },
+    "decision_criteria": "At least5% whole public trace reduction in primary targets with4/5 improving rounds and exact outputs, no material cold/control regression. Early3x3 gate before broad validation/sanitizers."
+  },
+  "baseline_warm_activity_profile": {
+    "schema_version": 1,
+    "profile_completed": true,
+    "method": "Own sequential normal-priority processes pinned to one allowed CPU. CUDA profiler start/stop captures one warm complete public trace. GPU activity is diagnostic, not unprofiled wall-time or occupancy evidence.",
+    "baseline_reference": "benchmarks/bvh_medium_ray_chunks_gpu_20261015.json",
+    "source_sha256": {
+      "src/raytrace/bvh.cu": "641ea052a1a2fde9424773f000db8d86ec473d558f61485aeae004d7acd4eaed",
+      "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+      "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+      "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+      "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+    },
+    "extension_sha256": "0f2e099d9e95c7453feaea2fd664a4b5105ed1ec33b73eb3cb4ab37ad0b7b555",
+    "helper_sha256": "95f1e44bac795c8e1ab637eff3f13664f0f4496c715fa37116f0c89d8691b795",
+    "cases": [
+      {
+        "case": [
+          12000,
+          1,
+          12
+        ],
+        "profiled_public_ms": 1.2944,
+        "input_sha256": "da45612dee5a56722f57a56d3b05203456a90783fd66129b121e1862961e70aa",
+        "output_sha256": "ee6bf6754fb230fa1e46c2065bcb2bacc3fe1eff157ba019412989458659c476",
+        "activities": [
+          {
+            "name": "[CUDA memcpy HtoD]",
+            "duration_ms": 0.000352
+          },
+          {
+            "name": "[CUDA memcpy HtoD]",
+            "duration_ms": 0.000704
+          },
+          {
+            "name": "gnss_gpu::los_check_bvh_batch_kernel(double const *, double const *, gnss_gpu::BVHNode const *, gnss_gpu::Triangle const *, int*, int, int, int)",
+            "duration_ms": 0.199261
+          },
+          {
+            "name": "void gnss_gpu::multipath_candidates_kernel<bool=1, bool=0>(double const *, double const , gnss_gpu::Triangle const *, int const *, gnss_gpu::MultipathCandidate*, int, int, int, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror const *)",
+            "duration_ms": 0.233628
+          },
+          {
+            "name": "gnss_gpu::multipath_finalize_kernel(gnss_gpu::MultipathCandidate const *, double*, double*, int, int)",
+            "duration_ms": 0.008
+          },
+          {
+            "name": "[CUDA memcpy DtoH]",
+            "duration_ms": 0.0008
+          },
+          {
+            "name": "[CUDA memcpy DtoH]",
+            "duration_ms": 0.000863
+          },
+          {
+            "name": "[CUDA memcpy DtoH]",
+            "duration_ms": 0.000768
+          }
+        ],
+        "activity_ms": 0.444376,
+        "raw_trace_sha256": "66b942f8c517d53c36b69d042d62629c639df586bd487b7fb3c1fabea1f2a0e8",
+        "candidate_activity_share_percent": 52.574396457054384,
+        "los_activity_share_percent": 44.84063045709039
+      },
+      {
+        "case": [
+          4096,
+          513,
+          32
+        ],
+        "profiled_public_ms": 72.2001,
+        "input_sha256": "2387441466f0f7191b90cfd01b3402f10d6ac1c5493f599405be9f551fa360f4",
+        "output_sha256": "2173ad2046161316029070f2733448cbc7d28a30e5c2c5eb808c303f63f37319",
+        "activities": [
+          {
+            "name": "[CUDA memcpy HtoD]",
+            "duration_ms": 0.001024
+          },
+          {
+            "name": "[CUDA memcpy HtoD]",
+            "duration_ms": 0.043615
+          },
+          {
+            "name": "gnss_gpu::los_check_bvh_batch_kernel(double const *, double const *, gnss_gpu::BVHNode const *, gnss_gpu::Triangle const *, int*, int, int, int)",
+            "duration_ms": 0.94459
+          },
+          {
+            "name": "gnss_gpu::reflection_mirrors_kernel(double const *, gnss_gpu::Triangle const *, int const *, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror*, int)",
+            "duration_ms": 0.081279
+          },
+          {
+            "name": "void gnss_gpu::multipath_candidates_kernel<bool=1, bool=1>(double const *, double const , gnss_gpu::Triangle const *, int const *, gnss_gpu::MultipathCandidate*, int, int, int, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror const *)",
+            "duration_ms": 17.466222
+          },
+          {
+            "name": "gnss_gpu::multipath_finalize_kernel(gnss_gpu::MultipathCandidate const *, double*, double*, int, int)",
+            "duration_ms": 0.002272
+          },
+          {
+            "name": "gnss_gpu::reflection_mirrors_kernel(double const *, gnss_gpu::Triangle const *, int const *, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror*, int)",
+            "duration_ms": 0.081406
+          },
+          {
+            "name": "void gnss_gpu::multipath_candidates_kernel<bool=1, bool=1>(double const *, double const , gnss_gpu::Triangle const *, int const *, gnss_gpu::MultipathCandidate*, int, int, int, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror const *)",
+            "duration_ms": 17.416015
+          },
+          {
+            "name": "gnss_gpu::multipath_finalize_kernel(gnss_gpu::MultipathCandidate const *, double*, double*, int, int)",
+            "duration_ms": 0.002208
+          },
+          {
+            "name": "gnss_gpu::reflection_mirrors_kernel(double const *, gnss_gpu::Triangle const *, int const *, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror*, int)",
+            "duration_ms": 0.082175
+          },
+          {
+            "name": "void gnss_gpu::multipath_candidates_kernel<bool=1, bool=1>(double const *, double const , gnss_gpu::Triangle const *, int const *, gnss_gpu::MultipathCandidate*, int, int, int, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror const *)",
+            "duration_ms": 17.447598
+          },
+          {
+            "name": "gnss_gpu::multipath_finalize_kernel(gnss_gpu::MultipathCandidate const *, double*, double*, int, int)",
+            "duration_ms": 0.00224
+          },
+          {
+            "name": "gnss_gpu::reflection_mirrors_kernel(double const *, gnss_gpu::Triangle const *, int const *, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror*, int)",
+            "duration_ms": 0.080574
+          },
+          {
+            "name": "void gnss_gpu::multipath_candidates_kernel<bool=1, bool=1>(double const *, double const , gnss_gpu::Triangle const *, int const *, gnss_gpu::MultipathCandidate*, int, int, int, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror const *)",
+            "duration_ms": 17.460655
+          },
+          {
+            "name": "gnss_gpu::multipath_finalize_kernel(gnss_gpu::MultipathCandidate const *, double*, double*, int, int)",
+            "duration_ms": 0.002272
+          },
+          {
+            "name": "gnss_gpu::reflection_mirrors_kernel(double const *, gnss_gpu::Triangle const *, int const *, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror*, int)",
+            "duration_ms": 0.002336
+          },
+          {
+            "name": "void gnss_gpu::multipath_candidates_kernel<bool=1, bool=1>(double const *, double const , gnss_gpu::Triangle const *, int const *, gnss_gpu::MultipathCandidate*, int, int, int, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror const *)",
+            "duration_ms": 0.217851
+          },
+          {
+            "name": "gnss_gpu::multipath_finalize_kernel(gnss_gpu::MultipathCandidate const *, double*, double*, int, int)",
+            "duration_ms": 0.001184
+          },
+          {
+            "name": "[CUDA memcpy DtoH]",
+            "duration_ms": 0.005728
+          },
+          {
+            "name": "[CUDA memcpy DtoH]",
+            "duration_ms": 0.034879
+          },
+          {
+            "name": "[CUDA memcpy DtoH]",
+            "duration_ms": 0.01184
+          }
+        ],
+        "activity_ms": 71.387963,
+        "raw_trace_sha256": "93d8068c780cb09ca9f45e7e7434ba93edf33661b4556afd941a49993de7b8bc",
+        "candidate_activity_share_percent": 98.06743049945268,
+        "los_activity_share_percent": 1.3231782506527046
+      },
+      {
+        "case": [
+          12000,
+          1366,
+          12
+        ],
+        "profiled_public_ms": 209.4217,
+        "input_sha256": "8db126f92ab50b40c3bae39f1bd801418146ae375fbae74addc5f5e323a99940",
+        "output_sha256": "d1ba4684dbc05261dbef620975a50b1ef48f4023cfca58e213f2efdfe67daffd",
+        "activities": [
+          {
+            "name": "[CUDA memcpy HtoD]",
+            "duration_ms": 0.001793
+          },
+          {
+            "name": "[CUDA memcpy HtoD]",
+            "duration_ms": 0.064191
+          },
+          {
+            "name": "gnss_gpu::los_check_bvh_batch_kernel(double const *, double const *, gnss_gpu::BVHNode const *, gnss_gpu::Triangle const *, int*, int, int, int)",
+            "duration_ms": 1.447523
+          },
+          {
+            "name": "gnss_gpu::reflection_mirrors_kernel(double const *, gnss_gpu::Triangle const *, int const *, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror*, int)",
+            "duration_ms": 0.465591
+          },
+          {
+            "name": "void gnss_gpu::multipath_candidates_kernel<bool=1, bool=1>(double const *, double const , gnss_gpu::Triangle const *, int const *, gnss_gpu::MultipathCandidate*, int, int, int, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror const *)",
+            "duration_ms": 17.220147
+          },
+          {
+            "name": "gnss_gpu::multipath_finalize_kernel(gnss_gpu::MultipathCandidate const *, double*, double*, int, int)",
+            "duration_ms": 0.001696
+          },
+          {
+            "name": "gnss_gpu::reflection_mirrors_kernel(double const *, gnss_gpu::Triangle const *, int const *, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror*, int)",
+            "duration_ms": 0.460535
+          },
+          {
+            "name": "void gnss_gpu::multipath_candidates_kernel<bool=1, bool=1>(double const *, double const , gnss_gpu::Triangle const *, int const *, gnss_gpu::MultipathCandidate*, int, int, int, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror const *)",
+            "duration_ms": 17.193523
+          },
+          {
+            "name": "gnss_gpu::multipath_finalize_kernel(gnss_gpu::MultipathCandidate const *, double*, double*, int, int)",
+            "duration_ms": 0.001664
+          },
+          {
+            "name": "gnss_gpu::reflection_mirrors_kernel(double const *, gnss_gpu::Triangle const *, int const *, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror*, int)",
+            "duration_ms": 0.457975
+          },
+          {
+            "name": "void gnss_gpu::multipath_candidates_kernel<bool=1, bool=1>(double const *, double const , gnss_gpu::Triangle const *, int const *, gnss_gpu::MultipathCandidate*, int, int, int, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror const *)",
+            "duration_ms": 17.218642
+          },
+          {
+            "name": "gnss_gpu::multipath_finalize_kernel(gnss_gpu::MultipathCandidate const *, double*, double*, int, int)",
+            "duration_ms": 0.001696
+          },
+          {
+            "name": "gnss_gpu::reflection_mirrors_kernel(double const *, gnss_gpu::Triangle const *, int const *, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror*, int)",
+            "duration_ms": 0.459991
+          },
+          {
+            "name": "void gnss_gpu::multipath_candidates_kernel<bool=1, bool=1>(double const *, double const , gnss_gpu::Triangle const *, int const *, gnss_gpu::MultipathCandidate*, int, int, int, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror const *)",
+            "duration_ms": 17.214131
+          },
+          {
+            "name": "gnss_gpu::multipath_finalize_kernel(gnss_gpu::MultipathCandidate const *, double*, double*, int, int)",
+            "duration_ms": 0.001728
+          },
+          {
+            "name": "gnss_gpu::reflection_mirrors_kernel(double const *, gnss_gpu::Triangle const *, int const *, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror*, int)",
+            "duration_ms": 0.460983
+          },
+          {
+            "name": "void gnss_gpu::multipath_candidates_kernel<bool=1, bool=1>(double const *, double const , gnss_gpu::Triangle const *, int const *, gnss_gpu::MultipathCandidate*, int, int, int, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror const *)",
+            "duration_ms": 17.142932
+          },
+          {
+            "name": "gnss_gpu::multipath_finalize_kernel(gnss_gpu::MultipathCandidate const *, double*, double*, int, int)",
+            "duration_ms": 0.001728
+          },
+          {
+            "name": "gnss_gpu::reflection_mirrors_kernel(double const *, gnss_gpu::Triangle const *, int const *, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror*, int)",
+            "duration_ms": 0.464728
+          },
+          {
+            "name": "void gnss_gpu::multipath_candidates_kernel<bool=1, bool=1>(double const *, double const , gnss_gpu::Triangle const *, int const *, gnss_gpu::MultipathCandidate*, int, int, int, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror const *)",
+            "duration_ms": 17.106261
+          },
+          {
+            "name": "gnss_gpu::multipath_finalize_kernel(gnss_gpu::MultipathCandidate const *, double*, double*, int, int)",
+            "duration_ms": 0.001792
+          },
+          {
+            "name": "gnss_gpu::reflection_mirrors_kernel(double const *, gnss_gpu::Triangle const *, int const *, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror*, int)",
+            "duration_ms": 0.456471
+          },
+          {
+            "name": "void gnss_gpu::multipath_candidates_kernel<bool=1, bool=1>(double const *, double const , gnss_gpu::Triangle const *, int const *, gnss_gpu::MultipathCandidate*, int, int, int, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror const *)",
+            "duration_ms": 17.074134
+          },
+          {
+            "name": "gnss_gpu::multipath_finalize_kernel(gnss_gpu::MultipathCandidate const *, double*, double*, int, int)",
+            "duration_ms": 0.00176
+          },
+          {
+            "name": "gnss_gpu::reflection_mirrors_kernel(double const *, gnss_gpu::Triangle const *, int const *, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror*, int)",
+            "duration_ms": 0.457431
+          },
+          {
+            "name": "void gnss_gpu::multipath_candidates_kernel<bool=1, bool=1>(double const *, double const , gnss_gpu::Triangle const *, int const *, gnss_gpu::MultipathCandidate*, int, int, int, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror const *)",
+            "duration_ms": 17.130612
+          },
+          {
+            "name": "gnss_gpu::multipath_finalize_kernel(gnss_gpu::MultipathCandidate const *, double*, double*, int, int)",
+            "duration_ms": 0.00176
+          },
+          {
+            "name": "gnss_gpu::reflection_mirrors_kernel(double const *, gnss_gpu::Triangle const *, int const *, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror*, int)",
+            "duration_ms": 0.454263
+          },
+          {
+            "name": "void gnss_gpu::multipath_candidates_kernel<bool=1, bool=1>(double const *, double const , gnss_gpu::Triangle const *, int const *, gnss_gpu::MultipathCandidate*, int, int, int, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror const *)",
+            "duration_ms": 17.083285
+          },
+          {
+            "name": "gnss_gpu::multipath_finalize_kernel(gnss_gpu::MultipathCandidate const *, double*, double*, int, int)",
+            "duration_ms": 0.00176
+          },
+          {
+            "name": "gnss_gpu::reflection_mirrors_kernel(double const *, gnss_gpu::Triangle const *, int const *, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror*, int)",
+            "duration_ms": 0.453304
+          },
+          {
+            "name": "void gnss_gpu::multipath_candidates_kernel<bool=1, bool=1>(double const *, double const , gnss_gpu::Triangle const *, int const *, gnss_gpu::MultipathCandidate*, int, int, int, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror const *)",
+            "duration_ms": 17.068021
+          },
+          {
+            "name": "gnss_gpu::multipath_finalize_kernel(gnss_gpu::MultipathCandidate const *, double*, double*, int, int)",
+            "duration_ms": 0.001888
+          },
+          {
+            "name": "gnss_gpu::reflection_mirrors_kernel(double const *, gnss_gpu::Triangle const *, int const *, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror*, int)",
+            "duration_ms": 0.458007
+          },
+          {
+            "name": "void gnss_gpu::multipath_candidates_kernel<bool=1, bool=1>(double const *, double const , gnss_gpu::Triangle const *, int const *, gnss_gpu::MultipathCandidate*, int, int, int, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror const *)",
+            "duration_ms": 17.097941
+          },
+          {
+            "name": "gnss_gpu::multipath_finalize_kernel(gnss_gpu::MultipathCandidate const *, double*, double*, int, int)",
+            "duration_ms": 0.00176
+          },
+          {
+            "name": "gnss_gpu::reflection_mirrors_kernel(double const *, gnss_gpu::Triangle const *, int const *, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror*, int)",
+            "duration_ms": 0.359833
+          },
+          {
+            "name": "void gnss_gpu::multipath_candidates_kernel<bool=1, bool=1>(double const *, double const , gnss_gpu::Triangle const *, int const *, gnss_gpu::MultipathCandidate*, int, int, int, gnss_gpu::ReflectionNormal const *, gnss_gpu::ReflectionMirror const *)",
+            "duration_ms": 13.252287
+          },
+          {
+            "name": "gnss_gpu::multipath_finalize_kernel(gnss_gpu::MultipathCandidate const *, double*, double*, int, int)",
+            "duration_ms": 0.001824
+          },
+          {
+            "name": "[CUDA memcpy DtoH]",
+            "duration_ms": 0.005664
+          },
+          {
+            "name": "[CUDA memcpy DtoH]",
+            "duration_ms": 0.045407
+          },
+          {
+            "name": "[CUDA memcpy DtoH]",
+            "duration_ms": 0.01152
+          }
+        ],
+        "activity_ms": 208.808182,
+        "raw_trace_sha256": "30c1398e5200405efc1328e81b8e7258dc180ba170360b8066bd9da5415030f4",
+        "candidate_activity_share_percent": 96.64464010323123,
+        "los_activity_share_percent": 0.6932309769355686
+      }
+    ]
+  },
+  "compared_timed_pairs": 144,
+  "all_timed_outputs_bit_identical": true,
+  "broad_candidate_validation_newly_run": false,
+  "candidate_regression_newly_run": false,
+  "candidate_sanitizers_newly_run": false,
+  "reproduction_helper": {
+    "path": "benchmarks/bench_bvh_candidate_registers_compare.py",
+    "sha256": "2703e01fca36a4ffd568829dc5f24b24a0beb7aec448d8c11306aff2e23947ee",
+    "created_after_measurements": true
+  },
+  "reproduction": "Use the frozen D208 sources/PE and exact patch, same CUDA12.8/MSVC Release/compute7.5/C++20/no fast math; --timing-only --counts 4096 12000 --shapes 513x32 1366x12 --rounds 3 --repeats 3. Original measured helper hashes remain in measurements.",
+  "limits": "Exploratory3x3 on nonexclusive host; activity profile is not unprofiled wall-time, occupancy or hardware-counter evidence. No whole PF/GNSS/IMU or long real-data accuracy measurement."
+}

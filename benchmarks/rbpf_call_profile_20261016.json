@@ -1,0 +1,5150 @@
+{
+  "timestamp_utc": "2026-10-16T12:18:03.198439+00:00",
+  "experiment": "D245 actual deterministic call diagnosis and coarse RTK/GTSAM spans",
+  "diagnostic_only": true,
+  "accepted_optimizations": 0,
+  "product_adoption": false,
+  "default_changed": false,
+  "production_changes": [],
+  "analysis": {
+    "timestamp_utc": "2026-10-16T12:14:44.048901+00:00",
+    "runner_sha256": "3471a9547977ec28d7bee3d3afd96d5f7196cce1ef4ba999a05625b00e2787e8",
+    "coarse_actual": {
+      "r3_seed0_processprofile_cpu_c0": {
+        "cluster_relin": 0,
+        "phases": {
+          "1": {
+            "epochs": 200,
+            "root_wall_ns": 32923488800,
+            "diagnostic_snapshot_wall_ns": 0,
+            "work_wall_ns_excluding_snapshot_span": 32923488800,
+            "disjoint_exclusive_spans": {
+              "rtk._build_dd_factors": {
+                "calls": 200,
+                "inclusive_wall_ns": 393199300,
+                "exclusive_wall_ns": 393199300,
+                "inclusive_CPU_ns": 390625000,
+                "exclusive_CPU_ns": 390625000,
+                "work_exclusive_wall_percent": 1.1942819984496904
+              },
+              "rtk._apply_fde": {
+                "calls": 200,
+                "inclusive_wall_ns": 87971000,
+                "exclusive_wall_ns": 87971000,
+                "inclusive_CPU_ns": 140625000,
+                "exclusive_CPU_ns": 140625000,
+                "work_exclusive_wall_percent": 0.2671982927884605
+              },
+              "gtsam.Marginals": {
+                "calls": 200,
+                "inclusive_wall_ns": 233051500,
+                "exclusive_wall_ns": 233051500,
+                "inclusive_CPU_ns": 156250000,
+                "exclusive_CPU_ns": 156250000,
+                "work_exclusive_wall_percent": 0.707857850107307
+              },
+              "gtsam.jointMarginalCovariance": {
+                "calls": 200,
+                "inclusive_wall_ns": 217665300,
+                "exclusive_wall_ns": 217665300,
+                "inclusive_CPU_ns": 171875000,
+                "exclusive_CPU_ns": 171875000,
+                "work_exclusive_wall_percent": 0.6611246497060178
+              },
+              "rtk._write_back": {
+                "calls": 200,
+                "inclusive_wall_ns": 1759561200,
+                "exclusive_wall_ns": 1308844400,
+                "inclusive_CPU_ns": 1687500000,
+                "exclusive_CPU_ns": 1359375000,
+                "work_exclusive_wall_percent": 3.9754122290952347
+              },
+              "rtk._do_ar": {
+                "calls": 200,
+                "inclusive_wall_ns": 20415313100,
+                "exclusive_wall_ns": 20410733200,
+                "inclusive_CPU_ns": 20109375000,
+                "exclusive_CPU_ns": 20093750000,
+                "work_exclusive_wall_percent": 61.99444209569916
+              },
+              "rtk.process": {
+                "calls": 200,
+                "inclusive_wall_ns": 32923488800,
+                "exclusive_wall_ns": 10266464500,
+                "inclusive_CPU_ns": 32328125000,
+                "exclusive_CPU_ns": 10000000000,
+                "work_exclusive_wall_percent": 31.182796459894007
+              },
+              "gtsam.smoother.update": {
+                "calls": 1,
+                "inclusive_wall_ns": 2180200,
+                "exclusive_wall_ns": 2180200,
+                "inclusive_CPU_ns": 0,
+                "exclusive_CPU_ns": 0,
+                "work_exclusive_wall_percent": 0.006622019960411972
+              },
+              "rtk._inject_hold": {
+                "calls": 199,
+                "inclusive_wall_ns": 4579900,
+                "exclusive_wall_ns": 2399700,
+                "inclusive_CPU_ns": 15625000,
+                "exclusive_CPU_ns": 15625000,
+                "work_exclusive_wall_percent": 0.007288717227318874
+              },
+              "rtk._seed_phase2_graph": {
+                "calls": 1,
+                "inclusive_wall_ns": 979700,
+                "exclusive_wall_ns": 979700,
+                "inclusive_CPU_ns": 0,
+                "exclusive_CPU_ns": 0,
+                "work_exclusive_wall_percent": 0.0029756870723858402
+              }
+            },
+            "distributions": {
+              "rtk.process": {
+                "recorded_epochs": 200,
+                "p50_wall_ns": 37107000.0,
+                "p95_nearest_rank_wall_ns": 74145300,
+                "min_wall_ns": 22585400,
+                "max_wall_ns": 17359120600,
+                "largest_five": [
+                  {
+                    "epoch": 2,
+                    "wall_ns": 17359120600
+                  },
+                  {
+                    "epoch": 1,
+                    "wall_ns": 7457329000
+                  },
+                  {
+                    "epoch": 200,
+                    "wall_ns": 83784300
+                  },
+                  {
+                    "epoch": 126,
+                    "wall_ns": 81783400
+                  },
+                  {
+                    "epoch": 60,
+                    "wall_ns": 81379700
+                  }
+                ]
+              },
+              "rtk._do_ar": {
+                "recorded_epochs": 200,
+                "p50_wall_ns": 8607750.0,
+                "p95_nearest_rank_wall_ns": 15776300,
+                "min_wall_ns": 5715600,
+                "max_wall_ns": 17335314200,
+                "largest_five": [
+                  {
+                    "epoch": 2,
+                    "wall_ns": 17335314200
+                  },
+                  {
+                    "epoch": 1,
+                    "wall_ns": 1205122900
+                  },
+                  {
+                    "epoch": 159,
+                    "wall_ns": 20487500
+                  },
+                  {
+                    "epoch": 167,
+                    "wall_ns": 19251900
+                  },
+                  {
+                    "epoch": 94,
+                    "wall_ns": 18488100
+                  }
+                ]
+              }
+            },
+            "selected_GTSAM_exclusive_wall_percent": 1.3756045197737368,
+            "note": "Subtracting the explicit snapshot span is arithmetic on this instrumented run,not recovery of an uninstrumented runtime. Exclusive rows partition the remaining duration;all epochs including startup/outliers retained. Selected GTSAM spans are incomplete,especially inherited phase1/base and model callbacks."
+          },
+          "2": {
+            "epochs": 200,
+            "root_wall_ns": 41991661300,
+            "diagnostic_snapshot_wall_ns": 25992017200,
+            "work_wall_ns_excluding_snapshot_span": 15999644100,
+            "disjoint_exclusive_spans": {
+              "rtk._build_dd_factors_arm": {
+                "calls": 200,
+                "inclusive_wall_ns": 491248700,
+                "exclusive_wall_ns": 491248700,
+                "inclusive_CPU_ns": 484375000,
+                "exclusive_CPU_ns": 484375000,
+                "work_exclusive_wall_percent": 3.070372671602114
+              },
+              "gtsam.smoother.update": {
+                "calls": 219,
+                "inclusive_wall_ns": 525395200,
+                "exclusive_wall_ns": 525395200,
+                "inclusive_CPU_ns": 421875000,
+                "exclusive_CPU_ns": 421875000,
+                "work_exclusive_wall_percent": 3.2837930438715195
+              },
+              "gtsam.smoother.calculateEstimate": {
+                "calls": 200,
+                "inclusive_wall_ns": 11936200,
+                "exclusive_wall_ns": 11936200,
+                "inclusive_CPU_ns": 0,
+                "exclusive_CPU_ns": 0,
+                "work_exclusive_wall_percent": 0.07460290944846705
+              },
+              "rtk._apply_fde": {
+                "calls": 200,
+                "inclusive_wall_ns": 182390000,
+                "exclusive_wall_ns": 182390000,
+                "inclusive_CPU_ns": 218750000,
+                "exclusive_CPU_ns": 218750000,
+                "work_exclusive_wall_percent": 1.1399628570488014
+              },
+              "gtsam.Marginals": {
+                "calls": 200,
+                "inclusive_wall_ns": 285842500,
+                "exclusive_wall_ns": 285842500,
+                "inclusive_CPU_ns": 187500000,
+                "exclusive_CPU_ns": 187500000,
+                "work_exclusive_wall_percent": 1.7865553646908934
+              },
+              "gtsam.marginalCovariance": {
+                "calls": 114,
+                "inclusive_wall_ns": 57502600,
+                "exclusive_wall_ns": 57502600,
+                "inclusive_CPU_ns": 46875000,
+                "exclusive_CPU_ns": 46875000,
+                "work_exclusive_wall_percent": 0.3593992443869423
+              },
+              "rtk._write_back_tc": {
+                "calls": 200,
+                "inclusive_wall_ns": 790440400,
+                "exclusive_wall_ns": 404900300,
+                "inclusive_CPU_ns": 796875000,
+                "exclusive_CPU_ns": 546875000,
+                "work_exclusive_wall_percent": 2.5306831668836933
+              },
+              "pf": {
+                "calls": 200,
+                "inclusive_wall_ns": 8636362100,
+                "exclusive_wall_ns": 8593916200,
+                "inclusive_CPU_ns": 8500000000,
+                "exclusive_CPU_ns": 8453125000,
+                "work_exclusive_wall_percent": 53.71317103234815
+              },
+              "rtk._do_ar": {
+                "calls": 200,
+                "inclusive_wall_ns": 36213281600,
+                "exclusive_wall_ns": 1583429800,
+                "inclusive_CPU_ns": 35953125000,
+                "exclusive_CPU_ns": 1578125000,
+                "work_exclusive_wall_percent": 9.896656388750547
+              },
+              "rtk._process_phase2": {
+                "calls": 200,
+                "inclusive_wall_ns": 41986412900,
+                "exclusive_wall_ns": 3778869700,
+                "inclusive_CPU_ns": 41765625000,
+                "exclusive_CPU_ns": 3890625000,
+                "work_exclusive_wall_percent": 23.618460988141607
+              },
+              "rtk.process": {
+                "calls": 200,
+                "inclusive_wall_ns": 41991661300,
+                "exclusive_wall_ns": 5248400,
+                "inclusive_CPU_ns": 41765625000,
+                "exclusive_CPU_ns": 0,
+                "work_exclusive_wall_percent": 0.0328032296668399
+              },
+              "gtsam.jointMarginalCovariance": {
+                "calls": 86,
+                "inclusive_wall_ns": 42195000,
+                "exclusive_wall_ns": 42195000,
+                "inclusive_CPU_ns": 15625000,
+                "exclusive_CPU_ns": 15625000,
+                "work_exclusive_wall_percent": 0.26372461622443216
+              },
+              "rtk._inject_hold": {
+                "calls": 212,
+                "inclusive_wall_ns": 36446700,
+                "exclusive_wall_ns": 3351700,
+                "inclusive_CPU_ns": 31250000,
+                "exclusive_CPU_ns": 0,
+                "work_exclusive_wall_percent": 0.020948590975220505
+              },
+              "rtk._release_ambiguity": {
+                "calls": 81,
+                "inclusive_wall_ns": 33417800,
+                "exclusive_wall_ns": 33417800,
+                "inclusive_CPU_ns": 46875000,
+                "exclusive_CPU_ns": 46875000,
+                "work_exclusive_wall_percent": 0.2088658959607733
+              }
+            },
+            "distributions": {
+              "rtk.process": {
+                "recorded_epochs": 200,
+                "p50_wall_ns": 195625100.0,
+                "p95_nearest_rank_wall_ns": 282272700,
+                "min_wall_ns": 100647800,
+                "max_wall_ns": 1453958700,
+                "largest_five": [
+                  {
+                    "epoch": 204,
+                    "wall_ns": 1453958700
+                  },
+                  {
+                    "epoch": 400,
+                    "wall_ns": 340056600
+                  },
+                  {
+                    "epoch": 216,
+                    "wall_ns": 329633100
+                  },
+                  {
+                    "epoch": 383,
+                    "wall_ns": 300705600
+                  },
+                  {
+                    "epoch": 305,
+                    "wall_ns": 297471300
+                  }
+                ]
+              },
+              "pf": {
+                "recorded_epochs": 200,
+                "p50_wall_ns": 33763000.0,
+                "p95_nearest_rank_wall_ns": 68145200,
+                "min_wall_ns": 209200,
+                "max_wall_ns": 1261949300,
+                "largest_five": [
+                  {
+                    "epoch": 204,
+                    "wall_ns": 1261949300
+                  },
+                  {
+                    "epoch": 400,
+                    "wall_ns": 124408700
+                  },
+                  {
+                    "epoch": 383,
+                    "wall_ns": 120932100
+                  },
+                  {
+                    "epoch": 216,
+                    "wall_ns": 114979400
+                  },
+                  {
+                    "epoch": 321,
+                    "wall_ns": 109563400
+                  }
+                ]
+              },
+              "rtk._do_ar": {
+                "recorded_epochs": 200,
+                "p50_wall_ns": 168828550.0,
+                "p95_nearest_rank_wall_ns": 248725100,
+                "min_wall_ns": 81257700,
+                "max_wall_ns": 1390681400,
+                "largest_five": [
+                  {
+                    "epoch": 204,
+                    "wall_ns": 1390681400
+                  },
+                  {
+                    "epoch": 400,
+                    "wall_ns": 301692100
+                  },
+                  {
+                    "epoch": 383,
+                    "wall_ns": 275674100
+                  },
+                  {
+                    "epoch": 305,
+                    "wall_ns": 273346800
+                  },
+                  {
+                    "epoch": 216,
+                    "wall_ns": 264260200
+                  }
+                ]
+              },
+              "rtk._process_phase2": {
+                "recorded_epochs": 200,
+                "p50_wall_ns": 195603400.0,
+                "p95_nearest_rank_wall_ns": 282234500,
+                "min_wall_ns": 100627300,
+                "max_wall_ns": 1453940500,
+                "largest_five": [
+                  {
+                    "epoch": 204,
+                    "wall_ns": 1453940500
+                  },
+                  {
+                    "epoch": 400,
+                    "wall_ns": 340012600
+                  },
+                  {
+                    "epoch": 216,
+                    "wall_ns": 329600400
+                  },
+                  {
+                    "epoch": 383,
+                    "wall_ns": 300676100
+                  },
+                  {
+                    "epoch": 305,
+                    "wall_ns": 297445100
+                  }
+                ]
+              },
+              "diagnostic_snapshot": {
+                "recorded_epochs": 200,
+                "p50_wall_ns": 123542650.0,
+                "p95_nearest_rank_wall_ns": 194051400,
+                "min_wall_ns": 80503600,
+                "max_wall_ns": 221978400,
+                "largest_five": [
+                  {
+                    "epoch": 365,
+                    "wall_ns": 221978400
+                  },
+                  {
+                    "epoch": 269,
+                    "wall_ns": 218960200
+                  },
+                  {
+                    "epoch": 209,
+                    "wall_ns": 210410500
+                  },
+                  {
+                    "epoch": 331,
+                    "wall_ns": 206290800
+                  },
+                  {
+                    "epoch": 290,
+                    "wall_ns": 205188400
+                  }
+                ]
+              }
+            },
+            "selected_GTSAM_exclusive_wall_percent": 5.768075178622254,
+            "note": "Subtracting the explicit snapshot span is arithmetic on this instrumented run,not recovery of an uninstrumented runtime. Exclusive rows partition the remaining duration;all epochs including startup/outliers retained. Selected GTSAM spans are incomplete,especially inherited phase1/base and model callbacks."
+          }
+        },
+        "paired_PF_steps": 200,
+        "all_saved_state_trajectory_cfg_metadata_equal": true,
+        "detailed_function_profiler_enabled": false
+      },
+      "r3_seed0_processprofile_cpu_c1": {
+        "cluster_relin": 1,
+        "phases": {
+          "1": {
+            "epochs": 200,
+            "root_wall_ns": 10261827400,
+            "diagnostic_snapshot_wall_ns": 0,
+            "work_wall_ns_excluding_snapshot_span": 10261827400,
+            "disjoint_exclusive_spans": {
+              "rtk._build_dd_factors": {
+                "calls": 200,
+                "inclusive_wall_ns": 401959900,
+                "exclusive_wall_ns": 401959900,
+                "inclusive_CPU_ns": 328125000,
+                "exclusive_CPU_ns": 328125000,
+                "work_exclusive_wall_percent": 3.917040156025232
+              },
+              "rtk._apply_fde": {
+                "calls": 200,
+                "inclusive_wall_ns": 93657100,
+                "exclusive_wall_ns": 93657100,
+                "inclusive_CPU_ns": 93750000,
+                "exclusive_CPU_ns": 93750000,
+                "work_exclusive_wall_percent": 0.9126746762472345
+              },
+              "gtsam.Marginals": {
+                "calls": 200,
+                "inclusive_wall_ns": 243130200,
+                "exclusive_wall_ns": 243130200,
+                "inclusive_CPU_ns": 234375000,
+                "exclusive_CPU_ns": 234375000,
+                "work_exclusive_wall_percent": 2.3692680701294977
+              },
+              "gtsam.jointMarginalCovariance": {
+                "calls": 200,
+                "inclusive_wall_ns": 216700000,
+                "exclusive_wall_ns": 216700000,
+                "inclusive_CPU_ns": 265625000,
+                "exclusive_CPU_ns": 265625000,
+                "work_exclusive_wall_percent": 2.111709655143878
+              },
+              "rtk._write_back": {
+                "calls": 200,
+                "inclusive_wall_ns": 1826899200,
+                "exclusive_wall_ns": 1367069000,
+                "inclusive_CPU_ns": 2046875000,
+                "exclusive_CPU_ns": 1546875000,
+                "work_exclusive_wall_percent": 13.321886509219595
+              },
+              "rtk._do_ar": {
+                "calls": 200,
+                "inclusive_wall_ns": 2437221000,
+                "exclusive_wall_ns": 2434555000,
+                "inclusive_CPU_ns": 2187500000,
+                "exclusive_CPU_ns": 2187500000,
+                "work_exclusive_wall_percent": 23.72438070825475
+              },
+              "rtk.process": {
+                "calls": 200,
+                "inclusive_wall_ns": 10261827400,
+                "exclusive_wall_ns": 5501127200,
+                "inclusive_CPU_ns": 9890625000,
+                "exclusive_CPU_ns": 5234375000,
+                "work_exclusive_wall_percent": 53.60767615327461
+              },
+              "gtsam.smoother.update": {
+                "calls": 1,
+                "inclusive_wall_ns": 880600,
+                "exclusive_wall_ns": 880600,
+                "inclusive_CPU_ns": 0,
+                "exclusive_CPU_ns": 0,
+                "work_exclusive_wall_percent": 0.008581317592615132
+              },
+              "rtk._inject_hold": {
+                "calls": 199,
+                "inclusive_wall_ns": 2666000,
+                "exclusive_wall_ns": 1785400,
+                "inclusive_CPU_ns": 0,
+                "exclusive_CPU_ns": 0,
+                "work_exclusive_wall_percent": 0.017398460628951916
+              },
+              "rtk._seed_phase2_graph": {
+                "calls": 1,
+                "inclusive_wall_ns": 963000,
+                "exclusive_wall_ns": 963000,
+                "inclusive_CPU_ns": 0,
+                "exclusive_CPU_ns": 0,
+                "work_exclusive_wall_percent": 0.009384293483634308
+              }
+            },
+            "distributions": {
+              "rtk.process": {
+                "recorded_epochs": 200,
+                "p50_wall_ns": 39146500.0,
+                "p95_nearest_rank_wall_ns": 87092400,
+                "min_wall_ns": 21926800,
+                "max_wall_ns": 1276912300,
+                "largest_five": [
+                  {
+                    "epoch": 1,
+                    "wall_ns": 1276912300
+                  },
+                  {
+                    "epoch": 2,
+                    "wall_ns": 330939500
+                  },
+                  {
+                    "epoch": 200,
+                    "wall_ns": 118227900
+                  },
+                  {
+                    "epoch": 108,
+                    "wall_ns": 117365600
+                  },
+                  {
+                    "epoch": 174,
+                    "wall_ns": 96391400
+                  }
+                ]
+              },
+              "rtk._do_ar": {
+                "recorded_epochs": 200,
+                "p50_wall_ns": 10192600.0,
+                "p95_nearest_rank_wall_ns": 16467400,
+                "min_wall_ns": 5698700,
+                "max_wall_ns": 306877200,
+                "largest_five": [
+                  {
+                    "epoch": 2,
+                    "wall_ns": 306877200
+                  },
+                  {
+                    "epoch": 1,
+                    "wall_ns": 36633400
+                  },
+                  {
+                    "epoch": 177,
+                    "wall_ns": 21486200
+                  },
+                  {
+                    "epoch": 9,
+                    "wall_ns": 19613200
+                  },
+                  {
+                    "epoch": 184,
+                    "wall_ns": 19540200
+                  }
+                ]
+              }
+            },
+            "selected_GTSAM_exclusive_wall_percent": 4.489559042865991,
+            "note": "Subtracting the explicit snapshot span is arithmetic on this instrumented run,not recovery of an uninstrumented runtime. Exclusive rows partition the remaining duration;all epochs including startup/outliers retained. Selected GTSAM spans are incomplete,especially inherited phase1/base and model callbacks."
+          },
+          "2": {
+            "epochs": 200,
+            "root_wall_ns": 51252141400,
+            "diagnostic_snapshot_wall_ns": 32107951600,
+            "work_wall_ns_excluding_snapshot_span": 19144189800,
+            "disjoint_exclusive_spans": {
+              "rtk._build_dd_factors_arm": {
+                "calls": 200,
+                "inclusive_wall_ns": 675168200,
+                "exclusive_wall_ns": 675168200,
+                "inclusive_CPU_ns": 546875000,
+                "exclusive_CPU_ns": 546875000,
+                "work_exclusive_wall_percent": 3.5267525398228137
+              },
+              "gtsam.smoother.update": {
+                "calls": 219,
+                "inclusive_wall_ns": 655375500,
+                "exclusive_wall_ns": 655375500,
+                "inclusive_CPU_ns": 609375000,
+                "exclusive_CPU_ns": 609375000,
+                "work_exclusive_wall_percent": 3.4233650357979633
+              },
+              "gtsam.smoother.calculateEstimate": {
+                "calls": 200,
+                "inclusive_wall_ns": 15179800,
+                "exclusive_wall_ns": 15179800,
+                "inclusive_CPU_ns": 0,
+                "exclusive_CPU_ns": 0,
+                "work_exclusive_wall_percent": 0.07929194266554963
+              },
+              "rtk._apply_fde": {
+                "calls": 200,
+                "inclusive_wall_ns": 238904200,
+                "exclusive_wall_ns": 238904200,
+                "inclusive_CPU_ns": 359375000,
+                "exclusive_CPU_ns": 359375000,
+                "work_exclusive_wall_percent": 1.247920139195444
+              },
+              "gtsam.Marginals": {
+                "calls": 200,
+                "inclusive_wall_ns": 372526700,
+                "exclusive_wall_ns": 372526700,
+                "inclusive_CPU_ns": 343750000,
+                "exclusive_CPU_ns": 343750000,
+                "work_exclusive_wall_percent": 1.9458995334448679
+              },
+              "gtsam.marginalCovariance": {
+                "calls": 119,
+                "inclusive_wall_ns": 75261600,
+                "exclusive_wall_ns": 75261600,
+                "inclusive_CPU_ns": 46875000,
+                "exclusive_CPU_ns": 46875000,
+                "work_exclusive_wall_percent": 0.3931302436209654
+              },
+              "rtk._write_back_tc": {
+                "calls": 200,
+                "inclusive_wall_ns": 1014511800,
+                "exclusive_wall_ns": 514413600,
+                "inclusive_CPU_ns": 1078125000,
+                "exclusive_CPU_ns": 671875000,
+                "work_exclusive_wall_percent": 2.6870481612128607
+              },
+              "pf": {
+                "calls": 200,
+                "inclusive_wall_ns": 9372686000,
+                "exclusive_wall_ns": 9330649000,
+                "inclusive_CPU_ns": 9421875000,
+                "exclusive_CPU_ns": 9359375000,
+                "work_exclusive_wall_percent": 48.73880324776137
+              },
+              "rtk._do_ar": {
+                "calls": 200,
+                "inclusive_wall_ns": 43498856300,
+                "exclusive_wall_ns": 2016490000,
+                "inclusive_CPU_ns": 43140625000,
+                "exclusive_CPU_ns": 1875000000,
+                "work_exclusive_wall_percent": 10.533169703530625
+              },
+              "rtk._process_phase2": {
+                "calls": 200,
+                "inclusive_wall_ns": 51246071100,
+                "exclusive_wall_ns": 5142517600,
+                "inclusive_CPU_ns": 50859375000,
+                "exclusive_CPU_ns": 5140625000,
+                "work_exclusive_wall_percent": 26.86202787228948
+              },
+              "rtk.process": {
+                "calls": 200,
+                "inclusive_wall_ns": 51252141400,
+                "exclusive_wall_ns": 6070300,
+                "inclusive_CPU_ns": 50859375000,
+                "exclusive_CPU_ns": 0,
+                "work_exclusive_wall_percent": 0.0317083149687536
+              },
+              "gtsam.jointMarginalCovariance": {
+                "calls": 81,
+                "inclusive_wall_ns": 52309900,
+                "exclusive_wall_ns": 52309900,
+                "inclusive_CPU_ns": 15625000,
+                "exclusive_CPU_ns": 15625000,
+                "work_exclusive_wall_percent": 0.27324164953692637
+              },
+              "rtk._inject_hold": {
+                "calls": 205,
+                "inclusive_wall_ns": 38672700,
+                "exclusive_wall_ns": 3561400,
+                "inclusive_CPU_ns": 78125000,
+                "exclusive_CPU_ns": 15625000,
+                "work_exclusive_wall_percent": 0.018603033281669616
+              },
+              "rtk._release_ambiguity": {
+                "calls": 80,
+                "inclusive_wall_ns": 45762000,
+                "exclusive_wall_ns": 45762000,
+                "inclusive_CPU_ns": 46875000,
+                "exclusive_CPU_ns": 46875000,
+                "work_exclusive_wall_percent": 0.23903858287071517
+              }
+            },
+            "distributions": {
+              "rtk.process": {
+                "recorded_epochs": 200,
+                "p50_wall_ns": 248119450.0,
+                "p95_nearest_rank_wall_ns": 340099200,
+                "min_wall_ns": 152042000,
+                "max_wall_ns": 407172300,
+                "largest_five": [
+                  {
+                    "epoch": 390,
+                    "wall_ns": 407172300
+                  },
+                  {
+                    "epoch": 215,
+                    "wall_ns": 403095900
+                  },
+                  {
+                    "epoch": 216,
+                    "wall_ns": 381582100
+                  },
+                  {
+                    "epoch": 271,
+                    "wall_ns": 368910000
+                  },
+                  {
+                    "epoch": 356,
+                    "wall_ns": 356658000
+                  }
+                ]
+              },
+              "pf": {
+                "recorded_epochs": 200,
+                "p50_wall_ns": 42018600.0,
+                "p95_nearest_rank_wall_ns": 86779300,
+                "min_wall_ns": 467000,
+                "max_wall_ns": 122746000,
+                "largest_five": [
+                  {
+                    "epoch": 266,
+                    "wall_ns": 122746000
+                  },
+                  {
+                    "epoch": 271,
+                    "wall_ns": 119147300
+                  },
+                  {
+                    "epoch": 295,
+                    "wall_ns": 114150500
+                  },
+                  {
+                    "epoch": 286,
+                    "wall_ns": 113154000
+                  },
+                  {
+                    "epoch": 290,
+                    "wall_ns": 108490100
+                  }
+                ]
+              },
+              "rtk._do_ar": {
+                "recorded_epochs": 200,
+                "p50_wall_ns": 209440950.0,
+                "p95_nearest_rank_wall_ns": 298898900,
+                "min_wall_ns": 119581700,
+                "max_wall_ns": 359912800,
+                "largest_five": [
+                  {
+                    "epoch": 215,
+                    "wall_ns": 359912800
+                  },
+                  {
+                    "epoch": 390,
+                    "wall_ns": 322657600
+                  },
+                  {
+                    "epoch": 275,
+                    "wall_ns": 314566900
+                  },
+                  {
+                    "epoch": 271,
+                    "wall_ns": 310531000
+                  },
+                  {
+                    "epoch": 290,
+                    "wall_ns": 309850200
+                  }
+                ]
+              },
+              "rtk._process_phase2": {
+                "recorded_epochs": 200,
+                "p50_wall_ns": 248098150.0,
+                "p95_nearest_rank_wall_ns": 340056000,
+                "min_wall_ns": 152002100,
+                "max_wall_ns": 407140100,
+                "largest_five": [
+                  {
+                    "epoch": 390,
+                    "wall_ns": 407140100
+                  },
+                  {
+                    "epoch": 215,
+                    "wall_ns": 403068600
+                  },
+                  {
+                    "epoch": 216,
+                    "wall_ns": 381539100
+                  },
+                  {
+                    "epoch": 271,
+                    "wall_ns": 368878500
+                  },
+                  {
+                    "epoch": 356,
+                    "wall_ns": 356616200
+                  }
+                ]
+              },
+              "diagnostic_snapshot": {
+                "recorded_epochs": 200,
+                "p50_wall_ns": 154690150.0,
+                "p95_nearest_rank_wall_ns": 216922200,
+                "min_wall_ns": 108561300,
+                "max_wall_ns": 271677500,
+                "largest_five": [
+                  {
+                    "epoch": 215,
+                    "wall_ns": 271677500
+                  },
+                  {
+                    "epoch": 211,
+                    "wall_ns": 239908800
+                  },
+                  {
+                    "epoch": 373,
+                    "wall_ns": 234438800
+                  },
+                  {
+                    "epoch": 281,
+                    "wall_ns": 232741400
+                  },
+                  {
+                    "epoch": 347,
+                    "wall_ns": 231140300
+                  }
+                ]
+              }
+            },
+            "selected_GTSAM_exclusive_wall_percent": 6.114928405066273,
+            "note": "Subtracting the explicit snapshot span is arithmetic on this instrumented run,not recovery of an uninstrumented runtime. Exclusive rows partition the remaining duration;all epochs including startup/outliers retained. Selected GTSAM spans are incomplete,especially inherited phase1/base and model callbacks."
+          }
+        },
+        "paired_PF_steps": 200,
+        "all_saved_state_trajectory_cfg_metadata_equal": true,
+        "detailed_function_profiler_enabled": false
+      }
+    },
+    "detailed_profiler_consistency_failures": {
+      "r3_seed0_callprofile_cpu_c0": {
+        "expected_PF_calls": 200,
+        "observed_cProfile_root": {
+          "code": {
+            "file": "benchmarks/rbpf_feedback_mass.py",
+            "line": 156,
+            "function": "__call__"
+          },
+          "calls": 181,
+          "recursive_calls": 176,
+          "self_seconds": 0.0012833,
+          "cumulative_seconds": 1.5188993000000002
+        },
+        "root_count_consistent": false,
+        "recursive_timing_anomalies": [
+          {
+            "code": {
+              "file": "experiments/rbpf_fgo/gtsam_rtk_standalone.py",
+              "line": 3966,
+              "function": "error_fn"
+            },
+            "calls": 15,
+            "recursive_calls": 15,
+            "self_seconds": 0.8746092000000001,
+            "cumulative_seconds": 0.0
+          },
+          {
+            "code": {
+              "file": "benchmarks/rbpf_feedback_mass.py",
+              "line": 1201,
+              "function": "_feedback"
+            },
+            "calls": 178,
+            "recursive_calls": 176,
+            "self_seconds": 0.031752,
+            "cumulative_seconds": 0.0016853
+          },
+          {
+            "code": {
+              "file": "benchmarks/rbpf_call_profile.py",
+              "line": 126,
+              "function": "wrap"
+            },
+            "calls": 13,
+            "recursive_calls": 13,
+            "self_seconds": 0.00016790000000000002,
+            "cumulative_seconds": 0.0
+          }
+        ],
+        "detailed_tree_accepted": false,
+        "independently_checked_move_call_counts": [
+          {
+            "code": {
+              "file": "benchmarks/rbpf_move_batch.py",
+              "line": 101,
+              "function": "_moves"
+            },
+            "calls": 197,
+            "independent_metadata_equal": true
+          },
+          {
+            "code": {
+              "file": "benchmarks/rbpf_move_batch.py",
+              "line": 121,
+              "function": "add"
+            },
+            "calls": 206522,
+            "independent_metadata_equal": true
+          },
+          {
+            "code": {
+              "file": "benchmarks/rbpf_epoch_memo.py",
+              "line": 26,
+              "function": "canonical"
+            },
+            "calls": 206522,
+            "independent_metadata_equal": true
+          }
+        ]
+      },
+      "r3_seed0_callprofile_cpu_c1": {
+        "expected_PF_calls": 200,
+        "observed_cProfile_root": {
+          "code": {
+            "file": "benchmarks/rbpf_feedback_mass.py",
+            "line": 156,
+            "function": "__call__"
+          },
+          "calls": 181,
+          "recursive_calls": 176,
+          "self_seconds": 0.0012125,
+          "cumulative_seconds": 0.11821690000000001
+        },
+        "root_count_consistent": false,
+        "recursive_timing_anomalies": [
+          {
+            "code": {
+              "file": "experiments/rbpf_fgo/gtsam_rtk_standalone.py",
+              "line": 3966,
+              "function": "error_fn"
+            },
+            "calls": 15,
+            "recursive_calls": 15,
+            "self_seconds": 0.8324086,
+            "cumulative_seconds": 0.0
+          },
+          {
+            "code": {
+              "file": "benchmarks/rbpf_component_mass.py",
+              "line": 1425,
+              "function": "_component_mass_step"
+            },
+            "calls": 181,
+            "recursive_calls": 176,
+            "self_seconds": 0.1424946,
+            "cumulative_seconds": 0.11755850000000001
+          },
+          {
+            "code": {
+              "file": "benchmarks/rbpf_feedback_mass.py",
+              "line": 1201,
+              "function": "_feedback"
+            },
+            "calls": 178,
+            "recursive_calls": 176,
+            "self_seconds": 0.0293932,
+            "cumulative_seconds": 0.0015197000000000001
+          },
+          {
+            "code": {
+              "file": "benchmarks/rbpf_call_profile.py",
+              "line": 126,
+              "function": "wrap"
+            },
+            "calls": 11,
+            "recursive_calls": 11,
+            "self_seconds": 9.15e-05,
+            "cumulative_seconds": 0.0
+          }
+        ],
+        "detailed_tree_accepted": false,
+        "independently_checked_move_call_counts": [
+          {
+            "code": {
+              "file": "benchmarks/rbpf_move_batch.py",
+              "line": 101,
+              "function": "_moves"
+            },
+            "calls": 197,
+            "independent_metadata_equal": true
+          },
+          {
+            "code": {
+              "file": "benchmarks/rbpf_move_batch.py",
+              "line": 121,
+              "function": "add"
+            },
+            "calls": 206341,
+            "independent_metadata_equal": true
+          },
+          {
+            "code": {
+              "file": "benchmarks/rbpf_epoch_memo.py",
+              "line": 26,
+              "function": "canonical"
+            },
+            "calls": 206341,
+            "independent_metadata_equal": true
+          }
+        ]
+      }
+    },
+    "calibration": {
+      "call": {
+        "timed_PF_calls": 135,
+        "warm_snapshots": 9,
+        "conditions": {
+          "particles64/initial_unique6/rows64/groups4": {
+            "condition": {
+              "particles": 64,
+              "initial_unique": 6,
+              "rows": 64,
+              "groups": 4
+            },
+            "summary": {
+              "profiled": {
+                "p50_ms": 28.7099,
+                "round_slowdown_percent": [
+                  115.00466204150008,
+                  121.41441454195396,
+                  199.76586724039743,
+                  61.25929137370958,
+                  118.51846686007588
+                ],
+                "paired_slowdown_percent": 118.51846686007588
+              },
+              "AA": {
+                "p50_ms": 13.1277,
+                "round_slowdown_percent": [
+                  -6.437568152725315,
+                  7.737435252453384,
+                  36.860665121122004,
+                  -0.7669522902782111,
+                  -3.629909618388749
+                ],
+                "paired_slowdown_percent": -0.7669522902782111
+              },
+              "reference_p50_ms": 14.3392,
+              "AA_control_passed": true,
+              "PF_profile_overhead_within_5_percent": false
+            },
+            "warm_bits_equal": true,
+            "all_timed_state_hashes_equal": true,
+            "cProfile_root_count_check": {
+              "expected_PF_calls": 16,
+              "observed_PF_calls": 16,
+              "recursive_calls": 0,
+              "consistent": true
+            }
+          },
+          "particles64/initial_unique32/rows64/groups4": {
+            "condition": {
+              "particles": 64,
+              "initial_unique": 32,
+              "rows": 64,
+              "groups": 4
+            },
+            "summary": {
+              "profiled": {
+                "p50_ms": 79.3941,
+                "round_slowdown_percent": [
+                  236.3074776855638,
+                  121.52434942273133,
+                  138.98163850679398,
+                  93.63183499868907,
+                  48.44818224876681
+                ],
+                "paired_slowdown_percent": 121.52434942273133
+              },
+              "AA": {
+                "p50_ms": 28.3804,
+                "round_slowdown_percent": [
+                  -11.44729532743851,
+                  3.3711880247233594,
+                  1.275606688304265,
+                  0.18702299019515145,
+                  -15.443816558296286
+                ],
+                "paired_slowdown_percent": 0.18702299019515145
+              },
+              "reference_p50_ms": 27.4616,
+              "AA_control_passed": true,
+              "PF_profile_overhead_within_5_percent": false
+            },
+            "warm_bits_equal": true,
+            "all_timed_state_hashes_equal": true,
+            "cProfile_root_count_check": {
+              "expected_PF_calls": 16,
+              "observed_PF_calls": 16,
+              "recursive_calls": 0,
+              "consistent": true
+            }
+          },
+          "particles128/initial_unique128/rows128/groups8": {
+            "condition": {
+              "particles": 128,
+              "initial_unique": 128,
+              "rows": 128,
+              "groups": 8
+            },
+            "summary": {
+              "profiled": {
+                "p50_ms": 988.0056,
+                "round_slowdown_percent": [
+                  59.92663341091371,
+                  107.90456515625775,
+                  84.36697089592873,
+                  87.9081622542719,
+                  115.03337943723015
+                ],
+                "paired_slowdown_percent": 87.9081622542719
+              },
+              "AA": {
+                "p50_ms": 511.6984,
+                "round_slowdown_percent": [
+                  -6.007329697354635,
+                  4.1635380013229195,
+                  12.43522134775148,
+                  5.13297310627161,
+                  0.2854230707354688
+                ],
+                "paired_slowdown_percent": 4.1635380013229195
+              },
+              "reference_p50_ms": 517.5702,
+              "AA_control_passed": true,
+              "PF_profile_overhead_within_5_percent": false
+            },
+            "warm_bits_equal": true,
+            "all_timed_state_hashes_equal": true,
+            "cProfile_root_count_check": {
+              "expected_PF_calls": 16,
+              "observed_PF_calls": 16,
+              "recursive_calls": 0,
+              "consistent": true
+            }
+          }
+        },
+        "AA_failed_conditions": 0,
+        "PF_overhead_failed_conditions": 3,
+        "raw_sha256": "22084e77a367bb7d79f62459583ce84f2a4a386b83fb8220c4e14980e6bdf1e7",
+        "plan_sha256": "204c1035c02092d5c46998214ea5e6def7d9ce1187404d852f5bbcd1401d7c23",
+        "snapshots_sha256": "a38ecd74961ffc4864e25dd9225ee1e2e93a98c203ed26dda68fdd92b3bee31d",
+        "scope": "Entire synthetic D236 step versus deterministic-call-profiled D236. Same math/state;calibrate PF profiler overhead only. Actual RTK subclass/C-call forwarding adapters and snapshot span are not calibrated here. Includes cProfile enable/disable and PF root span/record creation;export/getstats/restore/callback binding/hash/validation outside timer. One allowed CPU/one BLAS thread,normal priority,nonexclusive host/GPU.",
+        "not_an_optimization_speed_gate": true
+      },
+      "process": {
+        "timed_PF_calls": 135,
+        "warm_snapshots": 9,
+        "conditions": {
+          "particles64/initial_unique6/rows64/groups4": {
+            "condition": {
+              "particles": 64,
+              "initial_unique": 6,
+              "rows": 64,
+              "groups": 4
+            },
+            "summary": {
+              "profiled": {
+                "p50_ms": 14.1009,
+                "round_slowdown_percent": [
+                  7.225058266598916,
+                  6.165162893395082,
+                  8.94711291128969,
+                  -14.220442623459661,
+                  -8.19527435055658
+                ],
+                "paired_slowdown_percent": 6.165162893395082
+              },
+              "AA": {
+                "p50_ms": 15.4127,
+                "round_slowdown_percent": [
+                  13.566782254200538,
+                  -2.094826896937718,
+                  1.657838867916328,
+                  -2.720384402143783,
+                  -2.4161644896844803
+                ],
+                "paired_slowdown_percent": -2.094826896937718
+              },
+              "reference_p50_ms": 15.7481,
+              "AA_control_passed": true,
+              "PF_profile_overhead_within_5_percent": false
+            },
+            "warm_bits_equal": true,
+            "all_timed_state_hashes_equal": true,
+            "cProfile_root_count_check": null
+          },
+          "particles64/initial_unique32/rows64/groups4": {
+            "condition": {
+              "particles": 64,
+              "initial_unique": 32,
+              "rows": 64,
+              "groups": 4
+            },
+            "summary": {
+              "profiled": {
+                "p50_ms": 27.4143,
+                "round_slowdown_percent": [
+                  -1.294778012339004,
+                  3.4938006294925383,
+                  16.924950285148597,
+                  -3.148956650280177,
+                  8.410200168501781
+                ],
+                "paired_slowdown_percent": 3.4938006294925383
+              },
+              "AA": {
+                "p50_ms": 29.3666,
+                "round_slowdown_percent": [
+                  3.6028541699268724,
+                  0.1626384084057131,
+                  5.051843423684654,
+                  5.989640460404089,
+                  -1.7231486592487077
+                ],
+                "paired_slowdown_percent": 3.6028541699268724
+              },
+              "reference_p50_ms": 27.5368,
+              "AA_control_passed": true,
+              "PF_profile_overhead_within_5_percent": true
+            },
+            "warm_bits_equal": true,
+            "all_timed_state_hashes_equal": true,
+            "cProfile_root_count_check": null
+          },
+          "particles128/initial_unique128/rows128/groups8": {
+            "condition": {
+              "particles": 128,
+              "initial_unique": 128,
+              "rows": 128,
+              "groups": 8
+            },
+            "summary": {
+              "profiled": {
+                "p50_ms": 643.3202,
+                "round_slowdown_percent": [
+                  2.8097112325762286,
+                  -3.928719571641748,
+                  3.4641634904396312,
+                  21.28012155987504,
+                  -2.927285018120074
+                ],
+                "paired_slowdown_percent": 2.8097112325762286
+              },
+              "AA": {
+                "p50_ms": 541.7044,
+                "round_slowdown_percent": [
+                  2.4893177737475014,
+                  -0.4184930533398745,
+                  -18.487611468159116,
+                  -0.09330327042762487,
+                  -5.355099239667438
+                ],
+                "paired_slowdown_percent": -0.4184930533398745
+              },
+              "reference_p50_ms": 648.4939,
+              "AA_control_passed": true,
+              "PF_profile_overhead_within_5_percent": true
+            },
+            "warm_bits_equal": true,
+            "all_timed_state_hashes_equal": true,
+            "cProfile_root_count_check": null
+          }
+        },
+        "AA_failed_conditions": 0,
+        "PF_overhead_failed_conditions": 1,
+        "raw_sha256": "c039d4964e1fab27cb847ed2b8d0bbc8d2466e63ea3ff09ac0a83cc7a32a815c",
+        "plan_sha256": "3f02736e80f7b0be0b32434ed36dd4ed540f5532300bcda144aea3393a7bfb36",
+        "snapshots_sha256": "47062e6171d827509dc3c77296e07ce652db4066df491e471e58d9062bb831af",
+        "scope": "Entire synthetic D236 step versus coarse-span-profiled D236. Same math/state;calibrate PF profiler overhead only. Actual RTK subclass/C-call forwarding adapters and snapshot span are not calibrated here. Includes PF root span/record creation;restore/callback binding/hash/validation outside timer. One allowed CPU/one BLAS thread,normal priority,nonexclusive host/GPU.",
+        "not_an_optimization_speed_gate": true
+      }
+    },
+    "profiled_RTK_epochs": 1600,
+    "real_paired_PF_steps": 800,
+    "all_saved_state_trajectory_cfg_metadata_equal": true,
+    "detailed_function_profile_tree_accepted": false,
+    "diagnostic_only": true,
+    "accepted_optimizations": 0,
+    "product_or_default_changes": false,
+    "no_optimization_timing_retry": true,
+    "source_audits_sha256": {
+      "dist/rbpf_call_profile_field_audit_20261016.json": "1d1e2e055e4f6f6ee1729b97c3bc8ba6182ec66a2f44c13e7bd0f6c7c0ccd37b",
+      "dist/rbpf_process_profile_field_audit_20261016.json": "b66f1433f63a1b485dc7af6fc296f031fb8100a6c71a9898c46ae77ea56cfc5d",
+      "dist/rbpf_call_profile_overhead_audit_20261016.json": "cbfabf3fd7437c63e09bd754c0bf60d28d5949d1a64f1fc2d4acf7f2c874efe4"
+    },
+    "next_targets": [
+      "Inspect actual phase2 unclassified work around prepare_double_difference_measurements,build_pim and motion factors with coarse boundaries before rewriting equations or moving GTSAM wholesale to GPU.",
+      "Treat candidate construction/canonical validation as a remaining PF candidate;cross-check only independently verified call counts,and require a complete-PF speed gate for any implementation. Prior D239/D240/D241/D244 negative results remain.",
+      "Separate startup outliers from steady per-epoch latency descriptively without excluding them from totals. Do not infer an AR steady-state bottleneck from startup-dominated totals."
+    ],
+    "limits": [
+      "One route/seed prefixes,native_cpu only;not new GPU actual coverage/fullroute/multiseed accuracy or a speed acceptance.",
+      "Detailed cProfile actual root counts181/expected200,recursive176,and timing anomalies observed in both configurations. Cause not identified;do not trust full call tree or self/cumulative time shares. Synthetic counts16 are consistent but do not repair actual failures.",
+      "No timing/allocation/cycle causality claim. PF-only overhead calibration does not cover actual RTK/GTSAM forwarding;wall scheduling and process-CPU quantization/other own threads remain.",
+      "Coarse span removal of diagnostic serialization does not remove its cache/scheduling effects. Selected GTSAM expressions do not cover every native call."
+    ]
+  },
+  "detailed_field_audit": {
+    "timestamp_utc": "2026-10-16T12:05:40.438988+00:00",
+    "runner_sha256": "cb59ea8a8f2261a4294139e65d54c5ef08c0e5387462d64d5135d1bf56b15d6f",
+    "field_plan_sha256": "a809f441bfc57224db8d45a08b3bcf41aa504f56302169552107a3f2985573ec",
+    "field_run_sha256": "5a416c207fdc56f9ea7c21016466054104284c3e1bfc2a0895275e5f8ed07909",
+    "cases": {
+      "r3_seed0_callprofile_cpu_c0": {
+        "mode": "native_cpu",
+        "cluster_relin": 0,
+        "paired_steps": 200,
+        "all_saved_state_bits_equal": true,
+        "trajectory_all_array_bits_equal": true,
+        "trajectory": {
+          "ne": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "tow": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "week": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "sol_xyz": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400,
+              3
+            ]
+          },
+          "witness_xyz": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400,
+              3
+            ]
+          },
+          "witness_err3d": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "smode": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "err3d": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "nsat_dd": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "flt_err3d": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "flt_xyz": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400,
+              3
+            ]
+          },
+          "map_err3d": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "ar_ratio": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "ar_raw_nb": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "ar_phase": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "gamma": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "second_gamma": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "gamma_pair": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_nb": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_nbasins": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_ess": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_ok": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_npairs": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_nheld": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_spawn": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "base_xyz": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3
+            ]
+          },
+          "rb_n": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "rb_k": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "rb_beta": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": []
+          },
+          "rb_gamma": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": []
+          },
+          "rb_min_nb": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "rb_seed": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "rb_ddpr_dpos": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_ddpr_qual": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_fix_dpr": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_min_info": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_rep_dpr": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_witness_chi": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_loo_max_m": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_loo_med_m": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_loo_n": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_delay_5s_m": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_delay_20s_m": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_delay_corr_cos": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_delay_cross_cos": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_delayed_rejuv_trigger": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_shadow_promote": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_shadow_n": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "ckpt_phase2_valid": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "ckpt_pose_R": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3,
+              3
+            ]
+          },
+          "ckpt_pose_t": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3
+            ]
+          },
+          "ckpt_vel_enu": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3
+            ]
+          },
+          "ckpt_bias_acc": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3
+            ]
+          },
+          "ckpt_bias_gyro": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3
+            ]
+          },
+          "ckpt_imu_idx": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "ckpt_week": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "ckpt_tow": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": []
+          }
+        },
+        "all_cfg_and_prior_metadata_equal": true,
+        "aliases_restored": true,
+        "records": {
+          "D236": {
+            "record_sha256": "60a5fa7cb6e62db3c7ae1c0d8aebde2936ea658d38e04f1e5be152ae386bac5a",
+            "plan_sha256": "3439d7aa2da3794556d99e40d15110dd106b138c98badc868d24877f062bd3ea",
+            "snapshots_sha256": "31770a2799ca5248e4f3dd83da8a3bc75035cfab21634c79de495a55c436f925",
+            "calls": 200,
+            "frozen_accuracy_only": true
+          },
+          "profiled": {
+            "record_sha256": "03d635cf58edf0880d2ef0dc592251ff25998aed18de8b209e93b152399ef86e",
+            "plan_sha256": "3439d7aa2da3794556d99e40d15110dd106b138c98badc868d24877f062bd3ea",
+            "snapshots_sha256": "f2b19c7553c4913ba117c39aa24da050d4fb9b30f45d0e683d024e8f53342ea7",
+            "calls": 200,
+            "frozen_accuracy_only": false
+          }
+        },
+        "configs": [
+          {
+            "n_particles": 64,
+            "topk": 12,
+            "beta": 0.5,
+            "gamma_fix": 0.99,
+            "min_fix_nb": 5,
+            "ess_frac": 0.5,
+            "maxout": 5,
+            "seed": 20260710,
+            "p_survive": 0.62,
+            "p_extend": 0.12,
+            "p_adopt_cons": 0.12,
+            "p_adopt": 0.08,
+            "p_shrink": 0.04,
+            "p_release": 0.02,
+            "huber_c": 3.0,
+            "mix_eps": 0.1,
+            "mix_sigma_cp": 0.05,
+            "mix_sigma_pr": 10.0,
+            "sig_cp_floor": 0.008,
+            "sig_group": 0.02,
+            "sig_pos_floor": 1.0,
+            "p_burst": 0.1,
+            "marg_uniform": 1,
+            "qb_jitter": 1e-08,
+            "fb_enable": 1,
+            "fb_m": 3,
+            "fb_gamma": 0.99,
+            "fb_rel_mass": 0.5,
+            "fb_rel_m": 3,
+            "fb_min_nb": 5,
+            "spawn_enable": 1,
+            "spawn_outage": 15,
+            "spawn_epochs": 25,
+            "spawn_sig_pos": 30.0,
+            "spawn_min_cp": 5,
+            "p_spawn": 0.12,
+            "spawn_gap_s": 2.0,
+            "spawn_after": 25,
+            "spawn_min_dpos": 2.0,
+            "fix_max_dpr": 5.0,
+            "use_cuda": 0,
+            "fix_min_info": 0.0,
+            "fb_commit_max_dpr": 1.5,
+            "fb_ddpr_rel_d": 0.0,
+            "fb_ddpr_rel_m": 5,
+            "ddpr_qual_max": 1.0,
+            "chal_d": 0.0,
+            "chal_m": 3,
+            "fix_vote_dd": 6.0,
+            "fix_vote_dpr": 3.5,
+            "cluster_relin": 0,
+            "cluster_relin_top": 2,
+            "cluster_parent_min": 3,
+            "cluster_parent_frac": 0.8,
+            "cluster_sig_floor": 0.5,
+            "fb_support_min": 0,
+            "fb_support_m": 3,
+            "fb_dual_enable": 0,
+            "fb_dual_min": 12,
+            "fb_witness_pos": 0,
+            "fb_witness_chi": 3.0,
+            "fb_witness_sig_floor": 0.25,
+            "loo_enable": 0,
+            "delayed_enable": 0,
+            "delayed_short": 25,
+            "delayed_long": 100,
+            "delayed_rejuv_epochs": 0,
+            "delayed_rejuv_thresh": 0.5,
+            "delayed_rejuv_edge": 0,
+            "delayed_rejuv_reset": 0.4,
+            "delayed_rejuv_cooldown": 100,
+            "delayed_rejuv_qual_max": 0.0,
+            "shadow_epochs": 0,
+            "shadow_margin": 0.0
+          }
+        ],
+        "totals": {
+          "skipped_steps": 3,
+          "valid_steps": 197,
+          "particles": 12608,
+          "held_particles": 12504,
+          "extend_calls": 2110,
+          "shrink_calls": 2110,
+          "requested_moves": 206522,
+          "unique_moves": 4363,
+          "existing_cache_hits": 197,
+          "native_canonical_native_calls": 50268,
+          "native_canonical_fallback_calls": 0,
+          "parent_score_native_calls": 0,
+          "parent_score_fallback_calls": 0,
+          "component_mass_native_calls": 196,
+          "component_mass_fallback_calls": 0,
+          "component_mass_native_particles": 12544,
+          "component_mass_native_pairs": 7906,
+          "feedback_mass_native_calls": 197,
+          "feedback_mass_fallback_calls": 0,
+          "feedback_mass_native_particles": 12608,
+          "feedback_mass_native_pairs": 7933,
+          "feedback_mass_held_targets": 4814,
+          "scalar_fallbacks": 0
+        },
+        "profiled_RTK_epochs": 400,
+        "profiled_PF_steps": 200,
+        "diagnostic_snapshots": 200,
+        "exact_integer_wall_and_CPU_partitions": true,
+        "phases": {
+          "1": {
+            "epochs": 200,
+            "spans": {
+              "rtk._build_dd_factors": {
+                "calls": 200,
+                "wall_ns": 354171100,
+                "cpu_ns": 328125000,
+                "exclusive_wall_ns": 354171100,
+                "exclusive_cpu_ns": 328125000
+              },
+              "rtk._apply_fde": {
+                "calls": 200,
+                "wall_ns": 75314400,
+                "cpu_ns": 31250000,
+                "exclusive_wall_ns": 75314400,
+                "exclusive_cpu_ns": 31250000
+              },
+              "gtsam.Marginals": {
+                "calls": 200,
+                "wall_ns": 196037300,
+                "cpu_ns": 156250000,
+                "exclusive_wall_ns": 196037300,
+                "exclusive_cpu_ns": 156250000
+              },
+              "gtsam.jointMarginalCovariance": {
+                "calls": 200,
+                "wall_ns": 183755200,
+                "cpu_ns": 218750000,
+                "exclusive_wall_ns": 183755200,
+                "exclusive_cpu_ns": 218750000
+              },
+              "rtk._write_back": {
+                "calls": 200,
+                "wall_ns": 1511395600,
+                "cpu_ns": 1406250000,
+                "exclusive_wall_ns": 1131603100,
+                "exclusive_cpu_ns": 1031250000
+              },
+              "rtk._do_ar": {
+                "calls": 200,
+                "wall_ns": 19515726800,
+                "cpu_ns": 19281250000,
+                "exclusive_wall_ns": 19513217400,
+                "exclusive_cpu_ns": 19281250000
+              },
+              "rtk.process": {
+                "calls": 200,
+                "wall_ns": 29659320300,
+                "cpu_ns": 29093750000,
+                "exclusive_wall_ns": 8202135200,
+                "exclusive_cpu_ns": 8046875000
+              },
+              "gtsam.smoother.update": {
+                "calls": 1,
+                "wall_ns": 991700,
+                "cpu_ns": 0,
+                "exclusive_wall_ns": 991700,
+                "exclusive_cpu_ns": 0
+              },
+              "rtk._inject_hold": {
+                "calls": 199,
+                "wall_ns": 2509400,
+                "cpu_ns": 0,
+                "exclusive_wall_ns": 1517700,
+                "exclusive_cpu_ns": 0
+              },
+              "rtk._seed_phase2_graph": {
+                "calls": 1,
+                "wall_ns": 577200,
+                "cpu_ns": 0,
+                "exclusive_wall_ns": 577200,
+                "exclusive_cpu_ns": 0
+              }
+            }
+          },
+          "2": {
+            "epochs": 200,
+            "spans": {
+              "rtk._build_dd_factors_arm": {
+                "calls": 200,
+                "wall_ns": 412254600,
+                "cpu_ns": 453125000,
+                "exclusive_wall_ns": 412254600,
+                "exclusive_cpu_ns": 453125000
+              },
+              "gtsam.smoother.update": {
+                "calls": 219,
+                "wall_ns": 424069900,
+                "cpu_ns": 390625000,
+                "exclusive_wall_ns": 424069900,
+                "exclusive_cpu_ns": 390625000
+              },
+              "gtsam.smoother.calculateEstimate": {
+                "calls": 200,
+                "wall_ns": 9491700,
+                "cpu_ns": 31250000,
+                "exclusive_wall_ns": 9491700,
+                "exclusive_cpu_ns": 31250000
+              },
+              "rtk._apply_fde": {
+                "calls": 200,
+                "wall_ns": 141388000,
+                "cpu_ns": 78125000,
+                "exclusive_wall_ns": 141388000,
+                "exclusive_cpu_ns": 78125000
+              },
+              "gtsam.Marginals": {
+                "calls": 200,
+                "wall_ns": 226438400,
+                "cpu_ns": 187500000,
+                "exclusive_wall_ns": 226438400,
+                "exclusive_cpu_ns": 187500000
+              },
+              "gtsam.marginalCovariance": {
+                "calls": 114,
+                "wall_ns": 44181700,
+                "cpu_ns": 15625000,
+                "exclusive_wall_ns": 44181700,
+                "exclusive_cpu_ns": 15625000
+              },
+              "rtk._write_back_tc": {
+                "calls": 200,
+                "wall_ns": 633295800,
+                "cpu_ns": 625000000,
+                "exclusive_wall_ns": 331299100,
+                "exclusive_cpu_ns": 390625000
+              },
+              "pf": {
+                "calls": 200,
+                "wall_ns": 13688670300,
+                "cpu_ns": 13734375000,
+                "exclusive_wall_ns": 13656558400,
+                "exclusive_cpu_ns": 13656250000
+              },
+              "diagnostic_snapshot": {
+                "calls": 200,
+                "wall_ns": 20573592500,
+                "cpu_ns": 20390625000,
+                "exclusive_wall_ns": 20573592500,
+                "exclusive_cpu_ns": 20390625000
+              },
+              "rtk._do_ar": {
+                "calls": 200,
+                "wall_ns": 35524489500,
+                "cpu_ns": 35359375000,
+                "exclusive_wall_ns": 1261050900,
+                "exclusive_cpu_ns": 1234375000
+              },
+              "rtk._process_phase2": {
+                "calls": 200,
+                "wall_ns": 40110911900,
+                "cpu_ns": 39890625000,
+                "exclusive_wall_ns": 2970019400,
+                "exclusive_cpu_ns": 3000000000
+              },
+              "rtk.process": {
+                "calls": 200,
+                "wall_ns": 40115210100,
+                "cpu_ns": 39906250000,
+                "exclusive_wall_ns": 4298200,
+                "exclusive_cpu_ns": 15625000
+              },
+              "gtsam.jointMarginalCovariance": {
+                "calls": 86,
+                "wall_ns": 31376600,
+                "cpu_ns": 31250000,
+                "exclusive_wall_ns": 31376600,
+                "exclusive_cpu_ns": 31250000
+              },
+              "rtk._inject_hold": {
+                "calls": 212,
+                "wall_ns": 28506400,
+                "cpu_ns": 78125000,
+                "exclusive_wall_ns": 3216100,
+                "exclusive_cpu_ns": 0
+              },
+              "rtk._release_ambiguity": {
+                "calls": 81,
+                "wall_ns": 25974600,
+                "cpu_ns": 31250000,
+                "exclusive_wall_ns": 25974600,
+                "exclusive_cpu_ns": 31250000
+              }
+            }
+          }
+        },
+        "profiles_sha256": "e9f608d4be86e6b7c059ac228b11ca6235298279f714ec30af76ab4325122551",
+        "pstats_sha256": "b5f46140e969ed6c10ab15fb3d635c10e5f409063bb2634a5fabb3ccaae5cb23",
+        "cProfile_root_observed": {
+          "code": {
+            "file": "benchmarks/rbpf_feedback_mass.py",
+            "line": 156,
+            "function": "__call__"
+          },
+          "calls": 181,
+          "recursive_calls": 176,
+          "self_seconds": 0.0012833,
+          "cumulative_seconds": 1.5188993000000002
+        },
+        "cProfile_root_count_consistent": false,
+        "cProfile_recursive_timing_anomalies": [
+          {
+            "code": {
+              "file": "experiments/rbpf_fgo/gtsam_rtk_standalone.py",
+              "line": 3966,
+              "function": "error_fn"
+            },
+            "calls": 15,
+            "recursive_calls": 15,
+            "self_seconds": 0.8746092000000001,
+            "cumulative_seconds": 0.0
+          },
+          {
+            "code": {
+              "file": "benchmarks/rbpf_feedback_mass.py",
+              "line": 1201,
+              "function": "_feedback"
+            },
+            "calls": 178,
+            "recursive_calls": 176,
+            "self_seconds": 0.031752,
+            "cumulative_seconds": 0.0016853
+          },
+          {
+            "code": {
+              "file": "benchmarks/rbpf_call_profile.py",
+              "line": 126,
+              "function": "wrap"
+            },
+            "calls": 13,
+            "recursive_calls": 13,
+            "self_seconds": 0.00016790000000000002,
+            "cumulative_seconds": 0.0
+          }
+        ],
+        "cProfile_detailed_tree_accepted": false,
+        "independently_checked_move_call_counts": [
+          {
+            "code": {
+              "file": "benchmarks/rbpf_move_batch.py",
+              "line": 101,
+              "function": "_moves"
+            },
+            "calls": 197,
+            "independent_metadata_equal": true
+          },
+          {
+            "code": {
+              "file": "benchmarks/rbpf_move_batch.py",
+              "line": 121,
+              "function": "add"
+            },
+            "calls": 206522,
+            "independent_metadata_equal": true
+          },
+          {
+            "code": {
+              "file": "benchmarks/rbpf_epoch_memo.py",
+              "line": 26,
+              "function": "canonical"
+            },
+            "calls": 206522,
+            "independent_metadata_equal": true
+          }
+        ],
+        "method_AST_proofs": [
+          {
+            "method": "GtsamRtkTc.process",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtkTc._process_phase2",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [
+              "self.smoother.update",
+              "self.smoother.calculateEstimate",
+              "self.isam.update",
+              "self.isam.update",
+              "self.isam.calculateEstimate"
+            ],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtk._build_dd_factors",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "RbpfGtsamRtkTc._build_dd_factors_arm",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\rbpf_fgo.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtk._write_back",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [
+              "gtsam.Marginals",
+              "gtsam.Marginals",
+              "mg.jointMarginalCovariance",
+              "mg.marginalCovariance"
+            ],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtkTc._write_back_tc",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [
+              "gtsam.Marginals",
+              "gtsam.Marginals",
+              "mg.jointMarginalCovariance",
+              "mg.marginalCovariance"
+            ],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtk._apply_fde",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [
+              "self.smoother.update",
+              "self.smoother.calculateEstimate",
+              "self.isam.update",
+              "self.isam.update",
+              "self.isam.calculateEstimate"
+            ],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtkTc._tc_literal_postfit_quality",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtkTc._tc_literal_postprocess",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "RbpfGtsamRtkTc._do_ar",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\rbpf_fgo.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "RbpfGtsamRtkTc._seed_phase2_graph",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\rbpf_fgo.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtk._inject_hold",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [
+              "self.smoother.update",
+              "self.isam.update"
+            ],
+            "coarse_only": false
+          },
+          {
+            "method": "RbpfGtsamRtkTc._release_ambiguity",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\rbpf_fgo.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          }
+        ],
+        "accuracy_reference": "dist/rbpf_feedback_mass_field_20261016/r3_seed0_feedback_cpu_c0"
+      },
+      "r3_seed0_callprofile_cpu_c1": {
+        "mode": "native_cpu",
+        "cluster_relin": 1,
+        "paired_steps": 200,
+        "all_saved_state_bits_equal": true,
+        "trajectory_all_array_bits_equal": true,
+        "trajectory": {
+          "ne": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "tow": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "week": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "sol_xyz": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400,
+              3
+            ]
+          },
+          "witness_xyz": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400,
+              3
+            ]
+          },
+          "witness_err3d": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "smode": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "err3d": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "nsat_dd": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "flt_err3d": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "flt_xyz": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400,
+              3
+            ]
+          },
+          "map_err3d": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "ar_ratio": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "ar_raw_nb": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "ar_phase": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "gamma": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "second_gamma": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "gamma_pair": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_nb": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_nbasins": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_ess": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_ok": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_npairs": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_nheld": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_spawn": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "base_xyz": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3
+            ]
+          },
+          "rb_n": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "rb_k": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "rb_beta": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": []
+          },
+          "rb_gamma": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": []
+          },
+          "rb_min_nb": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "rb_seed": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "rb_ddpr_dpos": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_ddpr_qual": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_fix_dpr": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_min_info": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_rep_dpr": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_witness_chi": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_loo_max_m": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_loo_med_m": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_loo_n": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_delay_5s_m": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_delay_20s_m": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_delay_corr_cos": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_delay_cross_cos": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_delayed_rejuv_trigger": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_shadow_promote": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_shadow_n": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "ckpt_phase2_valid": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "ckpt_pose_R": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3,
+              3
+            ]
+          },
+          "ckpt_pose_t": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3
+            ]
+          },
+          "ckpt_vel_enu": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3
+            ]
+          },
+          "ckpt_bias_acc": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3
+            ]
+          },
+          "ckpt_bias_gyro": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3
+            ]
+          },
+          "ckpt_imu_idx": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "ckpt_week": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "ckpt_tow": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": []
+          }
+        },
+        "all_cfg_and_prior_metadata_equal": true,
+        "aliases_restored": true,
+        "records": {
+          "D236": {
+            "record_sha256": "8cc4db4e16ff0aaf8f7ea6d67013ac82b5623d40588341d748ce35ca409926de",
+            "plan_sha256": "3439d7aa2da3794556d99e40d15110dd106b138c98badc868d24877f062bd3ea",
+            "snapshots_sha256": "306891f7aff3dbd9014a688ef25b39c7201df1031572f141c9f185d0632f399b",
+            "calls": 200,
+            "frozen_accuracy_only": true
+          },
+          "profiled": {
+            "record_sha256": "d3d73dccfcc521abc8ed99e0e7291be950063c1c014340a0283edd44b0f38815",
+            "plan_sha256": "3439d7aa2da3794556d99e40d15110dd106b138c98badc868d24877f062bd3ea",
+            "snapshots_sha256": "6e6b7c8df6e7f85bc61cad5cecf7a681b9b03a5b1b35a7839839945d357cae1b",
+            "calls": 200,
+            "frozen_accuracy_only": false
+          }
+        },
+        "configs": [
+          {
+            "n_particles": 64,
+            "topk": 12,
+            "beta": 0.5,
+            "gamma_fix": 0.99,
+            "min_fix_nb": 5,
+            "ess_frac": 0.5,
+            "maxout": 5,
+            "seed": 20260710,
+            "p_survive": 0.62,
+            "p_extend": 0.12,
+            "p_adopt_cons": 0.12,
+            "p_adopt": 0.08,
+            "p_shrink": 0.04,
+            "p_release": 0.02,
+            "huber_c": 3.0,
+            "mix_eps": 0.1,
+            "mix_sigma_cp": 0.05,
+            "mix_sigma_pr": 10.0,
+            "sig_cp_floor": 0.008,
+            "sig_group": 0.02,
+            "sig_pos_floor": 1.0,
+            "p_burst": 0.1,
+            "marg_uniform": 1,
+            "qb_jitter": 1e-08,
+            "fb_enable": 1,
+            "fb_m": 3,
+            "fb_gamma": 0.99,
+            "fb_rel_mass": 0.5,
+            "fb_rel_m": 3,
+            "fb_min_nb": 5,
+            "spawn_enable": 1,
+            "spawn_outage": 15,
+            "spawn_epochs": 25,
+            "spawn_sig_pos": 30.0,
+            "spawn_min_cp": 5,
+            "p_spawn": 0.12,
+            "spawn_gap_s": 2.0,
+            "spawn_after": 25,
+            "spawn_min_dpos": 2.0,
+            "fix_max_dpr": 5.0,
+            "use_cuda": 0,
+            "fix_min_info": 0.0,
+            "fb_commit_max_dpr": 1.5,
+            "fb_ddpr_rel_d": 0.0,
+            "fb_ddpr_rel_m": 5,
+            "ddpr_qual_max": 1.0,
+            "chal_d": 0.0,
+            "chal_m": 3,
+            "fix_vote_dd": 6.0,
+            "fix_vote_dpr": 3.5,
+            "cluster_relin": 1,
+            "cluster_relin_top": 2,
+            "cluster_parent_min": 3,
+            "cluster_parent_frac": 0.8,
+            "cluster_sig_floor": 0.5,
+            "fb_support_min": 0,
+            "fb_support_m": 3,
+            "fb_dual_enable": 0,
+            "fb_dual_min": 12,
+            "fb_witness_pos": 0,
+            "fb_witness_chi": 3.0,
+            "fb_witness_sig_floor": 0.25,
+            "loo_enable": 0,
+            "delayed_enable": 0,
+            "delayed_short": 25,
+            "delayed_long": 100,
+            "delayed_rejuv_epochs": 0,
+            "delayed_rejuv_thresh": 0.5,
+            "delayed_rejuv_edge": 0,
+            "delayed_rejuv_reset": 0.4,
+            "delayed_rejuv_cooldown": 100,
+            "delayed_rejuv_qual_max": 0.0,
+            "shadow_epochs": 0,
+            "shadow_margin": 0.0
+          }
+        ],
+        "totals": {
+          "skipped_steps": 3,
+          "valid_steps": 197,
+          "particles": 12608,
+          "held_particles": 12508,
+          "extend_calls": 2007,
+          "shrink_calls": 2007,
+          "requested_moves": 206341,
+          "unique_moves": 4260,
+          "existing_cache_hits": 197,
+          "native_canonical_native_calls": 54915,
+          "native_canonical_fallback_calls": 0,
+          "parent_score_native_calls": 8382,
+          "parent_score_fallback_calls": 0,
+          "component_mass_native_calls": 196,
+          "component_mass_fallback_calls": 0,
+          "component_mass_native_particles": 12544,
+          "component_mass_native_pairs": 7816,
+          "feedback_mass_native_calls": 197,
+          "feedback_mass_fallback_calls": 0,
+          "feedback_mass_native_particles": 12608,
+          "feedback_mass_native_pairs": 7843,
+          "feedback_mass_held_targets": 4796,
+          "scalar_fallbacks": 0
+        },
+        "profiled_RTK_epochs": 400,
+        "profiled_PF_steps": 200,
+        "diagnostic_snapshots": 200,
+        "exact_integer_wall_and_CPU_partitions": true,
+        "phases": {
+          "1": {
+            "epochs": 200,
+            "spans": {
+              "rtk._build_dd_factors": {
+                "calls": 200,
+                "wall_ns": 288344600,
+                "cpu_ns": 265625000,
+                "exclusive_wall_ns": 288344600,
+                "exclusive_cpu_ns": 265625000
+              },
+              "rtk._apply_fde": {
+                "calls": 200,
+                "wall_ns": 61415500,
+                "cpu_ns": 62500000,
+                "exclusive_wall_ns": 61415500,
+                "exclusive_cpu_ns": 62500000
+              },
+              "gtsam.Marginals": {
+                "calls": 200,
+                "wall_ns": 169701200,
+                "cpu_ns": 203125000,
+                "exclusive_wall_ns": 169701200,
+                "exclusive_cpu_ns": 203125000
+              },
+              "gtsam.jointMarginalCovariance": {
+                "calls": 200,
+                "wall_ns": 155555100,
+                "cpu_ns": 203125000,
+                "exclusive_wall_ns": 155555100,
+                "exclusive_cpu_ns": 203125000
+              },
+              "rtk._write_back": {
+                "calls": 200,
+                "wall_ns": 1261824600,
+                "cpu_ns": 1328125000,
+                "exclusive_wall_ns": 936568300,
+                "exclusive_cpu_ns": 921875000
+              },
+              "rtk._do_ar": {
+                "calls": 200,
+                "wall_ns": 1697822300,
+                "cpu_ns": 1562500000,
+                "exclusive_wall_ns": 1695689400,
+                "exclusive_cpu_ns": 1562500000
+              },
+              "rtk.process": {
+                "calls": 200,
+                "wall_ns": 7104718400,
+                "cpu_ns": 6718750000,
+                "exclusive_wall_ns": 3794773900,
+                "exclusive_cpu_ns": 3500000000
+              },
+              "gtsam.smoother.update": {
+                "calls": 1,
+                "wall_ns": 814600,
+                "cpu_ns": 0,
+                "exclusive_wall_ns": 814600,
+                "exclusive_cpu_ns": 0
+              },
+              "rtk._inject_hold": {
+                "calls": 199,
+                "wall_ns": 2132900,
+                "cpu_ns": 0,
+                "exclusive_wall_ns": 1318300,
+                "exclusive_cpu_ns": 0
+              },
+              "rtk._seed_phase2_graph": {
+                "calls": 1,
+                "wall_ns": 537500,
+                "cpu_ns": 0,
+                "exclusive_wall_ns": 537500,
+                "exclusive_cpu_ns": 0
+              }
+            }
+          },
+          "2": {
+            "epochs": 200,
+            "spans": {
+              "rtk._build_dd_factors_arm": {
+                "calls": 200,
+                "wall_ns": 377234200,
+                "cpu_ns": 312500000,
+                "exclusive_wall_ns": 377234200,
+                "exclusive_cpu_ns": 312500000
+              },
+              "gtsam.smoother.update": {
+                "calls": 219,
+                "wall_ns": 412814900,
+                "cpu_ns": 500000000,
+                "exclusive_wall_ns": 412814900,
+                "exclusive_cpu_ns": 500000000
+              },
+              "gtsam.smoother.calculateEstimate": {
+                "calls": 200,
+                "wall_ns": 9285100,
+                "cpu_ns": 0,
+                "exclusive_wall_ns": 9285100,
+                "exclusive_cpu_ns": 0
+              },
+              "rtk._apply_fde": {
+                "calls": 200,
+                "wall_ns": 134679800,
+                "cpu_ns": 93750000,
+                "exclusive_wall_ns": 134679800,
+                "exclusive_cpu_ns": 93750000
+              },
+              "gtsam.Marginals": {
+                "calls": 200,
+                "wall_ns": 214894300,
+                "cpu_ns": 234375000,
+                "exclusive_wall_ns": 214894300,
+                "exclusive_cpu_ns": 234375000
+              },
+              "gtsam.marginalCovariance": {
+                "calls": 119,
+                "wall_ns": 45459200,
+                "cpu_ns": 31250000,
+                "exclusive_wall_ns": 45459200,
+                "exclusive_cpu_ns": 31250000
+              },
+              "rtk._write_back_tc": {
+                "calls": 200,
+                "wall_ns": 612828700,
+                "cpu_ns": 671875000,
+                "exclusive_wall_ns": 323366600,
+                "exclusive_cpu_ns": 375000000
+              },
+              "pf": {
+                "calls": 200,
+                "wall_ns": 11787622500,
+                "cpu_ns": 11656250000,
+                "exclusive_wall_ns": 11756703500,
+                "exclusive_cpu_ns": 11593750000
+              },
+              "diagnostic_snapshot": {
+                "calls": 200,
+                "wall_ns": 19759802600,
+                "cpu_ns": 19500000000,
+                "exclusive_wall_ns": 19759802600,
+                "exclusive_cpu_ns": 19500000000
+              },
+              "rtk._do_ar": {
+                "calls": 200,
+                "wall_ns": 32761943300,
+                "cpu_ns": 32453125000,
+                "exclusive_wall_ns": 1213438700,
+                "exclusive_cpu_ns": 1296875000
+              },
+              "rtk._process_phase2": {
+                "calls": 200,
+                "wall_ns": 37096251300,
+                "cpu_ns": 36828125000,
+                "exclusive_wall_ns": 2791193100,
+                "exclusive_cpu_ns": 2843750000
+              },
+              "rtk.process": {
+                "calls": 200,
+                "wall_ns": 37100274800,
+                "cpu_ns": 36828125000,
+                "exclusive_wall_ns": 4023500,
+                "exclusive_cpu_ns": 0
+              },
+              "gtsam.jointMarginalCovariance": {
+                "calls": 81,
+                "wall_ns": 29108600,
+                "cpu_ns": 31250000,
+                "exclusive_wall_ns": 29108600,
+                "exclusive_cpu_ns": 31250000
+              },
+              "rtk._inject_hold": {
+                "calls": 205,
+                "wall_ns": 29339800,
+                "cpu_ns": 46875000,
+                "exclusive_wall_ns": 3141000,
+                "exclusive_cpu_ns": 0
+              },
+              "rtk._release_ambiguity": {
+                "calls": 80,
+                "wall_ns": 25129700,
+                "cpu_ns": 15625000,
+                "exclusive_wall_ns": 25129700,
+                "exclusive_cpu_ns": 15625000
+              }
+            }
+          }
+        },
+        "profiles_sha256": "c3bb279800c7bd7d189a6f98c90764a2588c7d6890a5a1cd5d5a9319d4680db0",
+        "pstats_sha256": "636103857898f47161136b6516fa909f39f80a7ee226bc07861f5f55e865f7ce",
+        "cProfile_root_observed": {
+          "code": {
+            "file": "benchmarks/rbpf_feedback_mass.py",
+            "line": 156,
+            "function": "__call__"
+          },
+          "calls": 181,
+          "recursive_calls": 176,
+          "self_seconds": 0.0012125,
+          "cumulative_seconds": 0.11821690000000001
+        },
+        "cProfile_root_count_consistent": false,
+        "cProfile_recursive_timing_anomalies": [
+          {
+            "code": {
+              "file": "experiments/rbpf_fgo/gtsam_rtk_standalone.py",
+              "line": 3966,
+              "function": "error_fn"
+            },
+            "calls": 15,
+            "recursive_calls": 15,
+            "self_seconds": 0.8324086,
+            "cumulative_seconds": 0.0
+          },
+          {
+            "code": {
+              "file": "benchmarks/rbpf_component_mass.py",
+              "line": 1425,
+              "function": "_component_mass_step"
+            },
+            "calls": 181,
+            "recursive_calls": 176,
+            "self_seconds": 0.1424946,
+            "cumulative_seconds": 0.11755850000000001
+          },
+          {
+            "code": {
+              "file": "benchmarks/rbpf_feedback_mass.py",
+              "line": 1201,
+              "function": "_feedback"
+            },
+            "calls": 178,
+            "recursive_calls": 176,
+            "self_seconds": 0.0293932,
+            "cumulative_seconds": 0.0015197000000000001
+          },
+          {
+            "code": {
+              "file": "benchmarks/rbpf_call_profile.py",
+              "line": 126,
+              "function": "wrap"
+            },
+            "calls": 11,
+            "recursive_calls": 11,
+            "self_seconds": 9.15e-05,
+            "cumulative_seconds": 0.0
+          }
+        ],
+        "cProfile_detailed_tree_accepted": false,
+        "independently_checked_move_call_counts": [
+          {
+            "code": {
+              "file": "benchmarks/rbpf_move_batch.py",
+              "line": 101,
+              "function": "_moves"
+            },
+            "calls": 197,
+            "independent_metadata_equal": true
+          },
+          {
+            "code": {
+              "file": "benchmarks/rbpf_move_batch.py",
+              "line": 121,
+              "function": "add"
+            },
+            "calls": 206341,
+            "independent_metadata_equal": true
+          },
+          {
+            "code": {
+              "file": "benchmarks/rbpf_epoch_memo.py",
+              "line": 26,
+              "function": "canonical"
+            },
+            "calls": 206341,
+            "independent_metadata_equal": true
+          }
+        ],
+        "method_AST_proofs": [
+          {
+            "method": "GtsamRtkTc.process",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtkTc._process_phase2",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [
+              "self.smoother.update",
+              "self.smoother.calculateEstimate",
+              "self.isam.update",
+              "self.isam.update",
+              "self.isam.calculateEstimate"
+            ],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtk._build_dd_factors",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "RbpfGtsamRtkTc._build_dd_factors_arm",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\rbpf_fgo.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtk._write_back",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [
+              "gtsam.Marginals",
+              "gtsam.Marginals",
+              "mg.jointMarginalCovariance",
+              "mg.marginalCovariance"
+            ],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtkTc._write_back_tc",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [
+              "gtsam.Marginals",
+              "gtsam.Marginals",
+              "mg.jointMarginalCovariance",
+              "mg.marginalCovariance"
+            ],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtk._apply_fde",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [
+              "self.smoother.update",
+              "self.smoother.calculateEstimate",
+              "self.isam.update",
+              "self.isam.update",
+              "self.isam.calculateEstimate"
+            ],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtkTc._tc_literal_postfit_quality",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtkTc._tc_literal_postprocess",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "RbpfGtsamRtkTc._do_ar",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\rbpf_fgo.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "RbpfGtsamRtkTc._seed_phase2_graph",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\rbpf_fgo.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtk._inject_hold",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [
+              "self.smoother.update",
+              "self.isam.update"
+            ],
+            "coarse_only": false
+          },
+          {
+            "method": "RbpfGtsamRtkTc._release_ambiguity",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\rbpf_fgo.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          }
+        ],
+        "accuracy_reference": "dist/rbpf_feedback_mass_field_20261016/r3_seed0_feedback_cpu_c1"
+      }
+    },
+    "real_paired_steps": 400,
+    "profiled_RTK_epochs": 800,
+    "all_saved_state_bits_equal": true,
+    "trajectory_all_array_bits_equal": true,
+    "all_cfg_and_prior_metadata_equal": true,
+    "exact_integer_wall_and_CPU_partitions": true,
+    "scalar_NaN_payload_canonicalization_inherited": true,
+    "performance_gate_passed": false,
+    "scope": "Actual native_cpu D236, original cluster0/1, each400RTK epochs/200paired PF steps, one route/seed prefixes. Deterministic PF wall-call profile and coarse RTK/C-call wall/process-CPU spans include profiler/adapter overhead and scheduling;diagnostic serialization separate. Not sampled stacks,allocation/cycle attribution,exhaustive GTSAM spans or accepted speed/fullroute/multiseed accuracy."
+  },
+  "coarse_field_audit": {
+    "timestamp_utc": "2026-10-16T12:14:16.198732+00:00",
+    "runner_sha256": "c2a9545f5b1aa54d0783514cb21adbb552bc024d0b7575327453c949646efd35",
+    "field_plan_sha256": "52765ee303251c8df9b42063a5dc55b10744f505d0900d28fd3db938db3f233e",
+    "field_run_sha256": "b8dde778ec5a7ddc03e1d41dbf4fe9498ef4fed1f094c2ea5ec754c931dee8fb",
+    "cases": {
+      "r3_seed0_processprofile_cpu_c0": {
+        "mode": "native_cpu",
+        "cluster_relin": 0,
+        "paired_steps": 200,
+        "all_saved_state_bits_equal": true,
+        "trajectory_all_array_bits_equal": true,
+        "trajectory": {
+          "ne": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "tow": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "week": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "sol_xyz": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400,
+              3
+            ]
+          },
+          "witness_xyz": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400,
+              3
+            ]
+          },
+          "witness_err3d": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "smode": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "err3d": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "nsat_dd": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "flt_err3d": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "flt_xyz": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400,
+              3
+            ]
+          },
+          "map_err3d": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "ar_ratio": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "ar_raw_nb": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "ar_phase": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "gamma": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "second_gamma": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "gamma_pair": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_nb": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_nbasins": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_ess": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_ok": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_npairs": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_nheld": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_spawn": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "base_xyz": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3
+            ]
+          },
+          "rb_n": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "rb_k": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "rb_beta": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": []
+          },
+          "rb_gamma": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": []
+          },
+          "rb_min_nb": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "rb_seed": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "rb_ddpr_dpos": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_ddpr_qual": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_fix_dpr": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_min_info": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_rep_dpr": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_witness_chi": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_loo_max_m": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_loo_med_m": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_loo_n": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_delay_5s_m": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_delay_20s_m": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_delay_corr_cos": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_delay_cross_cos": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_delayed_rejuv_trigger": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_shadow_promote": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_shadow_n": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "ckpt_phase2_valid": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "ckpt_pose_R": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3,
+              3
+            ]
+          },
+          "ckpt_pose_t": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3
+            ]
+          },
+          "ckpt_vel_enu": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3
+            ]
+          },
+          "ckpt_bias_acc": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3
+            ]
+          },
+          "ckpt_bias_gyro": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3
+            ]
+          },
+          "ckpt_imu_idx": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "ckpt_week": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "ckpt_tow": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": []
+          }
+        },
+        "all_cfg_and_prior_metadata_equal": true,
+        "aliases_restored": true,
+        "records": {
+          "D236": {
+            "record_sha256": "60a5fa7cb6e62db3c7ae1c0d8aebde2936ea658d38e04f1e5be152ae386bac5a",
+            "plan_sha256": "3439d7aa2da3794556d99e40d15110dd106b138c98badc868d24877f062bd3ea",
+            "snapshots_sha256": "31770a2799ca5248e4f3dd83da8a3bc75035cfab21634c79de495a55c436f925",
+            "calls": 200,
+            "frozen_accuracy_only": true
+          },
+          "profiled": {
+            "record_sha256": "2e20f909573025a63b4fc42ad00ed1afdb90ea8966253e54e5de80dd3504d840",
+            "plan_sha256": "3439d7aa2da3794556d99e40d15110dd106b138c98badc868d24877f062bd3ea",
+            "snapshots_sha256": "5b60af3c34551cf30f757eab91df335faa12267e18dea91e44be6c2ae709bbd8",
+            "calls": 200,
+            "frozen_accuracy_only": false
+          }
+        },
+        "configs": [
+          {
+            "n_particles": 64,
+            "topk": 12,
+            "beta": 0.5,
+            "gamma_fix": 0.99,
+            "min_fix_nb": 5,
+            "ess_frac": 0.5,
+            "maxout": 5,
+            "seed": 20260710,
+            "p_survive": 0.62,
+            "p_extend": 0.12,
+            "p_adopt_cons": 0.12,
+            "p_adopt": 0.08,
+            "p_shrink": 0.04,
+            "p_release": 0.02,
+            "huber_c": 3.0,
+            "mix_eps": 0.1,
+            "mix_sigma_cp": 0.05,
+            "mix_sigma_pr": 10.0,
+            "sig_cp_floor": 0.008,
+            "sig_group": 0.02,
+            "sig_pos_floor": 1.0,
+            "p_burst": 0.1,
+            "marg_uniform": 1,
+            "qb_jitter": 1e-08,
+            "fb_enable": 1,
+            "fb_m": 3,
+            "fb_gamma": 0.99,
+            "fb_rel_mass": 0.5,
+            "fb_rel_m": 3,
+            "fb_min_nb": 5,
+            "spawn_enable": 1,
+            "spawn_outage": 15,
+            "spawn_epochs": 25,
+            "spawn_sig_pos": 30.0,
+            "spawn_min_cp": 5,
+            "p_spawn": 0.12,
+            "spawn_gap_s": 2.0,
+            "spawn_after": 25,
+            "spawn_min_dpos": 2.0,
+            "fix_max_dpr": 5.0,
+            "use_cuda": 0,
+            "fix_min_info": 0.0,
+            "fb_commit_max_dpr": 1.5,
+            "fb_ddpr_rel_d": 0.0,
+            "fb_ddpr_rel_m": 5,
+            "ddpr_qual_max": 1.0,
+            "chal_d": 0.0,
+            "chal_m": 3,
+            "fix_vote_dd": 6.0,
+            "fix_vote_dpr": 3.5,
+            "cluster_relin": 0,
+            "cluster_relin_top": 2,
+            "cluster_parent_min": 3,
+            "cluster_parent_frac": 0.8,
+            "cluster_sig_floor": 0.5,
+            "fb_support_min": 0,
+            "fb_support_m": 3,
+            "fb_dual_enable": 0,
+            "fb_dual_min": 12,
+            "fb_witness_pos": 0,
+            "fb_witness_chi": 3.0,
+            "fb_witness_sig_floor": 0.25,
+            "loo_enable": 0,
+            "delayed_enable": 0,
+            "delayed_short": 25,
+            "delayed_long": 100,
+            "delayed_rejuv_epochs": 0,
+            "delayed_rejuv_thresh": 0.5,
+            "delayed_rejuv_edge": 0,
+            "delayed_rejuv_reset": 0.4,
+            "delayed_rejuv_cooldown": 100,
+            "delayed_rejuv_qual_max": 0.0,
+            "shadow_epochs": 0,
+            "shadow_margin": 0.0
+          }
+        ],
+        "totals": {
+          "skipped_steps": 3,
+          "valid_steps": 197,
+          "particles": 12608,
+          "held_particles": 12504,
+          "extend_calls": 2110,
+          "shrink_calls": 2110,
+          "requested_moves": 206522,
+          "unique_moves": 4363,
+          "existing_cache_hits": 197,
+          "native_canonical_native_calls": 50268,
+          "native_canonical_fallback_calls": 0,
+          "parent_score_native_calls": 0,
+          "parent_score_fallback_calls": 0,
+          "component_mass_native_calls": 196,
+          "component_mass_fallback_calls": 0,
+          "component_mass_native_particles": 12544,
+          "component_mass_native_pairs": 7906,
+          "feedback_mass_native_calls": 197,
+          "feedback_mass_fallback_calls": 0,
+          "feedback_mass_native_particles": 12608,
+          "feedback_mass_native_pairs": 7933,
+          "feedback_mass_held_targets": 4814,
+          "scalar_fallbacks": 0
+        },
+        "profiled_RTK_epochs": 400,
+        "profiled_PF_steps": 200,
+        "diagnostic_snapshots": 200,
+        "exact_integer_wall_and_CPU_partitions": true,
+        "phases": {
+          "1": {
+            "epochs": 200,
+            "spans": {
+              "rtk._build_dd_factors": {
+                "calls": 200,
+                "wall_ns": 393199300,
+                "cpu_ns": 390625000,
+                "exclusive_wall_ns": 393199300,
+                "exclusive_cpu_ns": 390625000
+              },
+              "rtk._apply_fde": {
+                "calls": 200,
+                "wall_ns": 87971000,
+                "cpu_ns": 140625000,
+                "exclusive_wall_ns": 87971000,
+                "exclusive_cpu_ns": 140625000
+              },
+              "gtsam.Marginals": {
+                "calls": 200,
+                "wall_ns": 233051500,
+                "cpu_ns": 156250000,
+                "exclusive_wall_ns": 233051500,
+                "exclusive_cpu_ns": 156250000
+              },
+              "gtsam.jointMarginalCovariance": {
+                "calls": 200,
+                "wall_ns": 217665300,
+                "cpu_ns": 171875000,
+                "exclusive_wall_ns": 217665300,
+                "exclusive_cpu_ns": 171875000
+              },
+              "rtk._write_back": {
+                "calls": 200,
+                "wall_ns": 1759561200,
+                "cpu_ns": 1687500000,
+                "exclusive_wall_ns": 1308844400,
+                "exclusive_cpu_ns": 1359375000
+              },
+              "rtk._do_ar": {
+                "calls": 200,
+                "wall_ns": 20415313100,
+                "cpu_ns": 20109375000,
+                "exclusive_wall_ns": 20410733200,
+                "exclusive_cpu_ns": 20093750000
+              },
+              "rtk.process": {
+                "calls": 200,
+                "wall_ns": 32923488800,
+                "cpu_ns": 32328125000,
+                "exclusive_wall_ns": 10266464500,
+                "exclusive_cpu_ns": 10000000000
+              },
+              "gtsam.smoother.update": {
+                "calls": 1,
+                "wall_ns": 2180200,
+                "cpu_ns": 0,
+                "exclusive_wall_ns": 2180200,
+                "exclusive_cpu_ns": 0
+              },
+              "rtk._inject_hold": {
+                "calls": 199,
+                "wall_ns": 4579900,
+                "cpu_ns": 15625000,
+                "exclusive_wall_ns": 2399700,
+                "exclusive_cpu_ns": 15625000
+              },
+              "rtk._seed_phase2_graph": {
+                "calls": 1,
+                "wall_ns": 979700,
+                "cpu_ns": 0,
+                "exclusive_wall_ns": 979700,
+                "exclusive_cpu_ns": 0
+              }
+            }
+          },
+          "2": {
+            "epochs": 200,
+            "spans": {
+              "rtk._build_dd_factors_arm": {
+                "calls": 200,
+                "wall_ns": 491248700,
+                "cpu_ns": 484375000,
+                "exclusive_wall_ns": 491248700,
+                "exclusive_cpu_ns": 484375000
+              },
+              "gtsam.smoother.update": {
+                "calls": 219,
+                "wall_ns": 525395200,
+                "cpu_ns": 421875000,
+                "exclusive_wall_ns": 525395200,
+                "exclusive_cpu_ns": 421875000
+              },
+              "gtsam.smoother.calculateEstimate": {
+                "calls": 200,
+                "wall_ns": 11936200,
+                "cpu_ns": 0,
+                "exclusive_wall_ns": 11936200,
+                "exclusive_cpu_ns": 0
+              },
+              "rtk._apply_fde": {
+                "calls": 200,
+                "wall_ns": 182390000,
+                "cpu_ns": 218750000,
+                "exclusive_wall_ns": 182390000,
+                "exclusive_cpu_ns": 218750000
+              },
+              "gtsam.Marginals": {
+                "calls": 200,
+                "wall_ns": 285842500,
+                "cpu_ns": 187500000,
+                "exclusive_wall_ns": 285842500,
+                "exclusive_cpu_ns": 187500000
+              },
+              "gtsam.marginalCovariance": {
+                "calls": 114,
+                "wall_ns": 57502600,
+                "cpu_ns": 46875000,
+                "exclusive_wall_ns": 57502600,
+                "exclusive_cpu_ns": 46875000
+              },
+              "rtk._write_back_tc": {
+                "calls": 200,
+                "wall_ns": 790440400,
+                "cpu_ns": 796875000,
+                "exclusive_wall_ns": 404900300,
+                "exclusive_cpu_ns": 546875000
+              },
+              "pf": {
+                "calls": 200,
+                "wall_ns": 8636362100,
+                "cpu_ns": 8500000000,
+                "exclusive_wall_ns": 8593916200,
+                "exclusive_cpu_ns": 8453125000
+              },
+              "diagnostic_snapshot": {
+                "calls": 200,
+                "wall_ns": 25992017200,
+                "cpu_ns": 25875000000,
+                "exclusive_wall_ns": 25992017200,
+                "exclusive_cpu_ns": 25875000000
+              },
+              "rtk._do_ar": {
+                "calls": 200,
+                "wall_ns": 36213281600,
+                "cpu_ns": 35953125000,
+                "exclusive_wall_ns": 1583429800,
+                "exclusive_cpu_ns": 1578125000
+              },
+              "rtk._process_phase2": {
+                "calls": 200,
+                "wall_ns": 41986412900,
+                "cpu_ns": 41765625000,
+                "exclusive_wall_ns": 3778869700,
+                "exclusive_cpu_ns": 3890625000
+              },
+              "rtk.process": {
+                "calls": 200,
+                "wall_ns": 41991661300,
+                "cpu_ns": 41765625000,
+                "exclusive_wall_ns": 5248400,
+                "exclusive_cpu_ns": 0
+              },
+              "gtsam.jointMarginalCovariance": {
+                "calls": 86,
+                "wall_ns": 42195000,
+                "cpu_ns": 15625000,
+                "exclusive_wall_ns": 42195000,
+                "exclusive_cpu_ns": 15625000
+              },
+              "rtk._inject_hold": {
+                "calls": 212,
+                "wall_ns": 36446700,
+                "cpu_ns": 31250000,
+                "exclusive_wall_ns": 3351700,
+                "exclusive_cpu_ns": 0
+              },
+              "rtk._release_ambiguity": {
+                "calls": 81,
+                "wall_ns": 33417800,
+                "cpu_ns": 46875000,
+                "exclusive_wall_ns": 33417800,
+                "exclusive_cpu_ns": 46875000
+              }
+            }
+          }
+        },
+        "profiles_sha256": "e38d189ea48305c770d76af1a6546d9d5b58ee29d40a645fca4118ee4299259c",
+        "deterministic_call_profiler_enabled": false,
+        "method_AST_proofs": [
+          {
+            "method": "GtsamRtkTc.process",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtkTc._process_phase2",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [
+              "self.smoother.update",
+              "self.smoother.calculateEstimate",
+              "self.isam.update",
+              "self.isam.update",
+              "self.isam.calculateEstimate"
+            ],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtk._build_dd_factors",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "RbpfGtsamRtkTc._build_dd_factors_arm",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\rbpf_fgo.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtk._write_back",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [
+              "gtsam.Marginals",
+              "gtsam.Marginals",
+              "mg.jointMarginalCovariance",
+              "mg.marginalCovariance"
+            ],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtkTc._write_back_tc",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [
+              "gtsam.Marginals",
+              "gtsam.Marginals",
+              "mg.jointMarginalCovariance",
+              "mg.marginalCovariance"
+            ],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtk._apply_fde",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [
+              "self.smoother.update",
+              "self.smoother.calculateEstimate",
+              "self.isam.update",
+              "self.isam.update",
+              "self.isam.calculateEstimate"
+            ],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtkTc._tc_literal_postfit_quality",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtkTc._tc_literal_postprocess",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "RbpfGtsamRtkTc._do_ar",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\rbpf_fgo.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "RbpfGtsamRtkTc._seed_phase2_graph",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\rbpf_fgo.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtk._inject_hold",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [
+              "self.smoother.update",
+              "self.isam.update"
+            ],
+            "coarse_only": false
+          },
+          {
+            "method": "RbpfGtsamRtkTc._release_ambiguity",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\rbpf_fgo.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          }
+        ],
+        "accuracy_reference": "dist/rbpf_feedback_mass_field_20261016/r3_seed0_feedback_cpu_c0"
+      },
+      "r3_seed0_processprofile_cpu_c1": {
+        "mode": "native_cpu",
+        "cluster_relin": 1,
+        "paired_steps": 200,
+        "all_saved_state_bits_equal": true,
+        "trajectory_all_array_bits_equal": true,
+        "trajectory": {
+          "ne": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "tow": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "week": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "sol_xyz": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400,
+              3
+            ]
+          },
+          "witness_xyz": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400,
+              3
+            ]
+          },
+          "witness_err3d": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "smode": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "err3d": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "nsat_dd": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "flt_err3d": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "flt_xyz": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400,
+              3
+            ]
+          },
+          "map_err3d": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "ar_ratio": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "ar_raw_nb": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "ar_phase": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "gamma": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "second_gamma": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "gamma_pair": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_nb": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_nbasins": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_ess": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_ok": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_npairs": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_nheld": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_spawn": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": [
+              400
+            ]
+          },
+          "base_xyz": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3
+            ]
+          },
+          "rb_n": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "rb_k": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "rb_beta": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": []
+          },
+          "rb_gamma": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": []
+          },
+          "rb_min_nb": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "rb_seed": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "rb_ddpr_dpos": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_ddpr_qual": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_fix_dpr": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_min_info": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_rep_dpr": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_witness_chi": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_loo_max_m": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_loo_med_m": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_loo_n": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_delay_5s_m": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_delay_20s_m": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_delay_corr_cos": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_delay_cross_cos": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_delayed_rejuv_trigger": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_shadow_promote": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "rb_shadow_n": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              400
+            ]
+          },
+          "ckpt_phase2_valid": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "ckpt_pose_R": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3,
+              3
+            ]
+          },
+          "ckpt_pose_t": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3
+            ]
+          },
+          "ckpt_vel_enu": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3
+            ]
+          },
+          "ckpt_bias_acc": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3
+            ]
+          },
+          "ckpt_bias_gyro": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": [
+              3
+            ]
+          },
+          "ckpt_imu_idx": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "ckpt_week": {
+            "bits_equal": true,
+            "dtype": "<i8",
+            "shape": []
+          },
+          "ckpt_tow": {
+            "bits_equal": true,
+            "dtype": "<f8",
+            "shape": []
+          }
+        },
+        "all_cfg_and_prior_metadata_equal": true,
+        "aliases_restored": true,
+        "records": {
+          "D236": {
+            "record_sha256": "8cc4db4e16ff0aaf8f7ea6d67013ac82b5623d40588341d748ce35ca409926de",
+            "plan_sha256": "3439d7aa2da3794556d99e40d15110dd106b138c98badc868d24877f062bd3ea",
+            "snapshots_sha256": "306891f7aff3dbd9014a688ef25b39c7201df1031572f141c9f185d0632f399b",
+            "calls": 200,
+            "frozen_accuracy_only": true
+          },
+          "profiled": {
+            "record_sha256": "8bc5a635857dc5ee6ae072107dbf42e0c0729f7585fe8e9e11e16c1fb3ceef30",
+            "plan_sha256": "3439d7aa2da3794556d99e40d15110dd106b138c98badc868d24877f062bd3ea",
+            "snapshots_sha256": "415e3513471f97ad2ee1baca9308904f1fcb0981962a88342b0214fa1031b54f",
+            "calls": 200,
+            "frozen_accuracy_only": false
+          }
+        },
+        "configs": [
+          {
+            "n_particles": 64,
+            "topk": 12,
+            "beta": 0.5,
+            "gamma_fix": 0.99,
+            "min_fix_nb": 5,
+            "ess_frac": 0.5,
+            "maxout": 5,
+            "seed": 20260710,
+            "p_survive": 0.62,
+            "p_extend": 0.12,
+            "p_adopt_cons": 0.12,
+            "p_adopt": 0.08,
+            "p_shrink": 0.04,
+            "p_release": 0.02,
+            "huber_c": 3.0,
+            "mix_eps": 0.1,
+            "mix_sigma_cp": 0.05,
+            "mix_sigma_pr": 10.0,
+            "sig_cp_floor": 0.008,
+            "sig_group": 0.02,
+            "sig_pos_floor": 1.0,
+            "p_burst": 0.1,
+            "marg_uniform": 1,
+            "qb_jitter": 1e-08,
+            "fb_enable": 1,
+            "fb_m": 3,
+            "fb_gamma": 0.99,
+            "fb_rel_mass": 0.5,
+            "fb_rel_m": 3,
+            "fb_min_nb": 5,
+            "spawn_enable": 1,
+            "spawn_outage": 15,
+            "spawn_epochs": 25,
+            "spawn_sig_pos": 30.0,
+            "spawn_min_cp": 5,
+            "p_spawn": 0.12,
+            "spawn_gap_s": 2.0,
+            "spawn_after": 25,
+            "spawn_min_dpos": 2.0,
+            "fix_max_dpr": 5.0,
+            "use_cuda": 0,
+            "fix_min_info": 0.0,
+            "fb_commit_max_dpr": 1.5,
+            "fb_ddpr_rel_d": 0.0,
+            "fb_ddpr_rel_m": 5,
+            "ddpr_qual_max": 1.0,
+            "chal_d": 0.0,
+            "chal_m": 3,
+            "fix_vote_dd": 6.0,
+            "fix_vote_dpr": 3.5,
+            "cluster_relin": 1,
+            "cluster_relin_top": 2,
+            "cluster_parent_min": 3,
+            "cluster_parent_frac": 0.8,
+            "cluster_sig_floor": 0.5,
+            "fb_support_min": 0,
+            "fb_support_m": 3,
+            "fb_dual_enable": 0,
+            "fb_dual_min": 12,
+            "fb_witness_pos": 0,
+            "fb_witness_chi": 3.0,
+            "fb_witness_sig_floor": 0.25,
+            "loo_enable": 0,
+            "delayed_enable": 0,
+            "delayed_short": 25,
+            "delayed_long": 100,
+            "delayed_rejuv_epochs": 0,
+            "delayed_rejuv_thresh": 0.5,
+            "delayed_rejuv_edge": 0,
+            "delayed_rejuv_reset": 0.4,
+            "delayed_rejuv_cooldown": 100,
+            "delayed_rejuv_qual_max": 0.0,
+            "shadow_epochs": 0,
+            "shadow_margin": 0.0
+          }
+        ],
+        "totals": {
+          "skipped_steps": 3,
+          "valid_steps": 197,
+          "particles": 12608,
+          "held_particles": 12508,
+          "extend_calls": 2007,
+          "shrink_calls": 2007,
+          "requested_moves": 206341,
+          "unique_moves": 4260,
+          "existing_cache_hits": 197,
+          "native_canonical_native_calls": 54915,
+          "native_canonical_fallback_calls": 0,
+          "parent_score_native_calls": 8382,
+          "parent_score_fallback_calls": 0,
+          "component_mass_native_calls": 196,
+          "component_mass_fallback_calls": 0,
+          "component_mass_native_particles": 12544,
+          "component_mass_native_pairs": 7816,
+          "feedback_mass_native_calls": 197,
+          "feedback_mass_fallback_calls": 0,
+          "feedback_mass_native_particles": 12608,
+          "feedback_mass_native_pairs": 7843,
+          "feedback_mass_held_targets": 4796,
+          "scalar_fallbacks": 0
+        },
+        "profiled_RTK_epochs": 400,
+        "profiled_PF_steps": 200,
+        "diagnostic_snapshots": 200,
+        "exact_integer_wall_and_CPU_partitions": true,
+        "phases": {
+          "1": {
+            "epochs": 200,
+            "spans": {
+              "rtk._build_dd_factors": {
+                "calls": 200,
+                "wall_ns": 401959900,
+                "cpu_ns": 328125000,
+                "exclusive_wall_ns": 401959900,
+                "exclusive_cpu_ns": 328125000
+              },
+              "rtk._apply_fde": {
+                "calls": 200,
+                "wall_ns": 93657100,
+                "cpu_ns": 93750000,
+                "exclusive_wall_ns": 93657100,
+                "exclusive_cpu_ns": 93750000
+              },
+              "gtsam.Marginals": {
+                "calls": 200,
+                "wall_ns": 243130200,
+                "cpu_ns": 234375000,
+                "exclusive_wall_ns": 243130200,
+                "exclusive_cpu_ns": 234375000
+              },
+              "gtsam.jointMarginalCovariance": {
+                "calls": 200,
+                "wall_ns": 216700000,
+                "cpu_ns": 265625000,
+                "exclusive_wall_ns": 216700000,
+                "exclusive_cpu_ns": 265625000
+              },
+              "rtk._write_back": {
+                "calls": 200,
+                "wall_ns": 1826899200,
+                "cpu_ns": 2046875000,
+                "exclusive_wall_ns": 1367069000,
+                "exclusive_cpu_ns": 1546875000
+              },
+              "rtk._do_ar": {
+                "calls": 200,
+                "wall_ns": 2437221000,
+                "cpu_ns": 2187500000,
+                "exclusive_wall_ns": 2434555000,
+                "exclusive_cpu_ns": 2187500000
+              },
+              "rtk.process": {
+                "calls": 200,
+                "wall_ns": 10261827400,
+                "cpu_ns": 9890625000,
+                "exclusive_wall_ns": 5501127200,
+                "exclusive_cpu_ns": 5234375000
+              },
+              "gtsam.smoother.update": {
+                "calls": 1,
+                "wall_ns": 880600,
+                "cpu_ns": 0,
+                "exclusive_wall_ns": 880600,
+                "exclusive_cpu_ns": 0
+              },
+              "rtk._inject_hold": {
+                "calls": 199,
+                "wall_ns": 2666000,
+                "cpu_ns": 0,
+                "exclusive_wall_ns": 1785400,
+                "exclusive_cpu_ns": 0
+              },
+              "rtk._seed_phase2_graph": {
+                "calls": 1,
+                "wall_ns": 963000,
+                "cpu_ns": 0,
+                "exclusive_wall_ns": 963000,
+                "exclusive_cpu_ns": 0
+              }
+            }
+          },
+          "2": {
+            "epochs": 200,
+            "spans": {
+              "rtk._build_dd_factors_arm": {
+                "calls": 200,
+                "wall_ns": 675168200,
+                "cpu_ns": 546875000,
+                "exclusive_wall_ns": 675168200,
+                "exclusive_cpu_ns": 546875000
+              },
+              "gtsam.smoother.update": {
+                "calls": 219,
+                "wall_ns": 655375500,
+                "cpu_ns": 609375000,
+                "exclusive_wall_ns": 655375500,
+                "exclusive_cpu_ns": 609375000
+              },
+              "gtsam.smoother.calculateEstimate": {
+                "calls": 200,
+                "wall_ns": 15179800,
+                "cpu_ns": 0,
+                "exclusive_wall_ns": 15179800,
+                "exclusive_cpu_ns": 0
+              },
+              "rtk._apply_fde": {
+                "calls": 200,
+                "wall_ns": 238904200,
+                "cpu_ns": 359375000,
+                "exclusive_wall_ns": 238904200,
+                "exclusive_cpu_ns": 359375000
+              },
+              "gtsam.Marginals": {
+                "calls": 200,
+                "wall_ns": 372526700,
+                "cpu_ns": 343750000,
+                "exclusive_wall_ns": 372526700,
+                "exclusive_cpu_ns": 343750000
+              },
+              "gtsam.marginalCovariance": {
+                "calls": 119,
+                "wall_ns": 75261600,
+                "cpu_ns": 46875000,
+                "exclusive_wall_ns": 75261600,
+                "exclusive_cpu_ns": 46875000
+              },
+              "rtk._write_back_tc": {
+                "calls": 200,
+                "wall_ns": 1014511800,
+                "cpu_ns": 1078125000,
+                "exclusive_wall_ns": 514413600,
+                "exclusive_cpu_ns": 671875000
+              },
+              "pf": {
+                "calls": 200,
+                "wall_ns": 9372686000,
+                "cpu_ns": 9421875000,
+                "exclusive_wall_ns": 9330649000,
+                "exclusive_cpu_ns": 9359375000
+              },
+              "diagnostic_snapshot": {
+                "calls": 200,
+                "wall_ns": 32107951600,
+                "cpu_ns": 31828125000,
+                "exclusive_wall_ns": 32107951600,
+                "exclusive_cpu_ns": 31828125000
+              },
+              "rtk._do_ar": {
+                "calls": 200,
+                "wall_ns": 43498856300,
+                "cpu_ns": 43140625000,
+                "exclusive_wall_ns": 2016490000,
+                "exclusive_cpu_ns": 1875000000
+              },
+              "rtk._process_phase2": {
+                "calls": 200,
+                "wall_ns": 51246071100,
+                "cpu_ns": 50859375000,
+                "exclusive_wall_ns": 5142517600,
+                "exclusive_cpu_ns": 5140625000
+              },
+              "rtk.process": {
+                "calls": 200,
+                "wall_ns": 51252141400,
+                "cpu_ns": 50859375000,
+                "exclusive_wall_ns": 6070300,
+                "exclusive_cpu_ns": 0
+              },
+              "gtsam.jointMarginalCovariance": {
+                "calls": 81,
+                "wall_ns": 52309900,
+                "cpu_ns": 15625000,
+                "exclusive_wall_ns": 52309900,
+                "exclusive_cpu_ns": 15625000
+              },
+              "rtk._inject_hold": {
+                "calls": 205,
+                "wall_ns": 38672700,
+                "cpu_ns": 78125000,
+                "exclusive_wall_ns": 3561400,
+                "exclusive_cpu_ns": 15625000
+              },
+              "rtk._release_ambiguity": {
+                "calls": 80,
+                "wall_ns": 45762000,
+                "cpu_ns": 46875000,
+                "exclusive_wall_ns": 45762000,
+                "exclusive_cpu_ns": 46875000
+              }
+            }
+          }
+        },
+        "profiles_sha256": "61f81384b4a4a0f9c0854ea418161c390c408f9a124083bbf89d83a2a24e10db",
+        "deterministic_call_profiler_enabled": false,
+        "method_AST_proofs": [
+          {
+            "method": "GtsamRtkTc.process",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtkTc._process_phase2",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [
+              "self.smoother.update",
+              "self.smoother.calculateEstimate",
+              "self.isam.update",
+              "self.isam.update",
+              "self.isam.calculateEstimate"
+            ],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtk._build_dd_factors",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "RbpfGtsamRtkTc._build_dd_factors_arm",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\rbpf_fgo.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtk._write_back",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [
+              "gtsam.Marginals",
+              "gtsam.Marginals",
+              "mg.jointMarginalCovariance",
+              "mg.marginalCovariance"
+            ],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtkTc._write_back_tc",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [
+              "gtsam.Marginals",
+              "gtsam.Marginals",
+              "mg.jointMarginalCovariance",
+              "mg.marginalCovariance"
+            ],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtk._apply_fde",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [
+              "self.smoother.update",
+              "self.smoother.calculateEstimate",
+              "self.isam.update",
+              "self.isam.update",
+              "self.isam.calculateEstimate"
+            ],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtkTc._tc_literal_postfit_quality",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtkTc._tc_literal_postprocess",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "RbpfGtsamRtkTc._do_ar",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\rbpf_fgo.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "RbpfGtsamRtkTc._seed_phase2_graph",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\rbpf_fgo.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          },
+          {
+            "method": "GtsamRtk._inject_hold",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\gtsam_rtk_standalone.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [
+              "self.smoother.update",
+              "self.isam.update"
+            ],
+            "coarse_only": false
+          },
+          {
+            "method": "RbpfGtsamRtkTc._release_ambiguity",
+            "source": "C:\\Users\\rsasa\\Workspace\\gnss_gpu\\experiments\\rbpf_fgo\\rbpf_fgo.py",
+            "restored_AST_equal": true,
+            "replaced_C_calls": [],
+            "coarse_only": false
+          }
+        ],
+        "accuracy_reference": "dist/rbpf_feedback_mass_field_20261016/r3_seed0_feedback_cpu_c1"
+      }
+    },
+    "real_paired_steps": 400,
+    "profiled_RTK_epochs": 800,
+    "all_saved_state_bits_equal": true,
+    "trajectory_all_array_bits_equal": true,
+    "all_cfg_and_prior_metadata_equal": true,
+    "exact_integer_wall_and_CPU_partitions": true,
+    "scalar_NaN_payload_canonicalization_inherited": true,
+    "performance_gate_passed": false,
+    "scope": "Actual native_cpu D236, original cluster0/1, each400RTK epochs/200paired PF steps, one route/seed prefixes. Coarse PF/RTK/C-call wall/process-CPU spans without cProfile. Span/adapter overhead and scheduling included;diagnostic serialization separate. Detailed-call-profiler failures preserved separately,no optimization timing retry. Not sampled stacks,allocation/cycle attribution,exhaustive GTSAM spans or accepted speed/fullroute/multiseed accuracy."
+  },
+  "tests": {
+    "call": {
+      "passed": 29,
+      "known_configuration_warnings": 1,
+      "record": {
+        "exit_code": 0,
+        "plan_sha256": "417d8266912ce31eaea9de6fdcf449314d2d438de9f1eff7e2c2a58b9dcfbef9",
+        "log_sha256": "536245cb2f73d3d7e4d71d4172aa105c6d1a731684ba93e81c2d05b857f3e31e",
+        "sources_and_binaries_unchanged": true
+      },
+      "plan_sha256": "417d8266912ce31eaea9de6fdcf449314d2d438de9f1eff7e2c2a58b9dcfbef9"
+    },
+    "process": {
+      "passed": 24,
+      "known_configuration_warnings": 1,
+      "record": {
+        "exit_code": 0,
+        "plan_sha256": "cb94d8fa2ba8b231845db05b04c21c259b727ff1551638a7e3c75ca86a47b574",
+        "log_sha256": "4813bbf3788092fe372cd851c6231407914d6bd1912fed477de16a33ec687e38",
+        "sources_and_binaries_unchanged": true
+      },
+      "plan_sha256": "cb94d8fa2ba8b231845db05b04c21c259b727ff1551638a7e3c75ca86a47b574"
+    }
+  },
+  "CUDA_sanitizers_newly_run": false,
+  "no_native_or_CUDA_changes": true,
+  "preservation": {
+    "timestamp_utc": "2026-10-16T11:58:37.279644+00:00",
+    "runner_sha256": "1fdeeb6c916de49a5f5e7a00208c177ab04d9bf23775ab947af4154be5e84a91",
+    "production_source_sha256": {
+      "src/raytrace/bvh.cu": "7d9d06f128710f12eea70b09b8f0d475d16223957ddfdf41a7cf5ec77ac09d98",
+      "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+      "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+      "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+      "python/gnss_gpu/urban_signal_sim.py": "d3b332eeaa6b099449cb13ef4517aa4223cd8e561a5b753d8f7c5f99cf146075",
+      "src/signal_sim/signal_sim.cu": "31dc2c2a6e06d9f020c1b054371f0652c777dc3a6724f8a46b99297cda18be41",
+      "include/gnss_gpu/signal_sim.h": "2788f41ff6175da2d6c0db5212470ab3759f4e350d91f977a532e48fc70fa945",
+      "python/gnss_gpu/_signal_sim_bindings.cpp": "524f9460570f0b39f4165f8fb6526af927e6c2c8f39ff661c2731d34ee82bcff",
+      "python/gnss_gpu/signal_sim.py": "f316c47c4a9a9359498e6905f8d6afa8046f7b631f876e258074d44d527780d4",
+      "python/gnss_gpu/atmosphere.py": "8c7432e714699ae918f73d49346f43b9eb0a8b36802ad4618e1e042c09ddb76f",
+      "python/gnss_gpu/_atmosphere_bindings.cpp": "36c75159886ae798f28bd17c9d13d3b89e8797f3e81a07d3270aef9ea3b913ef",
+      "src/atmosphere/atmosphere.cu": "95e420949eac72a6ea2866add6a2cff6477c7ea4a27392830e526ebe23e86913",
+      "include/gnss_gpu/atmosphere.h": "e2d54dfb590391b6ca176a8bb9abc0156dc78fe51a330e6321a1579c752e8394",
+      "python/gnss_gpu/raytrace.py": "3d12a36b3db0b79d35fe54d38ed1f0fa0365c6b2064ff89fdaddc6c8140aab18",
+      "python/gnss_gpu/_raytrace_bindings.cpp": "472cae5221d1e5455570da2015a7a2ff8b5247482d540e50f88fb44470481896",
+      "src/raytrace/raytrace.cu": "454f371dd760e663ebb86563014bb56a16023d9bbff9b1df81ad4e54d855c7fa",
+      "include/gnss_gpu/raytrace.h": "02b0d9448a792a851aaa05397ee850748869430ba9c58f8fa998bfbad394b91c",
+      "python/gnss_gpu/double_reflection.py": "7a3950ba7c67efe6e2061f9541d993c8e52212994d0503f192f2d29906d11a80",
+      "python/gnss_gpu/diffraction.py": "7e6171943c90c8018bc87fe068533097938c139fbc59e5e2af47c9ca087aa52a",
+      "python/gnss_gpu/input_validation.py": "c1c4c08f1830edc254d38bcbdb05414041af2670f628f119cf7792759d2ea824",
+      "python/gnss_gpu/_diffraction_bindings.cpp": "94c12c172df10f32c0beb6f9409810996b932d3b9b3165bc1a21a4b62975c39a",
+      "src/diffraction/diffraction.cu": "f886d1cbc445707fabfc9e3dc5492ff1eebe82b27306d8a21ccf00404b43ff88",
+      "src/diffraction/utd.cu": "1ef9507efebb3c4fbc87e650d74a94067cdf6ab956ab0c8b0230a2a7bad34f82",
+      "include/gnss_gpu/diffraction.h": "3d276a6545b3db34f50fd2e7a4714e0b0e8cca1fbfa9dbe2fb28e3c256ccd5a9",
+      "python/gnss_gpu/reflection_diffraction.py": "90078b4ac1905bc291a7699c9ff7ccda7b723bcfdf10853e05f9a5ad4e2e39f8",
+      "src/particle_filter/pf_device.cu": "a20de06f6a6081670d39677b265d6fa58eb64baf69d816cb8173ea68aad9a7fe",
+      "include/gnss_gpu/pf_device.h": "9616ae2e4fb898b562143f04405e1006586548b98d461881eb37e11d57b51d85",
+      "python/gnss_gpu/_pf_device_bindings.cpp": "24ea505b9fbd1171f073d56db239f63fe23f0ed65f65c83c2df61383c0521c59",
+      "python/gnss_gpu/pf_device_runtime.py": "7a3ada45383ad7cc2377b43f6bf92b6ac75be101a5f319337819ab0dc8cd1361",
+      "python/gnss_gpu/realtime_runtime.py": "997b670f9186e01d6e6c9468d8804df47a39390b6a087ef92ae3978694a2432a",
+      "src/positioning/fgo.cu": "860deb60bbf03c3c0e7f25bda5d39a29f489284e1c081c45f63eb64a66e0f1b9",
+      "include/gnss_gpu/fgo.h": "443ffe8845dc85d8454704debef8e36bcddb7927d728871b91bfc0c3c203a6ee",
+      "python/gnss_gpu/fgo.py": "2eb5cefde7a7c91eef4b88e7175c0e00e6c85e9abd8883c00b2abfe11219e1c4",
+      "python/gnss_gpu/_bindings.cpp": "99eacd7c53fab0eb693c00699f97a0549bb06651c2b9907bf3b4fbf4f7546efd",
+      "experiments/rbpf_fgo/rbpf_fgo.py": "c977508d6a20413f7669efb39dfb1d87d74b254ce89cf1f57ae8681d7d6b8bb6",
+      "experiments/rbpf_fgo/gtsam_rtk_standalone.py": "1cdf4a7931bce541a3ad0c41a7d7e7e5aa404ca11e47bacdbbd832b17e5f8f38"
+    },
+    "production_extension_sha256": {
+      "_raytrace.cp312-win_amd64.pyd": "f9b3f83aede53d8cc03dff03c937529431b5143398f24ddc2aa1a2f50d0c2516",
+      "_gnss_gpu_signal_sim.cp312-win_amd64.pyd": "3ae8d0dc0c6136167fe4e1adde91972ce75fe0f00f3714021bd5bed851bfd5c6",
+      "_gnss_gpu_diffraction.cp312-win_amd64.pyd": "ca28ef50c132edd2ba87965ba934c6c6c274737f7a6b436ceea55a64c4cb6542",
+      "_gnss_gpu_pf_device.cp312-win_amd64.pyd": "48572e69d6bf1bd4b8257988b88a270c86c19be81c49b5a1e24e4dcfc785df52",
+      "_gnss_gpu.cp312-win_amd64.pyd": "8cc9cf532a0073bc2978ffc8b8daefe11f5195230bc23c269422ce4209c3f429"
+    },
+    "PF_build_PE_sha256": "48572e69d6bf1bd4b8257988b88a270c86c19be81c49b5a1e24e4dcfc785df52",
+    "prototype_DLL_sha256": "520258d5bccf5c921d29152004c19e25a19003c8bfe6eb986be4b43b784ad097",
+    "previous_reports_preserved": {
+      "benchmarks/double_geometry_gpu_20261016.json": "948b8797191d7c351e2710bec4578c749ea8893f6656f3f0e8cbe96fdbeabc7d",
+      "benchmarks/double_geometry_completion_check_20261016.json": "73c2f397ef645200090ae51346a9b9000d400767cc092d17a8ffe564553354e7",
+      "benchmarks/double_predicates_rejected_20261016.json": "309c46bed95ebc240657d54f591ea1b345575959ba2804c70ba8a5ca96a02f89",
+      "benchmarks/double_predicates_rejected_completion_check_20261016.json": "254bbf04216c7d24d602b42f530887b9fa93abb8e9f4760900e551e2ac43928b",
+      "benchmarks/diffraction_loss_rejected_20261016.json": "68680726625e1ddc840e6dabc4afb1cb02f90ac2547f21045687960b743faa8f",
+      "benchmarks/diffraction_loss_rejected_completion_check_20261016.json": "3dea35c50471c13fb0b18879fd9244d0e8447a83af8615d34f52ec16a577c4ec",
+      "benchmarks/composite_geometry_gpu_20261016.json": "d62537d0cf6fadcc546d7f4de78ac466829ffdde1b38a8b068cc36daab318747",
+      "benchmarks/composite_geometry_completion_check_20261016.json": "c1d2a40ed0144701fa8844dea1abf0116b308bd48749f56aa1fd2e495cf30203",
+      "benchmarks/pf_certified_division_rejected_20261016.json": "a9bef86816e1e420f9d9ecf8074bbf9c7a27d4510030798fd3d03accb823bfba",
+      "benchmarks/pf_certified_division_completion_check_20261016.json": "79bf4bff65429c904aeac6defff8f070d539d7c4179db9bc6a466340e86dfeeb",
+      "benchmarks/rbpf_fgo_gpu_feasibility_20261016.json": "feb4eeb242ce40f06975e4f1bb03c6b6610915aafb1a1d9737f4a1ccf12517de",
+      "benchmarks/rbpf_fgo_gpu_feasibility_completion_check_20261016.json": "17653b9558bcb84d144342ff40ee34a8cef3ea46d2880afd28613e40a3c60598",
+      "benchmarks/rbpf_likelihood_gpu_prototype_20261016.json": "6a6591cff2c515a31e02691032b6b20709064d56203264b5934010e7c8c48e07",
+      "benchmarks/rbpf_likelihood_gpu_prototype_completion_check_20261016.json": "305d24817650e54cd9185a235fe97a0f1bc6a7c2c4185850b207cff0a1fbae49",
+      "benchmarks/rbpf_move_batch_integration_20261016.json": "72f8c88908a0ea73757ffe54e7b7c0539ea7145442181f16292fe42a6eee4648",
+      "benchmarks/rbpf_move_batch_integration_completion_check_20261016.json": "80580c866e6e03f285f8476e74cfe9089bc8431ad3c86b82a74bd0bb6b4b3e68",
+      "benchmarks/rbpf_move_reuse_20261016.json": "8578f86a8c072194c5281bc48d94981ecc40272051ac9e228ac987c9f7c4c54f",
+      "benchmarks/rbpf_move_reuse_completion_check_20261016.json": "478e434ec64a61b5783367bc00fffe98efb3105b2db542034975fd6cb6b2c618",
+      "benchmarks/rbpf_epoch_memo_20261016.json": "e1b9079bee4fdcbff3c64cf2e9fc8b48544f61191dd70d2c19111ff2e6bb1915",
+      "benchmarks/rbpf_epoch_memo_completion_check_20261016.json": "103b960dd652e505d34f52dd02bec8e002cb8dd3d2d40591cc92669ee30cc26a",
+      "benchmarks/rbpf_proposal_reuse_20261016.json": "0be7ca23fdb752405e30307dfb43e30059b70e5646aef3851f7d32098b1c78a7",
+      "benchmarks/rbpf_proposal_reuse_completion_check_20261016.json": "a212f0813ce5f54e0129fb714e72eb03974a8346d01bf3c90513cd38c1bdf89e",
+      "benchmarks/rbpf_warp_likelihood_20261016.json": "3b502ebaa61172cad83a364878285b2b74110b6e0692e64d33638a038bfbe699",
+      "benchmarks/rbpf_warp_likelihood_completion_check_20261016.json": "c16af302ed55d6c517948410b3d8d6879b4b0a36e62555436b90b86ef46fb137",
+      "benchmarks/rbpf_dd_pack_20261016.json": "3541e177c7b9aab9588e9f5f370002d0b88273ea26617ad5dc49368dbe959f2f",
+      "benchmarks/rbpf_dd_pack_completion_check_20261016.json": "215126a7b5c5c2d3c0ed1830565ed599b0b87a698c5c2396405fed1a0b7565ee",
+      "benchmarks/rbpf_native_canonical_20261016.json": "80782b6be0ae8ac4360ff680666eab3338a412cfe699c139412d6b79a571e818",
+      "benchmarks/rbpf_native_canonical_completion_check_20261016.json": "a729d1b3c809a2f8b145cba4761c39e9fa663d399daf01494ac335c7ce89a51b",
+      "benchmarks/rbpf_parent_score_20261016.json": "827f9f71733661870fcd4092059153d785ce10007af9950d3efbd4a6163718d9",
+      "benchmarks/rbpf_parent_score_completion_check_20261016.json": "976d3f6f39a2ec9f4b20ae143d55a4361499c0136cb2499047d71212b9676a36",
+      "benchmarks/rbpf_component_mass_20261016.json": "21ce17d5b7912ea9ac67e5deaa80f951d989fe602bc348503c66804df7ea4a5b",
+      "benchmarks/rbpf_component_mass_completion_check_20261016.json": "7638a89c0021b4022ed80e065ddc8bf1382d15c1eb8897b00afab6f0e126ac2f",
+      "benchmarks/rbpf_feedback_mass_20261016.json": "860f6ed1c3685c4e37fe0164eb502518de017aeb8d6e3506b2ee41559404281f",
+      "benchmarks/rbpf_feedback_mass_completion_check_20261016.json": "a683d0410915d2959ced3223aaf9678832f4bd25817394d630ade3c2a8cccb08",
+      "benchmarks/rbpf_shrink_20261016.json": "e9ab9e68198ad1a7fa6391bbce9016e0e2963fce8c53f9bd249b190645854466",
+      "benchmarks/rbpf_shrink_completion_check_20261016.json": "aa1faf02b3f231d131f876f6ae5bed9e88eebeb0ec95358dc9a38596a2599424",
+      "benchmarks/rbpf_phase_profile_20261016.json": "c874f3cf0c21ab1ccc7600e5ca20854de9eb081b309695468f4c3b7f83809a05",
+      "benchmarks/rbpf_phase_profile_completion_check_20261016.json": "4f50c9b45476944a5947604d0fe734f5dd40d93c6fab1c54dd78e2956986d1a5",
+      "benchmarks/rbpf_score_index_memo_20261016.json": "1ef7247da4743550f13d0a3cddd40878106b61a978b74e15fac4923017534fa6",
+      "benchmarks/rbpf_score_index_memo_completion_check_20261016.json": "4c1446ceb4ac79f6cd8d4efde7417c03138dd74a2a765f40971f47279000c92d",
+      "benchmarks/rbpf_ordered_keys_20261016.json": "7383d0185865ad422bbd6476b285d7829036d3f5fa61acbeab42f21443b5a1f0",
+      "benchmarks/rbpf_ordered_keys_completion_check_20261016.json": "ee0bbb979af88aaaf3c1435fe6f93b20b932477ff8e9439ebb71d71a169c7494",
+      "benchmarks/rbpf_native_staging_20261016.json": "87e816c273deaca1fd23e26dc52c69e2cbeda554aaf34dc5da1e3d41b4435b7e",
+      "benchmarks/rbpf_native_staging_completion_check_20261016.json": "ec28a3c6acd32f3f716ecde1e75c693ba96d26843c5c31442e453fa066edbad0",
+      "benchmarks/rbpf_irls_identity_20261016.json": "a3f322e47a5f7b674c8a569e9f2848f3bed13642eeb032e0da5a0ff31da029b8",
+      "benchmarks/rbpf_irls_identity_completion_check_20261016.json": "3b0eac874ecee69fa432ae5e3b60c55dd388b091541899ce1b5d88046cfd20a9",
+      "benchmarks/rbpf_irls_replay_20261016.json": "fa5b1ece36bcce76a1aa500fa96d96b969be2dc7eaf2313c70b8dbb58f1b9bb6",
+      "benchmarks/rbpf_irls_replay_completion_check_20261016.json": "f51b020ef63dc8c75df99302ec06163e7e1c39bf44ef577bc731011eb49d243e",
+      "benchmarks/rbpf_fused_staging_20261016.json": "7fb662a3b11e5f0e97591aa0f86e4982c0646adcdf4d64d1c5ff72a4b2cc0b43",
+      "benchmarks/rbpf_fused_staging_completion_check_20261016.json": "fd4b8bfc117ea2caa22be40f5d04e9f0d87478938d50597600bcc5a18c7a23d8"
+    },
+    "archives_verified": {
+      "composite_geometry_candidate": {
+        "files": 305,
+        "manifest_sha256": "c5a0d912f148921b170b05f8eb1f4c0a0fa774ed62e4e278f2b672bf8b441b6e"
+      },
+      "pf_certified_division_rejected_20261016": {
+        "files": 94,
+        "manifest_sha256": "bdae75c0d2e7587e98dc2f6dfc86ca6d533d4604f25aee93c2398a68a0d24b05"
+      },
+      "rbpf_fgo_gpu_feasibility_20261016": {
+        "files": 149,
+        "manifest_sha256": "6854719596359dd1129e3c19bc74fef0f30830132d0f728e2b4667ae32c0f1ab"
+      },
+      "rbpf_likelihood_gpu_prototype_20261016": {
+        "files": 161,
+        "manifest_sha256": "e338e38ff4f52e9c11aaa0d4667ba60842e3902e0223ea1b25ded5805c4eb03c"
+      },
+      "rbpf_move_batch_integration_20261016": {
+        "files": 74,
+        "manifest_sha256": "ac31a335946f8b78909c41c837fcf35a5dfcc7a599ab79e34d4c9f9d925a28e8"
+      },
+      "rbpf_move_reuse_measured_source_20261016": {
+        "files": 1,
+        "manifest_sha256": "6f2dc57a14927150cb1ebb7c3b23c7b466197d17ef1aeea8449becabaf622145"
+      },
+      "rbpf_move_reuse_20261016": {
+        "files": 121,
+        "manifest_sha256": "c7b69513ee6e031774eb230d83a5d7a61fb3bfadd8163e5e97095667b5d93218"
+      },
+      "rbpf_epoch_memo_20261016": {
+        "files": 140,
+        "manifest_sha256": "35ec46c9f34924625376273054b9cb10acc49def9b0a7ccbe640b3ac0a0c435e"
+      },
+      "rbpf_proposal_reuse_20261016": {
+        "files": 84,
+        "manifest_sha256": "38ef475c10b65a1c208f6153cdedeb63a0d9ff35d7fcfc6c185ec962f305049b"
+      },
+      "rbpf_warp_likelihood_20261016": {
+        "files": 96,
+        "manifest_sha256": "4ed5c84af854b3e7414e912961a768551278d7d9086ba68ff9bf3ad615def45a"
+      },
+      "rbpf_warp_likelihood_text_correction_20261016": {
+        "files": 4,
+        "manifest_sha256": "d75888f7db8571ce798c6504b6c79a739dcbd8937710851027296c166d930075"
+      },
+      "rbpf_dd_pack_20261016": {
+        "files": 139,
+        "manifest_sha256": "8c6e10d94457fdaa6c73d825a86a679a0abc2e1dcbf87d77630eafd7fb0de0e5"
+      },
+      "rbpf_native_canonical_20261016": {
+        "files": 101,
+        "manifest_sha256": "d4cd45b5ffc110c931804314c60786aeb77391f9eec08f77cc0f273ea64ba91d"
+      },
+      "rbpf_parent_score_20261016": {
+        "files": 161,
+        "manifest_sha256": "25696234a36f1253c294ba92d0fceff2c799c7e9aee1ff45aae95feb7071e728"
+      },
+      "rbpf_component_mass_20261016": {
+        "files": 143,
+        "manifest_sha256": "3f1ec07899d1e991db9b120fe076d55b47b7648aaee487edaeb88edb7864daf9"
+      },
+      "rbpf_feedback_mass_20261016": {
+        "files": 130,
+        "manifest_sha256": "f44dad77d66367d2b70821fb033fc64e5a869a4647fbc225c033ca529c5c0da7"
+      },
+      "rbpf_shrink_20261016": {
+        "files": 157,
+        "manifest_sha256": "b812f3c78df09f769b68cd62318b0e437ed8cdb015af5093b2d5898de919dad3"
+      },
+      "rbpf_phase_profile_20261016": {
+        "files": 98,
+        "manifest_sha256": "5551e3d8ca990e9d236a8b90bbf93ef02cc63bb4a4e6ba5e9e6dc28d558196c9"
+      },
+      "rbpf_score_index_memo_20261016": {
+        "files": 187,
+        "manifest_sha256": "237a869eecf3ed0262a79194a8cfeea850657781fa8a2c36c1119533eb8d0182"
+      },
+      "rbpf_ordered_keys_20261016": {
+        "files": 154,
+        "manifest_sha256": "ce08a9383b4612471accd02e05039bea6eabf1b4dd3f940b860550953e3aa250"
+      },
+      "rbpf_native_staging_20261016": {
+        "files": 174,
+        "manifest_sha256": "3f3f88e3030b673c7f61cc9e1b64599eab0e254b351365ac6710b248475731be"
+      },
+      "rbpf_irls_identity_20261016": {
+        "files": 198,
+        "manifest_sha256": "f70e798c05dd997e0b9348059515d5a03dccec43d0b84877b5578dfeb5f43c51"
+      },
+      "rbpf_irls_replay_20261016": {
+        "files": 147,
+        "manifest_sha256": "0198f4b92f9a991f9d550e0e2341ec06e1a814d87935697a84b1221abe39a692"
+      },
+      "rbpf_fused_staging_20261016": {
+        "files": 246,
+        "manifest_sha256": "bb02cf3e8e87b131ace4c3a61bdff9bb7a8c39044830713f4461a6be09f56974"
+      }
+    },
+    "product_diff_paths_vs_main": [
+      "python/gnss_gpu/double_reflection.py",
+      "python/gnss_gpu/pf_device_runtime.py",
+      "python/gnss_gpu/raytrace.py",
+      "python/gnss_gpu/realtime_runtime.py",
+      "python/gnss_gpu/reflection_diffraction.py",
+      "python/gnss_gpu/signal_sim.py",
+      "python/gnss_gpu/urban_signal_sim.py",
+      "src/raytrace/bvh.cu"
+    ],
+    "production_changes": [],
+    "default_changed": false
+  },
+  "raw_evidence_sha256": {
+    "dist/analyze_rbpf_call_profile_20261016.py": "3471a9547977ec28d7bee3d3afd96d5f7196cce1ef4ba999a05625b00e2787e8",
+    "dist/audit_rbpf_call_profile_field_20261016.py": "cb59ea8a8f2261a4294139e65d54c5ef08c0e5387462d64d5135d1bf56b15d6f",
+    "dist/audit_rbpf_call_profile_overhead_20261016.py": "9b8b21313d836c2242443bc48cd80bac593c3794b6b80f2fd2e42b852c776f16",
+    "dist/audit_rbpf_call_profile_preservation_20261016.py": "1fdeeb6c916de49a5f5e7a00208c177ab04d9bf23775ab947af4154be5e84a91",
+    "dist/audit_rbpf_process_profile_field_20261016.py": "c2a9545f5b1aa54d0783514cb21adbb552bc024d0b7575327453c949646efd35",
+    "dist/rbpf_call_profile_analysis_20261016.json": "2270c766f6306aaa94710425d7a95f27e267270b285e8197af67218f3114b5c4",
+    "dist/rbpf_call_profile_field_audit_20261016.json": "1d1e2e055e4f6f6ee1729b97c3bc8ba6182ec66a2f44c13e7bd0f6c7c0ccd37b",
+    "dist/rbpf_call_profile_overhead_20261016.json": "22084e77a367bb7d79f62459583ce84f2a4a386b83fb8220c4e14980e6bdf1e7",
+    "dist/rbpf_call_profile_overhead_20261016.log": "eef5f1dc10b88ebd836b58685168e98e1b825088c6c392a060415ee525f6c880",
+    "dist/rbpf_call_profile_overhead_20261016.plan.json": "204c1035c02092d5c46998214ea5e6def7d9ce1187404d852f5bbcd1401d7c23",
+    "dist/rbpf_call_profile_overhead_20261016.run.json": "3a1d7edb0fad9fd95cae51c70f3f8c0f9e82c3d61a904a660c73cfe4c4b81332",
+    "dist/rbpf_call_profile_overhead_20261016.states.jsonl.gz": "a38ecd74961ffc4864e25dd9225ee1e2e93a98c203ed26dda68fdd92b3bee31d",
+    "dist/rbpf_call_profile_overhead_audit_20261016.json": "cbfabf3fd7437c63e09bd754c0bf60d28d5949d1a64f1fc2d4acf7f2c874efe4",
+    "dist/rbpf_call_profile_preservation_20261016.json": "d03d4aea3ba2865453a5573ce5601d62c42244a5a0e15441e1f2942a7889f28e",
+    "dist/rbpf_call_profile_tests_20261016.job.json": "7ca0d0da7c5a47df7b2bbb8ad3ef6fc7ff9e331a89cc828769f041adbd6637cf",
+    "dist/rbpf_call_profile_tests_20261016.json": "d8fb2763203c9d3b216ea54b37fd4e5aa0b64e96c54c480e0f512bc0e5842380",
+    "dist/rbpf_call_profile_tests_20261016.log": "536245cb2f73d3d7e4d71d4172aa105c6d1a731684ba93e81c2d05b857f3e31e",
+    "dist/rbpf_call_profile_tests_20261016.plan.json": "417d8266912ce31eaea9de6fdcf449314d2d438de9f1eff7e2c2a58b9dcfbef9",
+    "dist/rbpf_process_profile_field_audit_20261016.json": "b66f1433f63a1b485dc7af6fc296f031fb8100a6c71a9898c46ae77ea56cfc5d",
+    "dist/rbpf_process_profile_overhead_20261016.json": "c039d4964e1fab27cb847ed2b8d0bbc8d2466e63ea3ff09ac0a83cc7a32a815c",
+    "dist/rbpf_process_profile_overhead_20261016.log": "cd9e95a84bc94f4331abeb434e4a94ec23613d5d3d68c7e61ca2b8a3c958305b",
+    "dist/rbpf_process_profile_overhead_20261016.plan.json": "3f02736e80f7b0be0b32434ed36dd4ed540f5532300bcda144aea3393a7bfb36",
+    "dist/rbpf_process_profile_overhead_20261016.run.json": "f9e6890073600366ed92eb5f070e133179fad9739bbb41ddd5d3aa78dc73ed08",
+    "dist/rbpf_process_profile_overhead_20261016.states.jsonl.gz": "47062e6171d827509dc3c77296e07ce652db4066df491e471e58d9062bb831af",
+    "dist/rbpf_process_profile_tests_20261016.job.json": "aea07a87e887baded40f499dca551117cc2b073fd1fcdbe4c69438ed8ca10ca4",
+    "dist/rbpf_process_profile_tests_20261016.json": "6620326b534e59478fd868a54f821887c1c1174ed6c683af5fdda22eb8b36b52",
+    "dist/rbpf_process_profile_tests_20261016.log": "4813bbf3788092fe372cd851c6231407914d6bd1912fed477de16a33ec687e38",
+    "dist/rbpf_process_profile_tests_20261016.plan.json": "cb94d8fa2ba8b231845db05b04c21c259b727ff1551638a7e3c75ca86a47b574",
+    "dist/run_rbpf_call_profile_field_20261016.py": "b49fea046c36339dd9e3a1996f796e5b5e6ddf9553a446c4725ad64c16adc8eb",
+    "dist/run_rbpf_call_profile_overhead_20261016.py": "55ed4b9d26dedbd54019e10c69a4f4c00a360bd61463a052abed91a6b1043f22",
+    "dist/run_rbpf_call_profile_tests_20261016.py": "72fcb4f5f26590420690b83c33e05ecc388bdf95c23dd918c97617c2a2fe5d74",
+    "dist/run_rbpf_process_profile_field_20261016.py": "5caf6b0bc74a0fea4433832ba0cb01e591c8718f72c5c887b7df32fbecfa5e6f",
+    "dist/run_rbpf_process_profile_overhead_20261016.py": "908fd6ac959e3f2b02eff449d70d12954547e49b6c34852b23595c21d840fd68",
+    "dist/run_rbpf_process_profile_tests_20261016.py": "fcc023f24af6cf400458b3339caca521b56fb9c168fe8a62574ca96b99ecb65d"
+  },
+  "implementation_sha256": {
+    "benchmarks/rbpf_call_profile.py": "879fca7ddce87766909a355919223b694b127c7e9da05abb110e3addbf37e8c9",
+    "benchmarks/bench_rbpf_call_profile.py": "325a7e476ddf2d42adf8a86d4e94766c516141926e09554d4566a21e29c26b16",
+    "benchmarks/bench_rbpf_call_profile_field.py": "50b8bb8c84f838d623bde5956d5e39600a01328ac8bcc3924936d90bb830f65c",
+    "benchmarks/bench_rbpf_process_profile.py": "34fc702c00d9b67797a7a9c57dc266e4c5f90b64898052ff59703501da59c9eb",
+    "benchmarks/bench_rbpf_process_profile_field.py": "bef18a2bbe1003ca6f3213ae5b022faf01d3c9f5883a5600f53c5953d3023bd0",
+    "tests/test_rbpf_call_profile.py": "46e708868cb82161ff669a4bf57deae9d577bee8046cc6d4c6415f704057ff2d",
+    "tests/test_rbpf_process_profile.py": "c173b1cd30b36a4e1e52e0f390a5e37e76a8b785ee2c405425adaae50527dac7"
+  },
+  "all_saved_state_trajectory_cfg_prior_metadata_equal": true,
+  "real_paired_PF_steps": 800,
+  "profiled_RTK_epochs": 1600,
+  "same_two_prefix_workloads_observed_in_two_diagnostic_modes": true,
+  "new_GPU_actual_coverage": false,
+  "detailed_function_profile_tree_accepted": false,
+  "detailed_consistency_failures_preserved": true,
+  "calibration_timed_PF_steps": 270,
+  "calibration_warm_snapshots": 18,
+  "no_optimization_timing_retry": true,
+  "full_route_multiseed_accuracy_gate": false,
+  "whole_graph_speed_gate": false,
+  "memory": {
+    "cross_epoch_hypothesis_or_probability_cache": false,
+    "numerical_workspace_changed": false,
+    "new_persistent_native_or_device_workspace_bytes": 0,
+    "diagnostic_profiles_and_records_retained_in_Python": true,
+    "diagnostic_heap_peak_measured": false
+  },
+  "next_targets": [
+    "Inspect actual phase2 unclassified work around prepare_double_difference_measurements,build_pim and motion factors with coarse boundaries before rewriting equations or moving GTSAM wholesale to GPU.",
+    "Treat candidate construction/canonical validation as a remaining PF candidate;cross-check only independently verified call counts,and require a complete-PF speed gate for any implementation. Prior D239/D240/D241/D244 negative results remain.",
+    "Separate startup outliers from steady per-epoch latency descriptively without excluding them from totals. Do not infer an AR steady-state bottleneck from startup-dominated totals."
+  ],
+  "limits": [
+    "One route/seed prefixes,native_cpu only;not new GPU actual coverage/fullroute/multiseed accuracy or a speed acceptance.",
+    "Detailed cProfile actual root counts181/expected200,recursive176,and timing anomalies observed in both configurations. Cause not identified;do not trust full call tree or self/cumulative time shares. Synthetic counts16 are consistent but do not repair actual failures.",
+    "No timing/allocation/cycle causality claim. PF-only overhead calibration does not cover actual RTK/GTSAM forwarding;wall scheduling and process-CPU quantization/other own threads remain.",
+    "Coarse span removal of diagnostic serialization does not remove its cache/scheduling effects. Selected GTSAM expressions do not cover every native call."
+  ]
+}

@@ -1,0 +1,158 @@
+--- a/python/gnss_gpu/double_reflection.py
++++ b/python/gnss_gpu/double_reflection.py
+@@ -1,6 +1,7 @@
+ from __future__ import annotations
+ 
+ from dataclasses import dataclass
++from math import isfinite as _float_isfinite
+ 
+ import numpy as np
+ 
+@@ -72,8 +73,10 @@
+     ), dtype=np.float64)
+ 
+ 
+-def _point_in_triangle(point, triangle, geometry=None):
+-    if geometry is None:
++def _point_in_triangle(point, triangle, geometry=None, barycentric=None):
++    if barycentric is not None:
++        a, v0, v1, d00, d01, d11, denom, inv = barycentric
++    elif geometry is None:
+         a, b, c = triangle
+         v0 = b - a
+         v1 = c - a
+@@ -81,17 +84,21 @@
+         a, v0, v1 = geometry
+     v2 = point - a
+ 
+-    d00 = v0 @ v0
+-    d01 = v0 @ v1
+-    d02 = v0 @ v2
+-    d11 = v1 @ v1
+-    d12 = v1 @ v2
+-
+-    denom = d00 * d11 - d01 * d01
++    if barycentric is None:
++        d00 = v0 @ v0
++        d01 = v0 @ v1
++        d02 = v0 @ v2
++        d11 = v1 @ v1
++        d12 = v1 @ v2
++        denom = d00 * d11 - d01 * d01
++    else:
++        d02 = v0 @ v2
++        d12 = v1 @ v2
+     if abs(denom) <= area_eps:
+         return False
+ 
+-    inv = 1.0 / denom
++    if barycentric is None:
++        inv = 1.0 / denom
+     u = (d11 * d02 - d01 * d12) * inv
+     v = (d00 * d12 - d01 * d02) * inv
+     return bool(u >= -bary_tol and v >= -bary_tol and (u + v) <= 1.0 + bary_tol)
+@@ -193,7 +200,7 @@
+ 
+     __slots__ = ("triangles", "vertices", "receiver_distances", "receiver_images",
+                  "pair_images", "satellite_distances", "receiver_numerators",
+-                 "pair_numerators", "edges", "obstacles")
++                 "pair_numerators", "edges", "obstacles", "barycentrics")
+ 
+     def __init__(self, triangles, pair_count):
+         self.triangles = list(triangles)
+@@ -206,6 +213,7 @@
+         self.pair_numerators = [None] * pair_count
+         self.edges = [None] * len(triangles)
+         self.obstacles = [None] * len(triangles)
++        self.barycentrics = [None] * len(triangles)
+ 
+     def triangle_edges(self, index):
+         cached = self.edges[index]
+@@ -215,6 +223,20 @@
+             self.edges[index] = cached
+         return cached
+ 
++    def triangle_barycentric(self, index):
++        cached = self.barycentrics[index]
++        if cached is None:
++            a, v0, v1 = self.triangle_edges(index)
++            d00 = v0 @ v0
++            d01 = v0 @ v1
++            d11 = v1 @ v1
++            denom = d00 * d11 - d01 * d01
++            inv = None if abs(denom) <= area_eps else 1.0 / denom
++            # Keep NumPy scalar types and each original multiply/subtract/divide.
++            cached = (a, v0, v1, d00, d01, d11, denom, inv)
++            self.barycentrics[index] = cached
++        return cached
++
+     def obstacle_geometry(self, index):
+         cached = self.obstacles[index]
+         if cached is None:
+@@ -226,6 +248,8 @@
+ 
+ def _compute_single_path(tri_array, normals, rx, sat, direct_len, tri_a_id, tri_b_id,
+                          invariants=None, pair_index=None):
++    # All three checked values below are explicit Python floats.
++    isfinite = np.isfinite if invariants is None else _float_isfinite
+     if invariants is None:
+         tri_a = tri_array[tri_a_id]
+         tri_b = tri_array[tri_b_id]
+@@ -284,7 +308,7 @@
+             numerator2 = np.dot(b0 - i12, nb)
+             invariants.pair_numerators[pair_index] = numerator2
+         t2 = float(numerator2 / denom2)
+-    if not np.isfinite(t2) or t2 <= param_eps or t2 >= 1.0 - param_eps:
++    if not isfinite(t2) or t2 <= param_eps or t2 >= 1.0 - param_eps:
+         return None
+     if invariants is None:
+         p2 = i12 + t2 * (sat - i12)
+@@ -303,7 +327,7 @@
+             numerator1 = np.dot(a0 - i1, na)
+             invariants.receiver_numerators[tri_a_id] = numerator1
+         t1 = float(numerator1 / denom1)
+-    if not np.isfinite(t1) or t1 <= param_eps or t1 >= 1.0 - param_eps:
++    if not isfinite(t1) or t1 <= param_eps or t1 >= 1.0 - param_eps:
+         return None
+     if invariants is None:
+         p1 = i1 + t1 * (p2 - i1)
+@@ -316,9 +340,9 @@
+         if not _point_in_triangle(p2, tri_b):
+             return None
+     else:
+-        if not _point_in_triangle(p1, tri_a, invariants.triangle_edges(tri_a_id)):
+-            return None
+-        if not _point_in_triangle(p2, tri_b, invariants.triangle_edges(tri_b_id)):
++        if not _point_in_triangle(p1, tri_a, None, invariants.triangle_barycentric(tri_a_id)):
++            return None
++        if not _point_in_triangle(p2, tri_b, None, invariants.triangle_barycentric(tri_b_id)):
+             return None
+ 
+     excluded_ids = {tri_a_id, tri_b_id}
+@@ -342,7 +366,7 @@
+     seg3 = _norm(sat - p2)
+     path_len = seg1 + seg2 + seg3
+     excess_delay = float(path_len - direct_len)
+-    if not np.isfinite(excess_delay) or excess_delay <= delay_eps:
++    if not isfinite(excess_delay) or excess_delay <= delay_eps:
+         return None
+ 
+     u1 = _unit(p1 - rx)
+@@ -363,7 +387,7 @@
+ 
+ 
+ _IMAGE_HELPERS = (_compute_single_path, _triangle_normal, _norm, _ordered_pairs,
+-                  _point_in_triangle, _segment_blocked, _segment_intersects_triangle, _cross3_float64)
++                  _point_in_triangle, _segment_blocked, _segment_intersects_triangle, _cross3_float64, _float_isfinite)
+ 
+ 
+ def compute_double_reflection_paths(
+@@ -406,7 +430,7 @@
+             and 64 <= len(pairs) <= 32768 and n_sat * len(pairs) >= 1024
+             and all(current is original for current, original in zip(
+                 (_compute_single_path, _triangle_normal, _norm, _ordered_pairs,
+-                 _point_in_triangle, _segment_blocked, _segment_intersects_triangle, _cross3_float64), _IMAGE_HELPERS))
++                 _point_in_triangle, _segment_blocked, _segment_intersects_triangle, _cross3_float64, _float_isfinite), _IMAGE_HELPERS))
+             and area_eps == 1e-12 and plane_eps == 1e-6
+             and type(tri_array) is np.ndarray and tri_array.dtype == np.float64
+             and type(rx) is np.ndarray and type(sat_array) is np.ndarray

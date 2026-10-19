@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-15T13:32:56.941319+00:00",
+  "verified": true,
+  "adopted": true,
+  "report": {
+    "path": "benchmarks/reflection_geometry_gpu_20261015.json",
+    "sha256": "8b5143c3b7fe552f454170d7fa854e0c581ce93c0da81925b131cf32aa1ea79c"
+  },
+  "only_product_edit_since_D214": "python/gnss_gpu/raytrace.py",
+  "native_PE_CUDA_H_CPP_unchanged": true,
+  "previous_reports_and_core_sources_preserved": {
+    "benchmarks/pf_private_weights_gpu_20261015.json": "d3e7547b291f798f0371736297b35794e7259f64f146e6461b177d83e7991d78",
+    "benchmarks/pf_private_weights_completion_check_20261015.json": "3887db3457cd0b222e73e94a0829ec0be43080d8d3a794da6962e0a72af78946",
+    "benchmarks/urban_atmosphere_batch_gpu_20261015.json": "0b371a4da7c808106aae1ecd4d2a16d77ad68c9b416d471406db772d91481720",
+    "benchmarks/urban_atmosphere_batch_completion_check_20261015.json": "989ab3e54684fb8b2658072f8355633a3f82585cdbccd2fd941cd0d1b7d2c814",
+    "benchmarks/bvh_los_frontier_batches_gpu_20261015.json": "9031bc9cbe1c1b092fca8f158ac6d95e2e9763bcfe03e25be32a1208b166fcf9",
+    "benchmarks/bvh_los_frontier_batches_completion_check_20261015.json": "075d51987a8bca0fc06bed258bda484881bbeff00d09d005e8d7910e4ff0009e",
+    "benchmarks/bvh_direction_cohorts_rejected_20261015.json": "5bd118f5e7d2fcf7be4a31ebb417ff9a8d4618d078047114039f7d1c2b944706",
+    "benchmarks/bvh_direction_cohorts_completion_check_20261015.json": "27fd3f24c34af51e2f21eb601f8bb78aab60f377d5b48fdf4120b1cc3f201c2f"
+  },
+  "installed_bvh_preserved": true,
+  "source_record_immutable": true,
+  "measured_helpers_unchanged": true,
+  "exact_CRLF_patch_reconstruction": true,
+  "reverse_patch_check_passed": true,
+  "final_source_timed_pairs": 495,
+  "prior_source_timed_pairs": 218,
+  "all_timed_outputs_bit_identical": true,
+  "regression_passed": 271,
+  "existing_sample_dependent_tests_skipped": 2,
+  "new_oracle_tests": 103,
+  "oracle_byte_exact": true,
+  "sanitizers": {
+    "memcheck": {
+      "tests_passed": 103,
+      "exit_code": 0,
+      "summary": [
+        "========= LEAK SUMMARY: 0 bytes leaked in 0 allocations",
+        "========= ERROR SUMMARY: 0 errors"
+      ]
+    },
+    "racecheck": {
+      "tests_passed": 103,
+      "exit_code": 0,
+      "summary": [
+        "========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)"
+      ]
+    },
+    "synccheck": {
+      "tests_passed": 103,
+      "exit_code": 0,
+      "summary": [
+        "========= ERROR SUMMARY: 0 errors"
+      ]
+    }
+  },
+  "additional_persistent_host_or_GPU_workspace_bytes": 0,
+  "maximum_call_local_cache_payload_bytes": 33554432,
+  "guards_restore_all_four_failed_pre_adoption_cases": true,
+  "public_text_files_checked": 2850,
+  "public_device_product_names_absent": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  },
+  "new_whole_PF_or_long_real_data_positioning_accuracy_claim": false
+}

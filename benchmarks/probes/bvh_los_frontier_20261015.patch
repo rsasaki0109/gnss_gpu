@@ -1,0 +1,211 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -313,6 +313,20 @@
+ 
+ static const int BVH_MAX_DEPTH = 64;
+ 
++// A shallow cut retains every ancestor test before independent LOS subtrees.
++// Only trees whose complete height is at most32 use this path, so the legacy
++// 64-entry traversal stack never truncates an ancestor or subtree.
++struct LOSBranch {
++  int ancestors[5];
++  int count;
++  int root;
++};
++
++struct LOSFrontier {
++  LOSBranch branches[32];
++  int count;
++};
++
+ __global__ void los_check_bvh_kernel(const double* rx_ecef,
+                                       const double* sat_ecef,
+                                       const BVHNode* bvh,
+@@ -444,6 +458,82 @@
+   }
+ 
+   is_los[tid] = blocked ? 0 : 1;
++}
++
++// One warp per ray distributes a bounded, exact BVH frontier across lanes.
++// Single-call NaN behavior and batch padding remain distinct as in the old
++// kernels. Shared ray preparation uses the same device FP64 expressions.
++template <bool BATCH>
++__global__ void los_frontier_kernel(const double* rx_ecef, const double* sat_ecef,
++                                     const BVHNode* bvh, const Triangle* tris,
++                                     __grid_constant__ const LOSFrontier frontier,
++                                     int* is_los, int n_sat) {
++  int ray = blockIdx.x;
++  int epoch = ray / n_sat;
++  __shared__ double origin[3], dir[3], dir_inv[3], dist;
++  __shared__ int status;
++  if (threadIdx.x == 0) {
++    double ox = rx_ecef[epoch * 3], oy = rx_ecef[epoch * 3 + 1], oz = rx_ecef[epoch * 3 + 2];
++    double sx = sat_ecef[ray * 3], sy = sat_ecef[ray * 3 + 1], sz = sat_ecef[ray * 3 + 2];
++    status = 2;
++    if constexpr (BATCH) {
++      if (!isfinite(sx) || !isfinite(sy) || !isfinite(sz) ||
++          !isfinite(ox) || !isfinite(oy) || !isfinite(oz)) status = 0;
++    }
++    if (status) {
++      origin[0] = ox; origin[1] = oy; origin[2] = oz;
++      dir[0] = sx - ox; dir[1] = sy - oy; dir[2] = sz - oz;
++      dist = sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
++      if (dist < 1e-15) {
++        status = 1;
++      } else {
++        dir[0] /= dist; dir[1] /= dist; dir[2] /= dist;
++        for (int d = 0; d < 3; d++) {
++          dir_inv[d] = (fabs(dir[d]) > 1e-20) ? (1.0 / dir[d]) : ((dir[d] >= 0) ? 1e20 : -1e20);
++        }
++      }
++    }
++  }
++  __syncthreads();
++  if (status != 2) {
++    if (threadIdx.x == 0) is_los[ray] = status;
++    return;
++  }
++  bool blocked = false;
++  if (threadIdx.x < frontier.count) {
++    const LOSBranch& branch = frontier.branches[threadIdx.x];
++    bool reachable = true;
++    for (int i = 0; i < branch.count; i++) {
++      if (!ray_aabb_intersect(origin, dir_inv, 0.0, dist, bvh[branch.ancestors[i]].bbox)) {
++        reachable = false;
++        break;
++      }
++    }
++    if (reachable) {
++      int stack[BVH_MAX_DEPTH];
++      int sp = 0;
++      stack[sp++] = branch.root;
++      while (sp > 0 && !blocked) {
++        const BVHNode& node = bvh[stack[--sp]];
++        if (!ray_aabb_intersect(origin, dir_inv, 0.0, dist, node.bbox)) continue;
++        if (node.left == -1) {
++          for (int i = 0; i < node.tri_count; i++) {
++            double t;
++            const Triangle& tri = tris[node.tri_start + i];
++            if (mt_intersect(origin, dir, tri.v0, tri.v1, tri.v2, t) && t < dist) {
++              blocked = true;
++              break;
++            }
++          }
++        } else if (sp < BVH_MAX_DEPTH - 1) {
++          stack[sp++] = node.left;
++          stack[sp++] = node.right;
++        }
++      }
++    }
++  }
++  unsigned hits = __ballot_sync(0xffffffffu, blocked);
++  if (threadIdx.x == 0) is_los[ray] = hits ? 0 : 1;
+ }
+ 
+ __global__ void multipath_bvh_batch_kernel(const double* rx_ecef,
+@@ -911,7 +1001,8 @@
+ 
+ // Validate ranges and reject reachable cycles before any GPU allocation. Shared
+ // or overlapping leaves remain valid and use the legacy multipath path as needed.
+-int validate_device_bvh(const BVHNode* nodes, int n_nodes, int n_tri) {
++int validate_device_bvh(const BVHNode* nodes, int n_nodes, int n_tri,
++                        std::vector<LOSBranch>& frontier) {
+   int referenced = 0;
+   for (int i = 0; i < n_nodes; ++i) {
+     const auto& node = nodes[i];
+@@ -924,23 +1015,50 @@
+       throw std::invalid_argument("DeviceBVH: child index is out of bounds");
+     }
+   }
++  bool prepare_frontier = referenced >= 8192 && n_nodes >= 15;
+   std::vector<unsigned char> colors(n_nodes, 0);
+   std::vector<std::pair<int, bool>> pending{{0, false}};
+   while (!pending.empty()) {
+     auto [index, leaving] = pending.back();
+     pending.pop_back();
+     if (leaving) {
+-      colors[index] = 2;
++      // Completed colors encode min(height,33)+2 when a frontier is useful.
++      // Reuse the existing byte scratch instead of another node-sized vector.
++      colors[index] = prepare_frontier ? (nodes[index].left == -1 ? 3 :
++          std::min(35, 1 + std::max((int)colors[nodes[index].left],
++                                   (int)colors[nodes[index].right]))) : 2;
+       continue;
+     }
+     if (colors[index] == 1) throw std::invalid_argument("DeviceBVH: BVH contains a cycle");
+-    if (colors[index] == 2) continue;
++    if (colors[index] >= 2) continue;
+     colors[index] = 1;
+     pending.emplace_back(index, true);
+     if (nodes[index].left != -1) {
+       pending.emplace_back(nodes[index].left, false);
+       pending.emplace_back(nodes[index].right, false);
+     }
++  }
++  if (prepare_frontier && colors[0] <= 34) {
++    frontier.push_back(LOSBranch{});
++    for (int level = 0; level < 5; level++) {
++      std::vector<LOSBranch> next;
++      next.reserve(32);
++      for (const auto& branch : frontier) {
++        const auto& node = nodes[branch.root];
++        if (node.left == -1) {
++          next.push_back(branch);
++        } else {
++          LOSBranch child = branch;
++          child.ancestors[child.count++] = branch.root;
++          child.root = node.left;
++          next.push_back(child);
++          child.root = node.right;
++          next.push_back(child);
++        }
++      }
++      frontier.swap(next);
++    }
++    if (frontier.size() < 8) frontier.clear();
+   }
+   return referenced;
+ }
+@@ -953,6 +1071,7 @@
+   int n_order = 0;
+   bool ordered = false;
+   std::vector<int> host_order;
++  LOSFrontier frontier = {};
+   DeviceBuffer<BVHNode> nodes;
+   DeviceBuffer<Triangle> triangles;
+   DeviceBuffer<int> order, los;
+@@ -989,7 +1108,15 @@
+ 
+   void launch_los(int n_epoch, int n_sat, bool batch) {
+     int total = n_epoch * n_sat;
+-    if (batch) {
++    if (total <= 32 && frontier.count >= 8) {
++      if (batch) {
++        los_frontier_kernel<true><<<total, 32>>>(rx.data, sat.data, nodes.data, triangles.data,
++            frontier, los.data, n_sat);
++      } else {
++        los_frontier_kernel<false><<<total, 32>>>(rx.data, sat.data, nodes.data, triangles.data,
++            frontier, los.data, n_sat);
++      }
++    } else if (batch) {
+       los_check_bvh_batch_kernel<<<(total + 255) / 256, 256>>>(
+           rx.data, sat.data, nodes.data, triangles.data, los.data, n_epoch, n_sat, n_nodes);
+     } else {
+@@ -1161,12 +1288,15 @@
+ DeviceBVH::DeviceBVH(const BVHNode* h_nodes, int n_nodes, const Triangle* h_tri, int n_tri) {
+   if (!h_nodes || !h_tri || n_nodes <= 0 || n_tri <= 0)
+     throw std::invalid_argument("DeviceBVH: mesh must contain nodes and triangles");
+-  int referenced = validate_device_bvh(h_nodes, n_nodes, n_tri);
++  std::vector<LOSBranch> branches;
++  int referenced = validate_device_bvh(h_nodes, n_nodes, n_tri, branches);
+   // Keep this owner local until all uploads succeed, so failed construction also
+   // releases any buffers already allocated.
+   auto state = std::make_unique<Impl>();
+   CUDA_CHECK(cudaGetDevice(&state->device));
+   state->n_nodes = n_nodes;
++  state->frontier.count = (int)branches.size();
++  std::copy(branches.begin(), branches.end(), state->frontier.branches);
+   state->nodes.upload(h_nodes, (size_t)n_nodes);
+   state->triangles.upload(h_tri, (size_t)referenced);
+   if (referenced >= 64) {

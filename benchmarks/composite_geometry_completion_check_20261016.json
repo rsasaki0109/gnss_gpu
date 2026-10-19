@@ -1,0 +1,62 @@
+{
+  "timestamp_utc": "2026-10-15T19:48:13.119716+00:00",
+  "verified": true,
+  "adopted": true,
+  "report": {
+    "path": "benchmarks/composite_geometry_gpu_20261016.json",
+    "sha256": "d62537d0cf6fadcc546d7f4de78ac466829ffdde1b38a8b068cc36daab318747"
+  },
+  "only_product_edit_since_D222": [
+    "python/gnss_gpu/reflection_diffraction.py"
+  ],
+  "final_source_timed_pairs": 1765,
+  "AA_timed_pairs": 110,
+  "all_timed_outputs_bit_identical": true,
+  "all_performance_gates_passed": true,
+  "initial_rejected_probe_preserved": true,
+  "original12_scalar_helper_AST_unchanged": true,
+  "regression_passed": 661,
+  "new_tests": 79,
+  "existing_skips": 2,
+  "sanitizers": {
+    "memcheck": {
+      "tests_passed": 123,
+      "exit_code": 0,
+      "summary": [
+        "========= LEAK SUMMARY: 0 bytes leaked in 0 allocations",
+        "========= ERROR SUMMARY: 0 errors"
+      ]
+    },
+    "racecheck": {
+      "tests_passed": 123,
+      "exit_code": 0,
+      "summary": [
+        "========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)"
+      ]
+    },
+    "synccheck": {
+      "tests_passed": 123,
+      "exit_code": 0,
+      "summary": [
+        "========= ERROR SUMMARY: 0 errors"
+      ]
+    }
+  },
+  "native_PE_CUDA_H_CPP_unchanged": true,
+  "previous_reports_preserved": {
+    "benchmarks/double_geometry_gpu_20261016.json": "948b8797191d7c351e2710bec4578c749ea8893f6656f3f0e8cbe96fdbeabc7d",
+    "benchmarks/double_geometry_completion_check_20261016.json": "73c2f397ef645200090ae51346a9b9000d400767cc092d17a8ffe564553354e7",
+    "benchmarks/double_predicates_rejected_20261016.json": "309c46bed95ebc240657d54f591ea1b345575959ba2804c70ba8a5ca96a02f89",
+    "benchmarks/double_predicates_rejected_completion_check_20261016.json": "254bbf04216c7d24d602b42f530887b9fa93abb8e9f4760900e551e2ac43928b",
+    "benchmarks/diffraction_loss_rejected_20261016.json": "68680726625e1ddc840e6dabc4afb1cb02f90ac2547f21045687960b743faa8f",
+    "benchmarks/diffraction_loss_rejected_completion_check_20261016.json": "3dea35c50471c13fb0b18879fd9244d0e8447a83af8615d34f52ec16a577c4ec"
+  },
+  "new_whole_PF_or_real_data_positioning_accuracy_claim": false,
+  "reverse_patch_check_passed": true,
+  "public_text_files_checked": 2889,
+  "public_device_product_names_absent": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  }
+}

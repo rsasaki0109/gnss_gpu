@@ -1,0 +1,1476 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-15T10:00:10.110592+00:00",
+  "adopted": false,
+  "baseline_reference": "benchmarks/bvh_los_frontier_batches_gpu_20261015.json",
+  "build_configuration": "CUDA12.8 / MSVC Release / compute7.5 / C++20 / no fast math",
+  "source_sha256": {
+    "baseline": {
+      "src/raytrace/bvh.cu": "7d9d06f128710f12eea70b09b8f0d475d16223957ddfdf41a7cf5ec77ac09d98",
+      "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+      "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+      "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+      "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+    },
+    "candidate": {
+      "src/raytrace/bvh.cu": "2992cb8e4f8d2ada67140ee5900d7452ad5ed2519281f8856cf94e947a297fbe",
+      "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+      "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+      "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+      "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+    }
+  },
+  "source_normalized_lf_sha256": {
+    "baseline": {
+      "src/raytrace/bvh.cu": "f05e5672b6501775c872beaf78f1a485797aa161e91e6e7b49beac6d9fc9c3a6",
+      "include/gnss_gpu/bvh.h": "14029304fd6b0e63100900f2c66c9e8154358abca71ec3015aa893f5d782db8d",
+      "python/gnss_gpu/_bvh_bindings.cpp": "855b052fe467b0604044c09e3a8506ecb734beb13e6d2f11a3848b0f45ced8f3",
+      "python/gnss_gpu/bvh.py": "d049cdb693723b389b56aa20bb22ace2727c0a51059a42284abedf1091dc20e8",
+      "python/gnss_gpu/urban_signal_sim.py": "4ec72c2f863f1d3217907a6e002396431fc4b5204d76077a799613fca48bc366"
+    },
+    "candidate": {
+      "src/raytrace/bvh.cu": "c96c5c98e5422ac9dea454d68de6eb3148e1eb2d691348a44f99ede8dad1351f",
+      "include/gnss_gpu/bvh.h": "14029304fd6b0e63100900f2c66c9e8154358abca71ec3015aa893f5d782db8d",
+      "python/gnss_gpu/_bvh_bindings.cpp": "855b052fe467b0604044c09e3a8506ecb734beb13e6d2f11a3848b0f45ced8f3",
+      "python/gnss_gpu/bvh.py": "d049cdb693723b389b56aa20bb22ace2727c0a51059a42284abedf1091dc20e8",
+      "python/gnss_gpu/urban_signal_sim.py": "4ec72c2f863f1d3217907a6e002396431fc4b5204d76077a799613fca48bc366"
+    }
+  },
+  "extension_sha256": {
+    "baseline": "abf87878be7ff7079375cd04bfdcb82e22255df282a507cbf61da7da5a6553ec",
+    "candidate": "cf36f719b17135cac4a76f29499e357ee00688a07da2819393c1f251c01a6253"
+  },
+  "immutable_source_record_sha256": "5defdf2eb7f1027ceed4b33bc712fa31cc9a3627c24e36f5e408a8d2ac44e0b3",
+  "dispatch": "Only existing bounded large reflection groups using prepared mirrors use a new candidate kernel; all other paths unchanged.",
+  "semantics": "Keep every candidate, original ordinal/tie, FP64 expressions and mirror updates. A warp hash proposes peers but all192 mirror bits must match before sharing normalization. Hash collisions execute the original lane arithmetic. No approximate reciprocal, precision change or persistent cache.",
+  "tradeoff": "No new persistent GPU allocation; one new kernel with warp match/shuffle and exact-bit comparison overhead. Existing12 GPU kernels must remain byte-identical in normalized SASS/resources.",
+  "performance_gate": "At least5% complete public trace reduction on realistic large mirrored batches with4/5 improving final rounds, exact outputs and no material controls/cold regression. Reject promptly after an ineffective or nonidentical early gate.",
+  "decision": {
+    "timestamp_utc": "2026-10-15T09:57:49.174965+00:00",
+    "adopted": false,
+    "reason": "Every measured public trace median regressed; no meaningful speedup. Stop before broad candidate validation, regression or sanitizer runs.",
+    "timed_pairs": 144,
+    "all_timed_outputs_bit_identical": true,
+    "paired_statistics": {
+      "triangles4096/epochs513/satellites32/unchanged_warm_multipath": {
+        "pairs": 9,
+        "reduction_percent": -0.26571665592851623,
+        "improving_rounds": 0
+      },
+      "triangles4096/epochs513/satellites32/public_warm_trace": {
+        "pairs": 9,
+        "reduction_percent": -0.29649274824692373,
+        "improving_rounds": 0
+      },
+      "triangles4096/epochs513/satellites32/native_cold_trace_close": {
+        "pairs": 9,
+        "reduction_percent": -0.3216956526444603,
+        "improving_rounds": 0
+      },
+      "triangles4096/epochs513/satellites32/warm_los": {
+        "pairs": 9,
+        "reduction_percent": 0.9231044990141601,
+        "improving_rounds": 2
+      },
+      "triangles4096/epochs1366/satellites12/unchanged_warm_multipath": {
+        "pairs": 9,
+        "reduction_percent": -0.49601316648222316,
+        "improving_rounds": 0
+      },
+      "triangles4096/epochs1366/satellites12/public_warm_trace": {
+        "pairs": 9,
+        "reduction_percent": -0.384388018582249,
+        "improving_rounds": 0
+      },
+      "triangles4096/epochs1366/satellites12/native_cold_trace_close": {
+        "pairs": 9,
+        "reduction_percent": -0.6381938843792012,
+        "improving_rounds": 0
+      },
+      "triangles4096/epochs1366/satellites12/warm_los": {
+        "pairs": 9,
+        "reduction_percent": -4.696287964004497,
+        "improving_rounds": 0
+      },
+      "triangles12000/epochs513/satellites32/unchanged_warm_multipath": {
+        "pairs": 9,
+        "reduction_percent": -0.4388200477840165,
+        "improving_rounds": 0
+      },
+      "triangles12000/epochs513/satellites32/public_warm_trace": {
+        "pairs": 9,
+        "reduction_percent": -0.48996390289186564,
+        "improving_rounds": 0
+      },
+      "triangles12000/epochs513/satellites32/native_cold_trace_close": {
+        "pairs": 9,
+        "reduction_percent": -0.26656586444901986,
+        "improving_rounds": 0
+      },
+      "triangles12000/epochs513/satellites32/warm_los": {
+        "pairs": 9,
+        "reduction_percent": 0.30043624989711804,
+        "improving_rounds": 2
+      },
+      "triangles12000/epochs1366/satellites12/unchanged_warm_multipath": {
+        "pairs": 9,
+        "reduction_percent": -0.5935686889660952,
+        "improving_rounds": 0
+      },
+      "triangles12000/epochs1366/satellites12/public_warm_trace": {
+        "pairs": 9,
+        "reduction_percent": -0.5015844230669364,
+        "improving_rounds": 0
+      },
+      "triangles12000/epochs1366/satellites12/native_cold_trace_close": {
+        "pairs": 9,
+        "reduction_percent": -0.4353066400249572,
+        "improving_rounds": 0
+      },
+      "triangles12000/epochs1366/satellites12/warm_los": {
+        "pairs": 9,
+        "reduction_percent": -0.63334868724092,
+        "improving_rounds": 2
+      }
+    },
+    "restore_target_source_sha256": {
+      "src/raytrace/bvh.cu": "7d9d06f128710f12eea70b09b8f0d475d16223957ddfdf41a7cf5ec77ac09d98",
+      "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+      "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+      "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+      "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7"
+    },
+    "restore_target_extension_sha256": "abf87878be7ff7079375cd04bfdcb82e22255df282a507cbf61da7da5a6553ec"
+  },
+  "measurements": {
+    "triangles4096/epochs513/satellites32/unchanged_warm_multipath": {
+      "baseline_ms": 71.2413,
+      "candidate_ms": 71.4306,
+      "speedup": 0.9973498752635425,
+      "round_medians_ms": {
+        "baseline": [
+          71.2891,
+          71.2413,
+          71.1886
+        ],
+        "candidate": [
+          71.4331,
+          71.418,
+          71.4306
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            71.2891,
+            71.4916,
+            71.1989
+          ],
+          [
+            71.3154,
+            71.1611,
+            71.2413
+          ],
+          [
+            71.3417,
+            71.1838,
+            71.1886
+          ]
+        ],
+        "candidate": [
+          [
+            71.4422,
+            71.3953,
+            71.4331
+          ],
+          [
+            71.418,
+            71.4051,
+            71.4471
+          ],
+          [
+            71.4233,
+            71.4484,
+            71.4306
+          ]
+        ]
+      },
+      "output_sha256": "99e054869ab86afbcc8635e38ec77846cfb35e5a9685a296b0321ae5dba2409d",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "2387441466f0f7191b90cfd01b3402f10d6ac1c5493f599405be9f551fa360f4"
+    },
+    "triangles4096/epochs513/satellites32/public_warm_trace": {
+      "baseline_ms": 72.2446,
+      "candidate_ms": 72.4588,
+      "speedup": 0.9970438373254872,
+      "round_medians_ms": {
+        "baseline": [
+          72.2169,
+          72.2446,
+          72.3118
+        ],
+        "candidate": [
+          72.4996,
+          72.4588,
+          72.4235
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            72.1768,
+            72.2169,
+            72.4458
+          ],
+          [
+            72.3032,
+            72.1788,
+            72.2446
+          ],
+          [
+            72.3118,
+            72.2072,
+            72.3804
+          ]
+        ],
+        "candidate": [
+          [
+            72.4896,
+            72.5772,
+            72.4996
+          ],
+          [
+            72.5305,
+            72.4509,
+            72.4588
+          ],
+          [
+            72.4235,
+            72.395,
+            72.5051
+          ]
+        ]
+      },
+      "output_sha256": "2173ad2046161316029070f2733448cbc7d28a30e5c2c5eb808c303f63f37319",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "2387441466f0f7191b90cfd01b3402f10d6ac1c5493f599405be9f551fa360f4"
+    },
+    "triangles4096/epochs513/satellites32/native_cold_trace_close": {
+      "baseline_ms": 73.9208,
+      "candidate_ms": 74.1586,
+      "speedup": 0.9967933590979332,
+      "round_medians_ms": {
+        "baseline": [
+          73.9208,
+          74.0384,
+          73.8918
+        ],
+        "candidate": [
+          74.1526,
+          74.1586,
+          74.2242
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            73.9208,
+            73.9732,
+            73.8664
+          ],
+          [
+            74.0384,
+            74.2644,
+            73.7497
+          ],
+          [
+            73.69,
+            73.8918,
+            74.153
+          ]
+        ],
+        "candidate": [
+          [
+            74.1308,
+            74.1767,
+            74.1526
+          ],
+          [
+            74.3941,
+            73.9621,
+            74.1586
+          ],
+          [
+            74.2242,
+            74.05,
+            74.6665
+          ]
+        ]
+      },
+      "output_sha256": "8ac0b7e43cba9f41de06a8206974f36642aa02a8f79091108efde8e63339cb50",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "2387441466f0f7191b90cfd01b3402f10d6ac1c5493f599405be9f551fa360f4"
+    },
+    "triangles4096/epochs513/satellites32/warm_los": {
+      "baseline_ms": 1.1158,
+      "candidate_ms": 1.1055,
+      "speedup": 1.0093170511080958,
+      "round_medians_ms": {
+        "baseline": [
+          1.1158,
+          1.1023,
+          1.1926
+        ],
+        "candidate": [
+          1.1055,
+          1.1082,
+          1.1001
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            1.2,
+            1.0986,
+            1.1158
+          ],
+          [
+            1.1023,
+            1.0939,
+            1.2467
+          ],
+          [
+            1.1926,
+            1.1418,
+            1.2098
+          ]
+        ],
+        "candidate": [
+          [
+            1.1055,
+            1.0941,
+            1.2488
+          ],
+          [
+            1.1082,
+            1.1052,
+            1.109
+          ],
+          [
+            1.1001,
+            1.0995,
+            1.1096
+          ]
+        ]
+      },
+      "output_sha256": "f6084adbc71ce676c18a670855359f2aa60e9c9ab5c81d7c83b4a4d0bb43f8fe",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "2387441466f0f7191b90cfd01b3402f10d6ac1c5493f599405be9f551fa360f4"
+    },
+    "triangles4096/epochs513/satellites32/memory": {
+      "baseline": 14373336,
+      "candidate": 14373336,
+      "extra_bytes": 0
+    },
+    "triangles4096/epochs1366/satellites12/unchanged_warm_multipath": {
+      "baseline_ms": 70.482,
+      "candidate_ms": 70.8316,
+      "speedup": 0.9950643498099719,
+      "round_medians_ms": {
+        "baseline": [
+          70.5771,
+          70.4697,
+          70.482
+        ],
+        "candidate": [
+          70.7604,
+          70.8316,
+          70.875
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            70.5771,
+            70.5901,
+            70.4624
+          ],
+          [
+            70.4639,
+            70.4697,
+            70.7984
+          ],
+          [
+            71.0209,
+            70.482,
+            70.4712
+          ]
+        ],
+        "candidate": [
+          [
+            70.7779,
+            70.7604,
+            70.7285
+          ],
+          [
+            70.8316,
+            70.8852,
+            70.7415
+          ],
+          [
+            70.875,
+            70.9735,
+            70.8604
+          ]
+        ]
+      },
+      "output_sha256": "78f0e5e7d04caf11649290df5d63aeadeead6cce31e941c53a789921406e6ce4",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "a5fe891317e4771719d77027d33c06f60e278b5faa4695feb31f8c81a0f22e6d"
+    },
+    "triangles4096/epochs1366/satellites12/public_warm_trace": {
+      "baseline_ms": 71.7244,
+      "candidate_ms": 72.0001,
+      "speedup": 0.9961708386516129,
+      "round_medians_ms": {
+        "baseline": [
+          71.8818,
+          71.7244,
+          71.7172
+        ],
+        "candidate": [
+          72.0001,
+          72.055,
+          71.939
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            72.3593,
+            71.8818,
+            71.6769
+          ],
+          [
+            71.8086,
+            71.7244,
+            71.6725
+          ],
+          [
+            71.7172,
+            71.6438,
+            71.7944
+          ]
+        ],
+        "candidate": [
+          [
+            72.282,
+            72.0001,
+            71.9749
+          ],
+          [
+            71.9523,
+            72.1352,
+            72.055
+          ],
+          [
+            71.9153,
+            71.939,
+            72.0456
+          ]
+        ]
+      },
+      "output_sha256": "f45c8718b19037bb3f492d15818d1a89ca7705a34621bac349818dfa9259fba9",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "a5fe891317e4771719d77027d33c06f60e278b5faa4695feb31f8c81a0f22e6d"
+    },
+    "triangles4096/epochs1366/satellites12/native_cold_trace_close": {
+      "baseline_ms": 74.2721,
+      "candidate_ms": 74.7461,
+      "speedup": 0.993658532017055,
+      "round_medians_ms": {
+        "baseline": [
+          74.4027,
+          74.2652,
+          74.2721
+        ],
+        "candidate": [
+          74.756,
+          74.4507,
+          74.7461
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            74.19,
+            74.6268,
+            74.4027
+          ],
+          [
+            74.2652,
+            74.1565,
+            74.5523
+          ],
+          [
+            78.5403,
+            74.143,
+            74.2721
+          ]
+        ],
+        "candidate": [
+          [
+            74.4665,
+            75.4615,
+            74.756
+          ],
+          [
+            74.9052,
+            74.4507,
+            74.3193
+          ],
+          [
+            74.7461,
+            74.4877,
+            75.1068
+          ]
+        ]
+      },
+      "output_sha256": "33c5fd21e631aeed35ff033b41b2be85ba253b9534fff7ebaec8b2afa3a8d2a2",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "a5fe891317e4771719d77027d33c06f60e278b5faa4695feb31f8c81a0f22e6d"
+    },
+    "triangles4096/epochs1366/satellites12/warm_los": {
+      "baseline_ms": 0.7112,
+      "candidate_ms": 0.7446,
+      "speedup": 0.9551437013161429,
+      "round_medians_ms": {
+        "baseline": [
+          0.7085,
+          0.7201,
+          0.7112
+        ],
+        "candidate": [
+          0.7124,
+          0.7528,
+          0.7446
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            0.7538,
+            0.7085,
+            0.7041
+          ],
+          [
+            0.8278,
+            0.7099,
+            0.7201
+          ],
+          [
+            0.7112,
+            0.7106,
+            0.7112
+          ]
+        ],
+        "candidate": [
+          [
+            0.7234,
+            0.7124,
+            0.7012
+          ],
+          [
+            0.7285,
+            0.7528,
+            0.8701
+          ],
+          [
+            0.7011,
+            0.7446,
+            0.7635
+          ]
+        ]
+      },
+      "output_sha256": "c0d448551431df1b9203df3cfcf3f33308884457f0f9587d8404609b9860b550",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "a5fe891317e4771719d77027d33c06f60e278b5faa4695feb31f8c81a0f22e6d"
+    },
+    "triangles4096/epochs1366/satellites12/memory": {
+      "baseline": 35330960,
+      "candidate": 35330960,
+      "extra_bytes": 0
+    },
+    "triangles12000/epochs513/satellites32/unchanged_warm_multipath": {
+      "baseline_ms": 208.3542,
+      "candidate_ms": 209.2685,
+      "speedup": 0.9956309716942588,
+      "round_medians_ms": {
+        "baseline": [
+          208.2989,
+          208.3542,
+          208.4156
+        ],
+        "candidate": [
+          209.2645,
+          209.3391,
+          209.2685
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            208.2989,
+            208.304,
+            208.2449
+          ],
+          [
+            208.3542,
+            208.3616,
+            208.2257
+          ],
+          [
+            208.4092,
+            208.4156,
+            208.4362
+          ]
+        ],
+        "candidate": [
+          [
+            209.2645,
+            209.1938,
+            209.2969
+          ],
+          [
+            209.3374,
+            209.3391,
+            209.3585
+          ],
+          [
+            209.2685,
+            209.2133,
+            209.3033
+          ]
+        ]
+      },
+      "output_sha256": "bfe932506d6777bb8e0aa1b60b88ed875c7bec64f5f22f90d36149f323641f06",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "f08ef0dc4de3a431790bd9d4d3dbd944111a5a769ce795844e06e1974fc3ae4f"
+    },
+    "triangles12000/epochs513/satellites32/public_warm_trace": {
+      "baseline_ms": 210.7094,
+      "candidate_ms": 211.7418,
+      "speedup": 0.9951242503841943,
+      "round_medians_ms": {
+        "baseline": [
+          210.837,
+          210.6,
+          210.7094
+        ],
+        "candidate": [
+          236.2988,
+          211.7418,
+          211.6435
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            210.6213,
+            210.837,
+            241.4385
+          ],
+          [
+            210.8326,
+            210.5942,
+            210.6
+          ],
+          [
+            210.6898,
+            210.8336,
+            210.7094
+          ]
+        ],
+        "candidate": [
+          [
+            211.7071,
+            236.2988,
+            240.774
+          ],
+          [
+            215.3796,
+            211.6454,
+            211.7418
+          ],
+          [
+            211.524,
+            211.9229,
+            211.6435
+          ]
+        ]
+      },
+      "output_sha256": "76d8908960f56bb070239347a43fc42fada4a6ce14edc2323f241d83523de2c1",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "f08ef0dc4de3a431790bd9d4d3dbd944111a5a769ce795844e06e1974fc3ae4f"
+    },
+    "triangles12000/epochs513/satellites32/native_cold_trace_close": {
+      "baseline_ms": 214.281,
+      "candidate_ms": 214.8522,
+      "speedup": 0.9973414282004094,
+      "round_medians_ms": {
+        "baseline": [
+          214.281,
+          214.1303,
+          214.4032
+        ],
+        "candidate": [
+          214.8522,
+          215.0336,
+          214.7074
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            214.3091,
+            214.281,
+            213.9663
+          ],
+          [
+            214.1479,
+            214.1303,
+            213.9167
+          ],
+          [
+            213.872,
+            214.4288,
+            214.4032
+          ]
+        ],
+        "candidate": [
+          [
+            214.7638,
+            214.8522,
+            215.2793
+          ],
+          [
+            215.1083,
+            214.9937,
+            215.0336
+          ],
+          [
+            214.7047,
+            214.7074,
+            215.1618
+          ]
+        ]
+      },
+      "output_sha256": "dc0c30358cd977d55b2971a16a7d7a5893afc304b44ac2cc70e9eefecc42a04f",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "f08ef0dc4de3a431790bd9d4d3dbd944111a5a769ce795844e06e1974fc3ae4f"
+    },
+    "triangles12000/epochs513/satellites32/warm_los": {
+      "baseline_ms": 2.4298,
+      "candidate_ms": 2.4225,
+      "speedup": 1.003013415892673,
+      "round_medians_ms": {
+        "baseline": [
+          2.4218,
+          2.5032,
+          2.4298
+        ],
+        "candidate": [
+          2.3577,
+          2.4225,
+          2.4442
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            2.4218,
+            2.4178,
+            2.4453
+          ],
+          [
+            2.5032,
+            2.5377,
+            2.4165
+          ],
+          [
+            2.4298,
+            2.4235,
+            2.4422
+          ]
+        ],
+        "candidate": [
+          [
+            2.4529,
+            2.3532,
+            2.3577
+          ],
+          [
+            2.4225,
+            2.4508,
+            2.3457
+          ],
+          [
+            2.4442,
+            2.371,
+            2.5545
+          ]
+        ]
+      },
+      "output_sha256": "056f5fb69f7a503fe44982878201bff324b07e85c0dec4769e95f657f173f497",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "f08ef0dc4de3a431790bd9d4d3dbd944111a5a769ce795844e06e1974fc3ae4f"
+    },
+    "triangles12000/epochs513/satellites32/memory": {
+      "baseline": 36400216,
+      "candidate": 36400216,
+      "extra_bytes": 0
+    },
+    "triangles12000/epochs1366/satellites12/unchanged_warm_multipath": {
+      "baseline_ms": 210.1189,
+      "candidate_ms": 211.3661,
+      "speedup": 0.9940993375948177,
+      "round_medians_ms": {
+        "baseline": [
+          210.1028,
+          210.1189,
+          210.2755
+        ],
+        "candidate": [
+          211.3662,
+          211.3661,
+          211.2971
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            210.299,
+            210.1028,
+            210.0946
+          ],
+          [
+            210.1189,
+            210.0708,
+            210.2149
+          ],
+          [
+            210.2975,
+            210.2755,
+            210.0932
+          ]
+        ],
+        "candidate": [
+          [
+            211.4282,
+            211.1492,
+            211.3662
+          ],
+          [
+            211.3661,
+            211.5472,
+            211.1988
+          ],
+          [
+            211.4235,
+            211.2971,
+            211.2169
+          ]
+        ]
+      },
+      "output_sha256": "880e512f726e6a63e44da6359fd7d774e3465aed304796292a4e9efb27ea48f2",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "8db126f92ab50b40c3bae39f1bd801418146ae375fbae74addc5f5e323a99940"
+    },
+    "triangles12000/epochs1366/satellites12/public_warm_trace": {
+      "baseline_ms": 211.749,
+      "candidate_ms": 212.8111,
+      "speedup": 0.9950091889003909,
+      "round_medians_ms": {
+        "baseline": [
+          211.749,
+          211.7278,
+          211.7938
+        ],
+        "candidate": [
+          212.7513,
+          212.8659,
+          212.8111
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            212.0183,
+            211.5005,
+            211.749
+          ],
+          [
+            211.7278,
+            211.6148,
+            212.0587
+          ],
+          [
+            211.7982,
+            211.7938,
+            211.7797
+          ]
+        ],
+        "candidate": [
+          [
+            212.728,
+            212.7513,
+            212.893
+          ],
+          [
+            212.8659,
+            212.6188,
+            212.9917
+          ],
+          [
+            212.9457,
+            212.8111,
+            212.6193
+          ]
+        ]
+      },
+      "output_sha256": "d1ba4684dbc05261dbef620975a50b1ef48f4023cfca58e213f2efdfe67daffd",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "8db126f92ab50b40c3bae39f1bd801418146ae375fbae74addc5f5e323a99940"
+    },
+    "triangles12000/epochs1366/satellites12/native_cold_trace_close": {
+      "baseline_ms": 215.8019,
+      "candidate_ms": 216.7413,
+      "speedup": 0.9956658006572813,
+      "round_medians_ms": {
+        "baseline": [
+          215.2919,
+          215.81,
+          215.8019
+        ],
+        "candidate": [
+          216.2658,
+          216.7413,
+          217.0712
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            215.1898,
+            215.2919,
+            215.4267
+          ],
+          [
+            215.8166,
+            215.81,
+            215.2913
+          ],
+          [
+            217.6603,
+            215.6606,
+            215.8019
+          ]
+        ],
+        "candidate": [
+          [
+            218.0289,
+            216.2658,
+            215.886
+          ],
+          [
+            216.117,
+            216.7413,
+            216.8811
+          ],
+          [
+            218.7201,
+            217.0712,
+            216.956
+          ]
+        ]
+      },
+      "output_sha256": "7649ab4bd8a0be0630d139b495eee256ec53ed1dc04211ddf345b7eeaaaebbad",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "8db126f92ab50b40c3bae39f1bd801418146ae375fbae74addc5f5e323a99940"
+    },
+    "triangles12000/epochs1366/satellites12/warm_los": {
+      "baseline_ms": 1.7368,
+      "candidate_ms": 1.7478,
+      "speedup": 0.993706373726971,
+      "round_medians_ms": {
+        "baseline": [
+          1.7368,
+          1.7803,
+          1.7215
+        ],
+        "candidate": [
+          1.7219,
+          1.7581,
+          1.7478
+        ]
+      },
+      "samples_ms": {
+        "baseline": [
+          [
+            1.7368,
+            1.7672,
+            1.6891
+          ],
+          [
+            1.8388,
+            1.7803,
+            1.719
+          ],
+          [
+            1.7431,
+            1.7215,
+            1.6889
+          ]
+        ],
+        "candidate": [
+          [
+            1.7419,
+            1.7219,
+            1.6934
+          ],
+          [
+            1.7295,
+            1.7581,
+            1.7638
+          ],
+          [
+            1.7478,
+            1.7706,
+            1.7206
+          ]
+        ]
+      },
+      "output_sha256": "9e382ec27789a7b39944eac24acdce3f33163f197b2ae199eff3c7531d044e55",
+      "all_timed_outputs_identical": true,
+      "input_sha256": "8db126f92ab50b40c3bae39f1bd801418146ae375fbae74addc5f5e323a99940"
+    },
+    "triangles12000/epochs1366/satellites12/memory": {
+      "baseline": 36419088,
+      "candidate": 36419088,
+      "extra_bytes": 0
+    }
+  },
+  "paired_statistics": {
+    "triangles4096/epochs513/satellites32/unchanged_warm_multipath": {
+      "pairs": 9,
+      "reduction_percent": -0.26571665592851623,
+      "improving_rounds": 0
+    },
+    "triangles4096/epochs513/satellites32/public_warm_trace": {
+      "pairs": 9,
+      "reduction_percent": -0.29649274824692373,
+      "improving_rounds": 0
+    },
+    "triangles4096/epochs513/satellites32/native_cold_trace_close": {
+      "pairs": 9,
+      "reduction_percent": -0.3216956526444603,
+      "improving_rounds": 0
+    },
+    "triangles4096/epochs513/satellites32/warm_los": {
+      "pairs": 9,
+      "reduction_percent": 0.9231044990141601,
+      "improving_rounds": 2
+    },
+    "triangles4096/epochs1366/satellites12/unchanged_warm_multipath": {
+      "pairs": 9,
+      "reduction_percent": -0.49601316648222316,
+      "improving_rounds": 0
+    },
+    "triangles4096/epochs1366/satellites12/public_warm_trace": {
+      "pairs": 9,
+      "reduction_percent": -0.384388018582249,
+      "improving_rounds": 0
+    },
+    "triangles4096/epochs1366/satellites12/native_cold_trace_close": {
+      "pairs": 9,
+      "reduction_percent": -0.6381938843792012,
+      "improving_rounds": 0
+    },
+    "triangles4096/epochs1366/satellites12/warm_los": {
+      "pairs": 9,
+      "reduction_percent": -4.696287964004497,
+      "improving_rounds": 0
+    },
+    "triangles12000/epochs513/satellites32/unchanged_warm_multipath": {
+      "pairs": 9,
+      "reduction_percent": -0.4388200477840165,
+      "improving_rounds": 0
+    },
+    "triangles12000/epochs513/satellites32/public_warm_trace": {
+      "pairs": 9,
+      "reduction_percent": -0.48996390289186564,
+      "improving_rounds": 0
+    },
+    "triangles12000/epochs513/satellites32/native_cold_trace_close": {
+      "pairs": 9,
+      "reduction_percent": -0.26656586444901986,
+      "improving_rounds": 0
+    },
+    "triangles12000/epochs513/satellites32/warm_los": {
+      "pairs": 9,
+      "reduction_percent": 0.30043624989711804,
+      "improving_rounds": 2
+    },
+    "triangles12000/epochs1366/satellites12/unchanged_warm_multipath": {
+      "pairs": 9,
+      "reduction_percent": -0.5935686889660952,
+      "improving_rounds": 0
+    },
+    "triangles12000/epochs1366/satellites12/public_warm_trace": {
+      "pairs": 9,
+      "reduction_percent": -0.5015844230669364,
+      "improving_rounds": 0
+    },
+    "triangles12000/epochs1366/satellites12/native_cold_trace_close": {
+      "pairs": 9,
+      "reduction_percent": -0.4353066400249572,
+      "improving_rounds": 0
+    },
+    "triangles12000/epochs1366/satellites12/warm_los": {
+      "pairs": 9,
+      "reduction_percent": -0.63334868724092,
+      "improving_rounds": 2
+    }
+  },
+  "measured_stage_label_note": "The reused helper calls the native reflection stage unchanged_warm_multipath, a legacy label. This probe changes that stage; unchanged applies only to LOS and the retained original12 kernel bodies.",
+  "measurement_method": "Own process pinned to one allowed CPU, normal priority; sequential whole calls; alternating build order each repetition and round; nonexclusive host",
+  "measurement_scope": "native reflection/public LOS+reflection/native owner construction+first trace+close/LOS; includes validation, H2D, all kernels, synchronization and returned arrays; CPU BVH construction and output hashing excluded",
+  "rounds": 3,
+  "repeats": 3,
+  "benchmark_sha256": {
+    "benchmarks/bench_bvh_build_compare.py": "653a9e3c0307b0ff98da06b6999d0d2abfbdd9e514c0d310c66264765dd8f218",
+    "benchmarks/bench_bvh_combined_compare.py": "7f166d08584fa4d2c6f5eec42f1dd0365d5494d6f7fe3740c642bbad70f0e71f",
+    "benchmarks/bench_bvh_group_mirrors_compare.py": "5aac3b365442ff9a143585b38c42b3d114aa9eeee49a6e4928094d8a116e1f3f",
+    "benchmarks/bench_bvh_large_parallel_compare.py": "8605e96c3e6d9e738fe58be55091c43d3bfdac54bfdd8a2778dcb8c3a3e07980",
+    "benchmarks/bench_bvh_los_frontier_batches_compare.py": "643a92824b391e35a5390b84391144481bccef7b0e5d68a40044d9cda5f5f33c",
+    "benchmarks/bench_bvh_medium_parallel_compare.py": "61494839be29d357235193a53a04b407c107ccaa254fb6c2d680da58827b2b01",
+    "benchmarks/bench_bvh_medium_ray_chunks_compare.py": "a8d77770a447ca4eb4ba02938cc166b5a733d285f07a282db0827195238f98ef",
+    "benchmarks/bench_bvh_mesh2048_compare.py": "97cd43f2d187807e87e12f5d4ca80d5322c8a34dbc6d4ff0232ca54f0158ad92",
+    "benchmarks/bench_bvh_mesh512_compare.py": "c72f74b21eca586250dbf027194415c5f28b1157a04115db5d8f294b87110944",
+    "benchmarks/bench_bvh_mirror_compare.py": "aaeb318c1e397fa0f85d290be40a379dc33392bc88d09ca8dfbe2bf4b910480a",
+    "benchmarks/bench_bvh_multipath_compare.py": "ad3311b0a427ba5cc2e9442d58e078203145a1a41da09d44b773874a1f122c46",
+    "benchmarks/bench_bvh_normal_compare.py": "937bddc1bbf377c1af3d7f7bc071bf16a57ebe50685178b9b5790f77c8fb06fb",
+    "benchmarks/bench_bvh_ordered_triangles_compare.py": "031264ec58c7f0d405bbe68622af31a636a15a06418ef21bb92862e822d293da",
+    "benchmarks/bench_bvh_paired_candidates_compare.py": "65082bfb0f2f97664f82420ec60e9a5a0bd3dceff83b65c5b23299e4527ad762",
+    "benchmarks/bench_bvh_parallel_mirror_chunks_compare.py": "8203c8c532bb97123baf65fe2bb1e94899573efced4e35260306be46ccc463e5",
+    "benchmarks/bench_bvh_ray_chunks_compare.py": "b097c49e6d8d9909c0b716091d935d1018be7e80458899422707356062a4dbf4",
+    "benchmarks/bench_bvh_resident_compare.py": "f2bd01a0ff9d18cf7a4d0fe254ac2bdf9d80ecccecc74ce0f081683ed67b02f7",
+    "benchmarks/bench_bvh_serial_cache_compare.py": "497619a17bf0ccab99f2fdadd0fe6f88ea6a4b01791438c7679f49a728ab83df",
+    "benchmarks/bench_bvh_small_order_compare.py": "f01e4313d0313cafb14635b18b7f3a271eda20f3fa5c0eed4ca992b402ba94c0",
+    "benchmarks/bench_bvh_tiny_order_compare.py": "7fbd2d63bb8b0c8f288ddd763adff269e805d00fa2f5912037cfed9fb1159471",
+    "benchmarks/bench_raytrace.py": "44c1a925eef00c2c7577106f4c5cd7f670e1796304075b4d83829c3a53ee2100",
+    "python/gnss_gpu/__init__.py": "6d023c81a93d2ca1e29d994e4f4223eaf54796378c7f64527222665803ffab5e",
+    "python/gnss_gpu/_version.py": "b98ddc30032976a30a139efcbeef3a1479492ba1609a74f3c86405176f0ca71d",
+    "python/gnss_gpu/acquisition.py": "693ca1973d56154afb89d9c28536f0da309d85b4a81029225ac354a830a7faf7",
+    "python/gnss_gpu/atmosphere.py": "8c7432e714699ae918f73d49346f43b9eb0a8b36802ad4618e1e042c09ddb76f",
+    "python/gnss_gpu/backends.py": "b6c66ed1a76d61764e06dcc726b823ad8822b9fa9ae33ed57a27a695d93766c4",
+    "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+    "python/gnss_gpu/candidate_3dma.py": "d12b2fa550b1a1650709ec6cb2d9ceb95be4c3b723485a860cc96da5be0658c5",
+    "python/gnss_gpu/cycle_slip.py": "ecc1371c56bca43758a82d141927aba0c46b63afa64ea4caf57413ad34939d41",
+    "python/gnss_gpu/diffraction.py": "7e6171943c90c8018bc87fe068533097938c139fbc59e5e2af47c9ca087aa52a",
+    "python/gnss_gpu/doppler.py": "97007d7aaa1732ca1a3dc6e5f6d83306efb20c4b77428e1823cee0ddef4adf6f",
+    "python/gnss_gpu/double_reflection.py": "3b70e594ad8d627f2ed07f30b9074a05e4ad38c0a1a8eaa0deadd99ef69c1344",
+    "python/gnss_gpu/e2e_helpers.py": "c7be63d8a0b9dc3fa5b14cc793deec7ec28905a46f5110cab83d9bd0743395de",
+    "python/gnss_gpu/ekf.py": "ee75f6e25fd082267929773ded68d79a3759a78a82f34382ffcb8b7d901bd12c",
+    "python/gnss_gpu/ephemeris.py": "824b9d1d1aa0802112d61a25abe36ac83d3f052ee1173b489ee73634a3ba4ccf",
+    "python/gnss_gpu/fgo.py": "2eb5cefde7a7c91eef4b88e7175c0e00e6c85e9abd8883c00b2abfe11219e1c4",
+    "python/gnss_gpu/fresnel.py": "f632f4ddaaf9721b2cf9c00b4ac0eb71894ece25ccd5d7ecd031ceb7c7f85b8b",
+    "python/gnss_gpu/gnss_time_scales.py": "b0efbd9744f1bb9f8069fb23f8b8fbad0f1a3d42a5ec81eed9791badb07edba5",
+    "python/gnss_gpu/input_validation.py": "c1c4c08f1830edc254d38bcbdb05414041af2670f628f119cf7792759d2ea824",
+    "python/gnss_gpu/interference.py": "4d71dea5eb7dfece29049096605ce90c61901bd5440394a6b7503d1705964f0e",
+    "python/gnss_gpu/io/__init__.py": "bc99d045facfdea68e9b91f58d3324021d8ae0a3c677a262830a6929e7ad4c2c",
+    "python/gnss_gpu/io/citygml.py": "ab1cb8c50b69efe7a70cfa54ec7d59d3aca2eb260d8301c521fa804fa3b4e7e1",
+    "python/gnss_gpu/io/nav_rinex.py": "c4a311749ac0bc52be6c57b1b20a650b131e211ddbe5a1d2dad2c0d8b99b7217",
+    "python/gnss_gpu/io/nmea.py": "9bae92ec2e18913627f5c58d279f780b2036c9d38003148243c1524df3773a78",
+    "python/gnss_gpu/io/nmea_writer.py": "24683d9c30f8da909f39fdf2368d2fb51081c32ee9b0a8371ed3ebe785251178",
+    "python/gnss_gpu/io/plateau.py": "ee1731d25aea961a029b458524c515f7b307591260471bbaf78adabf6fbddbcc",
+    "python/gnss_gpu/io/ppc.py": "15fa1b92e96514c36110c350ce967b794d0c9cdcc625bb964316eb05b036c65c",
+    "python/gnss_gpu/io/rinex.py": "64a85b69febc846868ac62e5d07ad3ba550443c1ff16e3b2d799a3ca0b07da1c",
+    "python/gnss_gpu/io/urbannav.py": "3892a46f18f969f13911d60800a0f0f3668a0048e8d79f35ce07623e1aa29df3",
+    "python/gnss_gpu/multi_gnss.py": "d3f611de91c86c63fc69b44377ed054030d6399088b6e8fd10d0f48c6ad31dc3",
+    "python/gnss_gpu/multi_gnss_quality.py": "70d814eca4b07f3c3ae2b3aef23a5f0710b56103bea10fbea45ff2e14020346f",
+    "python/gnss_gpu/multipath.py": "98d0c3f6ebf702f11b657a920e4e9e3fa431462a05ef8cf487c5ee92c8625fa4",
+    "python/gnss_gpu/nav_validity.py": "863c6fae53ef797a3cf6602273640de69fd5a231c24a22da3532bcbccb08e5c5",
+    "python/gnss_gpu/orbit_glonass.py": "360d2b0106e0888523b1851c84ad2d146e7459ed26b3e7c72293b1b60ba647aa",
+    "python/gnss_gpu/particle_filter.py": "9bab1f6947caa1542ff82cf6a12c02a3de85066375d89fc0ff3a2a531984ba4d",
+    "python/gnss_gpu/particle_filter_3d.py": "5935450dca7c85f2bf674eaaec2e3197fcae5b374e302011e6c3ca0ed9dc7b07",
+    "python/gnss_gpu/particle_filter_device.py": "25ec388103e8c50fda3355ffdd29a049d5285ed33cce5402bb9bef8607c45521",
+    "python/gnss_gpu/pf_device_config.py": "6b7e40d0e3f519e6454845ac1e348431d7769e143b95cf7c7b062134733a7c99",
+    "python/gnss_gpu/pf_device_runtime.py": "7a3ada45383ad7cc2377b43f6bf92b6ac75be101a5f319337819ab0dc8cd1361",
+    "python/gnss_gpu/pf_device_smoother.py": "4ca024cf224eab4a472642127a838028afcda647ba5aef6807d0b5f365ee85b7",
+    "python/gnss_gpu/raim.py": "b76b303fcb47d84ee69a038140f49f4978cfe1537d0cb5a75bc2cf708f339bbb",
+    "python/gnss_gpu/range_model.py": "68e3612384f66565908623b096baccde22fcbe38c424cda57fce0d0f73c26f2e",
+    "python/gnss_gpu/raytrace.py": "2cc8fdbb1fa59c3b534866edddd3f637043c5e6c398c3b8184147a3ca6bf6b8c",
+    "python/gnss_gpu/reflection_diffraction.py": "6c71123104d033ca4b5f103acfbab423c6548b2e0949e8629b1cd5b9a1094043",
+    "python/gnss_gpu/robust_spp.py": "9780ba470740d156f34aaff29e79155ff184f62449df9bfd17f5b25e66df5a2d",
+    "python/gnss_gpu/rtk.py": "925b2ba6ff22daf7c86ebefc42fbaa69171c466cbe1a6fdc9f09ca1beb073a2e",
+    "python/gnss_gpu/sbas.py": "4fbb66f2874b1932f8b4c07d1398b56e4520dd141fa3a28f78c666085473a00d",
+    "python/gnss_gpu/signal_sim.py": "f316c47c4a9a9359498e6905f8d6afa8046f7b631f876e258074d44d527780d4",
+    "python/gnss_gpu/skyplot.py": "056417986a64689ffc272902c57dde3355d3f24ba1f3a07795ed4a15b63df7ff",
+    "python/gnss_gpu/surface_materials.py": "ddb083a0d77bd056c653d495a0315602063450e8d27f3426f8d82a19f2d4bbde",
+    "python/gnss_gpu/svgd.py": "72bd61edb20e121d919fd88b0a38a1a3f5304290999e9fd712b1456936d83bf8",
+    "python/gnss_gpu/tracking.py": "1e554870ffbc1cabc543b61aac018b86aed7ca96d79ae64531432ac88c8d0a64",
+    "python/gnss_gpu/urban_signal_sim.py": "79d0177e3da56d46ff5614717fd1f91205ccb786629d9dc1b407873cf9b6e7c7",
+    "python/gnss_gpu/utd_diffraction.py": "9bfd2ec80f90bb4825a9a9d076b381d203e4842c88e3fd9e4b0343df7f16fadb"
+  },
+  "device_code": {
+    "existing_GPU_functions": 12,
+    "new_GPU_functions": 1,
+    "all_existing_normalized_SASS_bodies_identical": true,
+    "all_existing_resource_counts_identical": true,
+    "baseline_resources": {
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb0ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 78,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 78,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb1EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 77,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu19los_frontier_kernelILb0EEEvPKdS2_PKNS_7BVHNodeEPKNS_8TriangleENS_11LOSFrontierEPii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 84,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu19los_frontier_kernelILb1EEEvPKdS2_PKNS_7BVHNodeEPKNS_8TriangleENS_11LOSFrontierEPii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 84,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii": {
+        "registers": 25,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25reflection_mirrors_kernelEPKdPKNS_8TriangleEPKiPKNS_16ReflectionNormalEPNS_16ReflectionMirrorEi": {
+        "registers": 30,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu30multipath_cached_serial_kernelEPKdS1_PKiPKNS_16ReflectionNormalEPKNS_8TriangleEPdSA_iii": {
+        "registers": 85,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25reflection_normals_kernelEPKNS_8TriangleEPKiPNS_16ReflectionNormalEi": {
+        "registers": 36,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii": {
+        "registers": 90,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      }
+    },
+    "candidate_resources": {
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb0ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 78,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb1EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 77,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 78,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu19los_frontier_kernelILb0EEEvPKdS2_PKNS_7BVHNodeEPKNS_8TriangleENS_11LOSFrontierEPii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 84,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu19los_frontier_kernelILb1EEEvPKdS2_PKNS_7BVHNodeEPKNS_8TriangleENS_11LOSFrontierEPii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 84,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii": {
+        "registers": 25,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu34multipath_cohort_candidates_kernelEPKdS1_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": {
+        "registers": 78,
+        "stack_bytes": 0,
+        "static_shared_bytes": 5120,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25reflection_mirrors_kernelEPKdPKNS_8TriangleEPKiPKNS_16ReflectionNormalEPNS_16ReflectionMirrorEi": {
+        "registers": 30,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu30multipath_cached_serial_kernelEPKdS1_PKiPKNS_16ReflectionNormalEPKNS_8TriangleEPdSA_iii": {
+        "registers": 85,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu25reflection_normals_kernelEPKNS_8TriangleEPKiPNS_16ReflectionNormalEi": {
+        "registers": 36,
+        "stack_bytes": 0,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii": {
+        "registers": 90,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      },
+      "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii": {
+        "registers": 63,
+        "stack_bytes": 256,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      }
+    },
+    "normalized_body_sha256": {
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb0ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": "408d155aa283c7943a1d1c2dcfd97a24121d8a93f8c261d368ed0e1072888645",
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb1EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": "549dd5440483debb80be07f4da9184aec7d4db17007ca082a38923421850eb4d",
+      "_ZN8gnss_gpu27multipath_candidates_kernelILb1ELb0EEEvPKdS2_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": "33ffeda1472ce61605d146684de9af42bbd8ad5af23e50777a8f97b84d13c370",
+      "_ZN8gnss_gpu19los_frontier_kernelILb0EEEvPKdS2_PKNS_7BVHNodeEPKNS_8TriangleENS_11LOSFrontierEPii": "72d41680aa1085a169116cd3e9fa5db40efc49dba7e394ba084bb6c36309ce90",
+      "_ZN8gnss_gpu19los_frontier_kernelILb1EEEvPKdS2_PKNS_7BVHNodeEPKNS_8TriangleENS_11LOSFrontierEPii": "3dc2592cdb1be4461dca2a07074e58e63b2eee61e66bd017ff70285bab4672e8",
+      "_ZN8gnss_gpu25multipath_finalize_kernelEPKNS_18MultipathCandidateEPdS3_ii": "ac36c4fea909ca1b067b131ead0e807a54c106ebf0c461356758cc5b6d6ab915",
+      "_ZN8gnss_gpu34multipath_cohort_candidates_kernelEPKdS1_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE": "9d929953d496d16e1b47969426dc02d9cbc30c2d72b8545b5d8830ee4239256d",
+      "_ZN8gnss_gpu25reflection_mirrors_kernelEPKdPKNS_8TriangleEPKiPKNS_16ReflectionNormalEPNS_16ReflectionMirrorEi": "091fbf16ae7589c15f53ae37e0aa0735fd200bfd5f1cffb484b457103b5e58a7",
+      "_ZN8gnss_gpu30multipath_cached_serial_kernelEPKdS1_PKiPKNS_16ReflectionNormalEPKNS_8TriangleEPdSA_iii": "1cf0fe86e5f31ee697995cc91af7eee4d961a96c5bd2d6a4064c3a4509a4ec68",
+      "_ZN8gnss_gpu25reflection_normals_kernelEPKNS_8TriangleEPKiPNS_16ReflectionNormalEi": "b9822fdcd81636a436a075c4a8fc87689a25aa676632d84065675e5beba93617",
+      "_ZN8gnss_gpu26multipath_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPdS8_iii": "4e8ae452c1eba3d84027f7eb7600c65dfb6ae0fe2b67d9be0fc4dc54397c5f5a",
+      "_ZN8gnss_gpu26los_check_bvh_batch_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiiii": "d12d67b93f6b9e8dad02078a0e2c703fae7520fee4c3d4a56a50d9dd0f6fed42",
+      "_ZN8gnss_gpu20los_check_bvh_kernelEPKdS1_PKNS_7BVHNodeEPKNS_8TriangleEPiii": "b0de8f220b77b975c30e402f1db956b9700d7cecd2f034ad234a83bf4e5e9087"
+    },
+    "new_functions": [
+      "_ZN8gnss_gpu34multipath_cohort_candidates_kernelEPKdS1_PKNS_8TriangleEPKiPNS_18MultipathCandidateEiiiPKNS_16ReflectionNormalEPKNS_16ReflectionMirrorE"
+    ],
+    "patch": {
+      "path": "benchmarks/probes/bvh_direction_cohorts_20261015.patch",
+      "sha256": "a2c86ee698bd6ca509ce46d86872118c8a68fd79a7f65405ebe987652fcbbe67",
+      "files": {
+        "src/raytrace/bvh.cu": {
+          "baseline_sha256": "7d9d06f128710f12eea70b09b8f0d475d16223957ddfdf41a7cf5ec77ac09d98",
+          "candidate_sha256": "2992cb8e4f8d2ada67140ee5900d7452ad5ed2519281f8856cf94e947a297fbe",
+          "reconstructs_crlf_bytes": true
+        }
+      }
+    },
+    "source_record_sha256": "5defdf2eb7f1027ceed4b33bc712fa31cc9a3627c24e36f5e408a8d2ac44e0b3"
+  },
+  "patch": {
+    "path": "benchmarks/probes/bvh_direction_cohorts_20261015.patch",
+    "sha256": "a2c86ee698bd6ca509ce46d86872118c8a68fd79a7f65405ebe987652fcbbe67",
+    "files": {
+      "src/raytrace/bvh.cu": {
+        "baseline_sha256": "7d9d06f128710f12eea70b09b8f0d475d16223957ddfdf41a7cf5ec77ac09d98",
+        "candidate_sha256": "2992cb8e4f8d2ada67140ee5900d7452ad5ed2519281f8856cf94e947a297fbe",
+        "reconstructs_crlf_bytes": true
+      }
+    }
+  },
+  "archive_manifests_sha256": {
+    "bvh_direction_cohorts_baseline": "e148eec19edfa4e676761c365e97ada640a232a4269b40c4739e10f45f341bee",
+    "bvh_direction_cohorts_rejected": "734ce22c55cc0e08c95bd4421e6f824340e2efcac4902f57ca96b80d4e01cef9",
+    "bvh_los_frontier_batches_candidate": "0be0e8a3e4f7c1dc1a5b28d02749df7bf613c0d507b57e1dd7c4795d73273570"
+  },
+  "restoration": {
+    "rebuild_exit_code": 0,
+    "rebuilt_extension_sha256": "1ba074399243a0ea28355426e38d0942d9c0c1d9c37dce48162d6cab48e23de4",
+    "exact_frozen_baseline_PE_restored": true,
+    "restored_extension_sha256": "abf87878be7ff7079375cd04bfdcb82e22255df282a507cbf61da7da5a6553ec",
+    "installed_extension_preserved": true,
+    "installed_extension_sha256": "0f2e099d9e95c7453feaea2fd664a4b5105ed1ec33b73eb3cb4ab37ad0b7b555",
+    "smoke_exit_code": 0,
+    "smoke_log_sha256": "d2e2373bbb3a7f79da56e545ee48fee981ab9f67132de6d87f17b401b186fc86",
+    "build_log_sha256": "69cd95e62b73f268abd74c012f2363b25df45dacddb41f6b5a50f7019c4f2742"
+  },
+  "preserved_PF_signal": {
+    "pf_fused_uniform_gpu_20261015.json": {
+      "source_exact": true,
+      "build_and_installed_PE_exact": true
+    },
+    "signal_wide_static_gpu_20261014.json": {
+      "source_exact": true,
+      "build_and_installed_PE_exact": true
+    }
+  },
+  "runtime_reference": {
+    "path": "benchmarks/bvh_los_frontier_batches_gpu_20261015.json",
+    "sha256": "9031bc9cbe1c1b092fca8f158ac6d95e2e9763bcfe03e25be32a1208b166fcf9",
+    "source_and_build_PE_restored": true
+  },
+  "candidate_broad_validation_newly_run": false,
+  "candidate_regression_newly_run": false,
+  "candidate_sanitizers_newly_run": false,
+  "restoration_smoke_tests_passed": 42,
+  "comparison_counts": {
+    "timed_pairs": 144,
+    "all_timed_outputs_bit_identical": true
+  },
+  "reproduction": {
+    "helper": "benchmarks/bench_bvh_los_frontier_batches_compare.py",
+    "measured_helper_sha256": "643a92824b391e35a5390b84391144481bccef7b0e5d68a40044d9cda5f5f33c",
+    "arguments": "--baseline <D211.pyd> --candidate <probe.pyd> --baseline-dir <D211 sources> --source-record benchmarks/bvh_direction_cohorts_rejected_20261015.json --output <fresh.json> --counts 4096 12000 --shapes 513x32 1366x12 --rounds 3 --repeats 3 --timing-only"
+  },
+  "limits": [
+    "This144-pair early performance gate is not broad accuracy or CUDA-sanitizer certification for the rejected candidate.",
+    "All measured complete public trace medians regressed0.30..0.50%; no speedup is claimed. No positioning-error, PF/GNSS/IMU or IQ performance change is adopted.",
+    "No hardware counter or achieved-occupancy claim. The new kernel uses78 registers,5120 static shared bytes,0 stack/local, as does the original shared-mirror candidate kernel."
+  ]
+}

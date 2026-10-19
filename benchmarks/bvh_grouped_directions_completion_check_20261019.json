@@ -1,0 +1,10 @@
+{
+  "verified": true,
+  "report_sha256": "cac86e04681de5590fcbb0dbd918bcc9a083b0f89d2baa2ae5369f385b013857",
+  "functional_tests": 36,
+  "CUDA_checkers_pass": 3,
+  "all772outputs_exact": true,
+  "native_screen_pass": false,
+  "product_adoption": false,
+  "default_changed": false
+}

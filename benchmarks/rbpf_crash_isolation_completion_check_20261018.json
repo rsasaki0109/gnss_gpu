@@ -1,0 +1,22 @@
+{
+  "verified": true,
+  "report_sha256": "ddd9e25ea9760bcea4114d9df1fdbc81d40106c13fa4bf2511845c345700cb5e",
+  "functional_tests": 14,
+  "diagnostic_cases": 6,
+  "all5_saved_native_event_records_verified": true,
+  "case5_missing_native_events_preserved": true,
+  "watchdog_faults_before_CUDA_GTSAM_load_verified": true,
+  "all2final_boundaries114_NPY_members_exact": true,
+  "parent_timeout_regressions_pass": true,
+  "collection_checked14": true,
+  "numeric_diagnostic_set_retried": false,
+  "old_D289_cause_proven": false,
+  "speed_gate_repaired": false,
+  "new_optimization_speed_gain_established": false,
+  "production_source_changes": [],
+  "test_configuration_changes": [
+    "pyproject.toml"
+  ],
+  "product_adoption": false,
+  "default_changed": false
+}

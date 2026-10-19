@@ -1,0 +1,122 @@
+--- a/python/gnss_gpu/raytrace.py
++++ b/python/gnss_gpu/raytrace.py
+@@ -204,6 +204,36 @@
+                 raise ValueError("ground_plane normal must be non-zero")
+             ground_normal = ground_normal / normal_len
+ 
++        # These constants depend only on this call's mesh and receiver. Keep
++        # each original three-vector expression; reuse no data across calls.
++        # The bounds avoid overflow in cross/norm/receiver mirror arithmetic;
++        # nonstandard NumPy policies retain the original scalar evaluation.
++        geometry = None
++        ready = None
++        policy = np.geterr()
++        if (sat.shape[0] >= 2 and type(tri) is np.ndarray and tri.dtype == np.float64
++                and 8 <= len(tri) <= (32 * 1024 * 1024) // 113
++                and policy["under"] == "ignore"
++                and all(mode in ("warn", "ignore") for mode in policy.values())
++                and np.all(np.isfinite(rx)) and np.all(np.isfinite(tri))
++                and np.max(np.abs(rx)) <= 1e50 and np.max(np.abs(tri)) <= 1e50):
++            geometry = np.empty((len(tri), 14), dtype=np.float64)
++            ready = np.zeros(len(tri), dtype=np.uint8)
++
++        def _triangle_geometry(index, triangle):
++            row = geometry[index]
++            if not (ready[index] & 1):
++                p0, p1, p2 = triangle
++                edge1 = p1 - p0
++                edge2 = p2 - p0
++                normal = np.cross(edge1, edge2)
++                normal_len = float(np.linalg.norm(normal))
++                row[:3], row[3:6], row[9] = edge1, edge2, normal_len
++                if normal_len > area_eps:
++                    row[6:9] = normal / normal_len
++                ready[index] |= 1
++            return row
++
+         def _point_in_triangle(point, triangle):
+             a, b, c = triangle
+             v0 = b - a
+@@ -226,17 +256,23 @@
+ 
+             return u >= -bary_tol and v >= -bary_tol and (u + v) <= 1.0 + bary_tol
+ 
+-        def _segment_intersects_triangle(start, end, triangle):
++        def _segment_intersects_triangle(start, end, triangle, triangle_id):
+             direction = end - start
+             seg_len = float(np.linalg.norm(direction))
+             if seg_len <= intersect_eps:
+                 return False
+ 
+             v0, v1, v2 = triangle
+-            edge1 = v1 - v0
+-            edge2 = v2 - v0
+-            if np.linalg.norm(np.cross(edge1, edge2)) <= area_eps:
+-                return False
++            if geometry is None:
++                edge1 = v1 - v0
++                edge2 = v2 - v0
++                if np.linalg.norm(np.cross(edge1, edge2)) <= area_eps:
++                    return False
++            else:
++                row = _triangle_geometry(triangle_id, triangle)
++                if row[9] <= area_eps:
++                    return False
++                edge1, edge2 = row[:3], row[3:6]
+ 
+             pvec = np.cross(direction, edge2)
+             det = float(np.dot(edge1, pvec))
+@@ -262,7 +298,7 @@
+             for obstacle_id, obstacle in enumerate(tri):
+                 if obstacle_id == excluded_triangle_id:
+                     continue
+-                if _segment_intersects_triangle(start, end, obstacle):
++                if _segment_intersects_triangle(start, end, obstacle, obstacle_id):
+                     return True
+             return False
+ 
+@@ -327,13 +363,22 @@
+ 
+             for tri_idx, triangle in enumerate(tri):
+                 p0, p1, p2 = triangle
+-                normal = np.cross(p1 - p0, p2 - p0)
+-                normal_len = float(np.linalg.norm(normal))
+-                if normal_len <= area_eps:
+-                    continue
+-                normal = normal / normal_len
+-
+-                rx_side = float(np.dot(rx - p0, normal))
++                if geometry is None:
++                    normal = np.cross(p1 - p0, p2 - p0)
++                    normal_len = float(np.linalg.norm(normal))
++                    if normal_len <= area_eps:
++                        continue
++                    normal = normal / normal_len
++                    rx_side = float(np.dot(rx - p0, normal))
++                else:
++                    row = _triangle_geometry(tri_idx, triangle)
++                    if row[9] <= area_eps:
++                        continue
++                    normal = row[6:9]
++                    if not (ready[tri_idx] & 2):
++                        row[10] = float(np.dot(rx - p0, normal))
++                        ready[tri_idx] |= 2
++                    rx_side = float(row[10])
+                 if abs(rx_side) < plane_eps:
+                     continue
+ 
+@@ -341,7 +386,13 @@
+                 if abs(sat_side) < plane_eps or rx_side * sat_side <= 0.0:
+                     continue
+ 
+-                rx_img = rx - 2.0 * rx_side * normal
++                if geometry is None:
++                    rx_img = rx - 2.0 * rx_side * normal
++                else:
++                    if not (ready[tri_idx] & 4):
++                        row[11:14] = rx - 2.0 * rx_side * normal
++                        ready[tri_idx] |= 4
++                    rx_img = row[11:14]
+                 image_dir = sat_pos - rx_img
+                 denom = float(np.dot(image_dir, normal))
+                 if abs(denom) < plane_eps:

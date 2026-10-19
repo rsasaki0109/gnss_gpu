@@ -1,0 +1,15 @@
+{
+  "verified": true,
+  "report_sha256": "1ff2064055f5a48cd6750288d047f5ef941822843a1881840a151bfe93d3c077",
+  "functional_tests": 37,
+  "all_device_code_and_score_bodies_exact": true,
+  "all_numeric_actual_and_field_accuracy_checks_exact": true,
+  "all_screen_statistics_and_raw_order_exact": true,
+  "steady_component_passes": 0,
+  "cold_component_pass": false,
+  "memcheck_subset_tests": 12,
+  "original_failed_gates_preserved": true,
+  "RTK_speed_gain_established": false,
+  "production_changes": [],
+  "default_changed": false
+}

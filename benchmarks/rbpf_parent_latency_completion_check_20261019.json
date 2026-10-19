@@ -1,0 +1,15 @@
+{
+  "verified": true,
+  "report_sha256": "2a1627dad582a18f85c13d473d3f892005d78cde8eca93478518db4c9d95aec4",
+  "audit_sha256": "285e63ec34b6fceadaa8f2a2373dab7be04aed348f24d361f9f2de0b97e4b823",
+  "first_transition_latency_screen": false,
+  "whole400_timing_gate_performed": false,
+  "functional_tests": 24,
+  "numeric_prefixes": 16,
+  "all_final_boundaries_exact": 16,
+  "NPY_members_exact": 912,
+  "original_failed_and_aborted_sets_preserved": true,
+  "production_changes": [],
+  "product_adoption": false,
+  "default_changed": false
+}

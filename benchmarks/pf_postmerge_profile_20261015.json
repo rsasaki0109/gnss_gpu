@@ -1,0 +1,2005 @@
+{
+  "schema_version": 1,
+  "merged_main_reference": "921e946cea44000799dd8114e07f2668225aa778",
+  "baseline_reference": "benchmarks/pf_fused_uniform_gpu_20261015.json",
+  "method": "Seven serial own-process nvprof ranges after warm calls; profiler enabled only around the complete operation. Three unprofiled wall samples and one profiled range per condition on a nonexclusive host. No production or method-identity changes.",
+  "duration_units_read_per_trace_and_converted_to_ms": true,
+  "stages": {
+    "PR_control": {
+      "stage": "PR_control",
+      "extension_sha256": "48572e69d6bf1bd4b8257988b88a270c86c19be81c49b5a1e24e4dcfc785df52",
+      "source_sha256": {
+        "src/particle_filter/pf_device.cu": "a20de06f6a6081670d39677b265d6fa58eb64baf69d816cb8173ea68aad9a7fe",
+        "include/gnss_gpu/pf_device.h": "9616ae2e4fb898b562143f04405e1006586548b98d461881eb37e11d57b51d85",
+        "python/gnss_gpu/_pf_device_bindings.cpp": "24ea505b9fbd1171f073d56db239f63fe23f0ed65f65c83c2df61383c0521c59",
+        "python/gnss_gpu/pf_device_runtime.py": "7a3ada45383ad7cc2377b43f6bf92b6ac75be101a5f319337819ab0dc8cd1361",
+        "python/gnss_gpu/pf_device_config.py": "6b7e40d0e3f519e6454845ac1e348431d7769e143b95cf7c7b062134733a7c99",
+        "python/gnss_gpu/realtime_runtime.py": "143efce522df61877f02dee7f4ff6eea0158add40405f6f1aade51c3bea426a9"
+      },
+      "count": 1000000,
+      "input_output": {
+        "input_sha256": "cf6d5770f28e78a946169fe9f61c318e78b40709f4ab292c07b04cb6c61827d4",
+        "output_sha256": "21ddfa044fb0bd80aeaba55f000214bda6bc82e3b3ae2b075852d354a84ceb90"
+      },
+      "unprofiled_wall_samples_ms": [
+        4.0587,
+        4.0468,
+        4.0652
+      ],
+      "profiled_wall_ms": 4.665,
+      "profile_output_bit_identical": true,
+      "events": [
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.001984,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_weight_gaussian_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int, int, double)",
+          "duration_ms": 3.970291,
+          "kind": "kernel"
+        }
+      ],
+      "summary": {
+        "gnss_gpu::pfd_weight_gaussian_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int, int, double)": {
+          "calls": 1,
+          "total_ms": 3.970291
+        },
+        "[CUDA memcpy HtoD]": {
+          "calls": 1,
+          "total_ms": 0.001984
+        }
+      },
+      "raw_sha256": "4159ffff2a35a8799f8ce4337718f5b86cc8cab59c0e51ccaa21308a40e265d0",
+      "console_sha256": "ace52797f32fbf4e9f14b32e150df11203b8ed68003261d9011d95b2f6204ae4",
+      "trace_duration_units": "ms",
+      "unit_conversion_to_ms_applied": true
+    },
+    "public_PR_step": {
+      "stage": "public_PR_step",
+      "extension_sha256": "48572e69d6bf1bd4b8257988b88a270c86c19be81c49b5a1e24e4dcfc785df52",
+      "source_sha256": {
+        "src/particle_filter/pf_device.cu": "a20de06f6a6081670d39677b265d6fa58eb64baf69d816cb8173ea68aad9a7fe",
+        "include/gnss_gpu/pf_device.h": "9616ae2e4fb898b562143f04405e1006586548b98d461881eb37e11d57b51d85",
+        "python/gnss_gpu/_pf_device_bindings.cpp": "24ea505b9fbd1171f073d56db239f63fe23f0ed65f65c83c2df61383c0521c59",
+        "python/gnss_gpu/pf_device_runtime.py": "7a3ada45383ad7cc2377b43f6bf92b6ac75be101a5f319337819ab0dc8cd1361",
+        "python/gnss_gpu/pf_device_config.py": "6b7e40d0e3f519e6454845ac1e348431d7769e143b95cf7c7b062134733a7c99",
+        "python/gnss_gpu/realtime_runtime.py": "143efce522df61877f02dee7f4ff6eea0158add40405f6f1aade51c3bea426a9"
+      },
+      "count": 1000000,
+      "input_output": {
+        "input_sha256": "6bd4164e6b7757f4f5f9f2951237410a4197fea2b942b0ac2d94d97b6e747a17",
+        "output_sha256": "8161e4fda1481defebc64d9badbc4e7a4dad15830306e4ee91723995f01d2bc5"
+      },
+      "unprofiled_wall_samples_ms": [
+        11.4634,
+        11.2389,
+        11.2678
+      ],
+      "profiled_wall_ms": 11.4967,
+      "profile_output_bit_identical": true,
+      "events": [
+        {
+          "name": "void gnss_gpu::pfd_predict_kernel<bool=0, bool=0>(double*, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, double, double, double, double, double, double, double, double, double, int, __int64, int)",
+          "duration_ms": 2.64235,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.001856,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_weight_gaussian_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int, int, double)",
+          "duration_ms": 3.891957,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_ess_kernel(double const *, double*, double*, double*, int)",
+          "duration_ms": 0.459734,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_ess_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.040095,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.00096,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_megopolis_coalesced_kernel(double const *, int*, int, __int64, int)",
+          "duration_ms": 1.938618,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_pack_common_resample_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.461015,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_gather_common_packed_kernel(double const *, int const *, double*, double*, double*, double*, double*, double*, double*, double*, int)",
+          "duration_ms": 0.80824,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_estimate_kernel(double const *, double const *, double const *, double const *, double const *, double*, double*, double*, int)",
+          "duration_ms": 0.548789,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_estimate_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.043903,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.0008,
+          "kind": "copy"
+        }
+      ],
+      "summary": {
+        "gnss_gpu::pfd_weight_gaussian_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int, int, double)": {
+          "calls": 1,
+          "total_ms": 3.891957
+        },
+        "void gnss_gpu::pfd_predict_kernel<bool=0, bool=0>(double*, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, double, double, double, double, double, double, double, double, double, int, __int64, int)": {
+          "calls": 1,
+          "total_ms": 2.64235
+        },
+        "gnss_gpu::pfd_megopolis_coalesced_kernel(double const *, int*, int, __int64, int)": {
+          "calls": 1,
+          "total_ms": 1.938618
+        },
+        "gnss_gpu::pfd_gather_common_packed_kernel(double const *, int const *, double*, double*, double*, double*, double*, double*, double*, double*, int)": {
+          "calls": 1,
+          "total_ms": 0.80824
+        },
+        "gnss_gpu::pfd_estimate_kernel(double const *, double const *, double const *, double const *, double const *, double*, double*, double*, int)": {
+          "calls": 1,
+          "total_ms": 0.548789
+        },
+        "gnss_gpu::pfd_pack_common_resample_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int)": {
+          "calls": 1,
+          "total_ms": 0.461015
+        },
+        "gnss_gpu::pfd_ess_kernel(double const *, double*, double*, double*, int)": {
+          "calls": 1,
+          "total_ms": 0.459734
+        },
+        "gnss_gpu::pfd_finalize_estimate_kernel(double const *, double const *, double const *, double*, int)": {
+          "calls": 1,
+          "total_ms": 0.043903
+        },
+        "gnss_gpu::pfd_finalize_ess_kernel(double const *, double const *, double const *, double*, int)": {
+          "calls": 1,
+          "total_ms": 0.040095
+        },
+        "[CUDA memcpy HtoD]": {
+          "calls": 1,
+          "total_ms": 0.001856
+        },
+        "[CUDA memcpy DtoH]": {
+          "calls": 2,
+          "total_ms": 0.00176
+        }
+      },
+      "raw_sha256": "3e752adfc78c3171b0e05e3188c3a47f527cfe80f9236a568332be54c56b6fc5",
+      "console_sha256": "e9ee643116b201b60d434f9913b5548505e827ae8b4ea63f15795313be415357",
+      "trace_duration_units": "ms",
+      "unit_conversion_to_ms_applied": true
+    },
+    "public_PR_KF_step": {
+      "stage": "public_PR_KF_step",
+      "extension_sha256": "48572e69d6bf1bd4b8257988b88a270c86c19be81c49b5a1e24e4dcfc785df52",
+      "source_sha256": {
+        "src/particle_filter/pf_device.cu": "a20de06f6a6081670d39677b265d6fa58eb64baf69d816cb8173ea68aad9a7fe",
+        "include/gnss_gpu/pf_device.h": "9616ae2e4fb898b562143f04405e1006586548b98d461881eb37e11d57b51d85",
+        "python/gnss_gpu/_pf_device_bindings.cpp": "24ea505b9fbd1171f073d56db239f63fe23f0ed65f65c83c2df61383c0521c59",
+        "python/gnss_gpu/pf_device_runtime.py": "7a3ada45383ad7cc2377b43f6bf92b6ac75be101a5f319337819ab0dc8cd1361",
+        "python/gnss_gpu/pf_device_config.py": "6b7e40d0e3f519e6454845ac1e348431d7769e143b95cf7c7b062134733a7c99",
+        "python/gnss_gpu/realtime_runtime.py": "143efce522df61877f02dee7f4ff6eea0158add40405f6f1aade51c3bea426a9"
+      },
+      "count": 1000000,
+      "input_output": {
+        "input_sha256": "6bd4164e6b7757f4f5f9f2951237410a4197fea2b942b0ac2d94d97b6e747a17",
+        "output_sha256": "e4a2294ff10dd590aa8699816c107cbebd06c38ce805f24f3d1b148c71b52e7e"
+      },
+      "unprofiled_wall_samples_ms": [
+        45.6192,
+        45.5705,
+        45.6332
+      ],
+      "profiled_wall_ms": 47.3341,
+      "profile_output_bit_identical": true,
+      "events": [
+        {
+          "name": "void gnss_gpu::pfd_predict_common_kernel<bool=1, bool=0>(double*, gnss_gpu::pfd_predict_common_kernel<bool=1, bool=0>, gnss_gpu::pfd_predict_common_kernel<bool=1, bool=0>, gnss_gpu::pfd_predict_common_kernel<bool=1, bool=0>, gnss_gpu::pfd_predict_common_kernel<bool=1, bool=0>, gnss_gpu::pfd_predict_common_kernel<bool=1, bool=0>, gnss_gpu::pfd_predict_common_kernel<bool=1, bool=0>, gnss_gpu::pfd_predict_common_kernel<bool=1, bool=0>, double, double, double, double, double, double, double, double, double, int, __int64, int)",
+          "duration_ms": 3.046309,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.001824,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_weight_gaussian_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int, int, double)",
+          "duration_ms": 3.973236,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.001536,
+          "kind": "copy"
+        },
+        {
+          "name": "void gnss_gpu::pfd_doppler_kf_update_kernel<int=16>(double const *, double const , double const , double*, double const *, double const *, double const *, double const , double const *, int, int, double, double)",
+          "duration_ms": 34.002578,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_ess_kernel(double const *, double*, double*, double*, int)",
+          "duration_ms": 0.46943,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_ess_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.040287,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.001281,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_megopolis_coalesced_kernel(double const *, int*, int, __int64, int)",
+          "duration_ms": 1.975546,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_gather_resample_covariance_kernel(double const *, double*, int const *, int)",
+          "duration_ms": 0.967757,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_pack_common_resample_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.460599,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_gather_common_packed_kernel(double const *, int const *, double*, double*, double*, double*, double*, double*, double*, double*, int)",
+          "duration_ms": 0.810705,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_estimate_kernel(double const *, double const *, double const *, double const *, double const *, double*, double*, double*, int)",
+          "duration_ms": 0.560278,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_estimate_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.04432,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.0008,
+          "kind": "copy"
+        }
+      ],
+      "summary": {
+        "void gnss_gpu::pfd_doppler_kf_update_kernel<int=16>(double const *, double const , double const , double*, double const *, double const *, double const *, double const , double const *, int, int, double, double)": {
+          "calls": 1,
+          "total_ms": 34.002578
+        },
+        "gnss_gpu::pfd_weight_gaussian_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int, int, double)": {
+          "calls": 1,
+          "total_ms": 3.973236
+        },
+        "void gnss_gpu::pfd_predict_common_kernel<bool=1, bool=0>(double*, gnss_gpu::pfd_predict_common_kernel<bool=1, bool=0>, gnss_gpu::pfd_predict_common_kernel<bool=1, bool=0>, gnss_gpu::pfd_predict_common_kernel<bool=1, bool=0>, gnss_gpu::pfd_predict_common_kernel<bool=1, bool=0>, gnss_gpu::pfd_predict_common_kernel<bool=1, bool=0>, gnss_gpu::pfd_predict_common_kernel<bool=1, bool=0>, gnss_gpu::pfd_predict_common_kernel<bool=1, bool=0>, double, double, double, double, double, double, double, double, double, int, __int64, int)": {
+          "calls": 1,
+          "total_ms": 3.046309
+        },
+        "gnss_gpu::pfd_megopolis_coalesced_kernel(double const *, int*, int, __int64, int)": {
+          "calls": 1,
+          "total_ms": 1.975546
+        },
+        "gnss_gpu::pfd_gather_resample_covariance_kernel(double const *, double*, int const *, int)": {
+          "calls": 1,
+          "total_ms": 0.967757
+        },
+        "gnss_gpu::pfd_gather_common_packed_kernel(double const *, int const *, double*, double*, double*, double*, double*, double*, double*, double*, int)": {
+          "calls": 1,
+          "total_ms": 0.810705
+        },
+        "gnss_gpu::pfd_estimate_kernel(double const *, double const *, double const *, double const *, double const *, double*, double*, double*, int)": {
+          "calls": 1,
+          "total_ms": 0.560278
+        },
+        "gnss_gpu::pfd_ess_kernel(double const *, double*, double*, double*, int)": {
+          "calls": 1,
+          "total_ms": 0.46943
+        },
+        "gnss_gpu::pfd_pack_common_resample_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int)": {
+          "calls": 1,
+          "total_ms": 0.460599
+        },
+        "gnss_gpu::pfd_finalize_estimate_kernel(double const *, double const *, double const *, double*, int)": {
+          "calls": 1,
+          "total_ms": 0.04432
+        },
+        "gnss_gpu::pfd_finalize_ess_kernel(double const *, double const *, double const *, double*, int)": {
+          "calls": 1,
+          "total_ms": 0.040287
+        },
+        "[CUDA memcpy HtoD]": {
+          "calls": 2,
+          "total_ms": 0.00336
+        },
+        "[CUDA memcpy DtoH]": {
+          "calls": 2,
+          "total_ms": 0.002081
+        }
+      },
+      "raw_sha256": "ad0af9bbff6ff9fa05a7fe2232fd6adc0da98e848200bbac044884894b20d351",
+      "console_sha256": "bf76a381761d3138e02bd53d4800ede54658fbf6b3e6789fd77d27825732224e",
+      "trace_duration_units": "ms",
+      "unit_conversion_to_ms_applied": true
+    },
+    "resample_B60_imported": {
+      "stage": "resample_B60_imported",
+      "extension_sha256": "48572e69d6bf1bd4b8257988b88a270c86c19be81c49b5a1e24e4dcfc785df52",
+      "source_sha256": {
+        "src/particle_filter/pf_device.cu": "a20de06f6a6081670d39677b265d6fa58eb64baf69d816cb8173ea68aad9a7fe",
+        "include/gnss_gpu/pf_device.h": "9616ae2e4fb898b562143f04405e1006586548b98d461881eb37e11d57b51d85",
+        "python/gnss_gpu/_pf_device_bindings.cpp": "24ea505b9fbd1171f073d56db239f63fe23f0ed65f65c83c2df61383c0521c59",
+        "python/gnss_gpu/pf_device_runtime.py": "7a3ada45383ad7cc2377b43f6bf92b6ac75be101a5f319337819ab0dc8cd1361",
+        "python/gnss_gpu/pf_device_config.py": "6b7e40d0e3f519e6454845ac1e348431d7769e143b95cf7c7b062134733a7c99",
+        "python/gnss_gpu/realtime_runtime.py": "143efce522df61877f02dee7f4ff6eea0158add40405f6f1aade51c3bea426a9"
+      },
+      "count": 1000000,
+      "input_output": {
+        "input_sha256": "1f9d2179fa9f4f5ce5760e7b0a4dfbcab979f4300f550f0f5eac8c105ebf167d",
+        "output_sha256": "d099fb33a9dbee7c6385d7fbd644fa93618d13ef0b4477012d17841718994848"
+      },
+      "unprofiled_wall_samples_ms": [
+        4.2453,
+        4.2364,
+        4.2403
+      ],
+      "profiled_wall_ms": 4.4138,
+      "profile_output_bit_identical": true,
+      "events": [
+        {
+          "name": "gnss_gpu::pfd_megopolis_coalesced_kernel(double const *, int*, int, __int64, int)",
+          "duration_ms": 1.955035,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_gather_resample_covariance_kernel(double const *, double*, int const *, int)",
+          "duration_ms": 0.959437,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_pack_common_resample_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.460887,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_gather_common_packed_kernel(double const *, int const *, double*, double*, double*, double*, double*, double*, double*, double*, int)",
+          "duration_ms": 0.819505,
+          "kind": "kernel"
+        }
+      ],
+      "summary": {
+        "gnss_gpu::pfd_megopolis_coalesced_kernel(double const *, int*, int, __int64, int)": {
+          "calls": 1,
+          "total_ms": 1.955035
+        },
+        "gnss_gpu::pfd_gather_resample_covariance_kernel(double const *, double*, int const *, int)": {
+          "calls": 1,
+          "total_ms": 0.959437
+        },
+        "gnss_gpu::pfd_gather_common_packed_kernel(double const *, int const *, double*, double*, double*, double*, double*, double*, double*, double*, int)": {
+          "calls": 1,
+          "total_ms": 0.819505
+        },
+        "gnss_gpu::pfd_pack_common_resample_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int)": {
+          "calls": 1,
+          "total_ms": 0.460887
+        }
+      },
+      "raw_sha256": "387e620da698eef37810c8e5c1e5d5238cd5a6563702e6dde543f3e002bc9ffb",
+      "console_sha256": "88c0bbba4ba13f535d10ffb6e3e5e0e8f87f473ea40e90b8320679960d511898",
+      "trace_duration_units": "ms",
+      "unit_conversion_to_ms_applied": true
+    },
+    "public_pool_roundtrip": {
+      "stage": "public_pool_roundtrip",
+      "extension_sha256": "48572e69d6bf1bd4b8257988b88a270c86c19be81c49b5a1e24e4dcfc785df52",
+      "source_sha256": {
+        "src/particle_filter/pf_device.cu": "a20de06f6a6081670d39677b265d6fa58eb64baf69d816cb8173ea68aad9a7fe",
+        "include/gnss_gpu/pf_device.h": "9616ae2e4fb898b562143f04405e1006586548b98d461881eb37e11d57b51d85",
+        "python/gnss_gpu/_pf_device_bindings.cpp": "24ea505b9fbd1171f073d56db239f63fe23f0ed65f65c83c2df61383c0521c59",
+        "python/gnss_gpu/pf_device_runtime.py": "7a3ada45383ad7cc2377b43f6bf92b6ac75be101a5f319337819ab0dc8cd1361",
+        "python/gnss_gpu/pf_device_config.py": "6b7e40d0e3f519e6454845ac1e348431d7769e143b95cf7c7b062134733a7c99",
+        "python/gnss_gpu/realtime_runtime.py": "143efce522df61877f02dee7f4ff6eea0158add40405f6f1aade51c3bea426a9"
+      },
+      "count": 1000000,
+      "input_output": {
+        "input_sha256": "cf6d5770f28e78a946169fe9f61c318e78b40709f4ab292c07b04cb6c61827d4",
+        "output_sha256": "b152a904541e6d3307bc34b2e39de1faa5143d8fe162f261f5b5a6b40cfbd92c"
+      },
+      "unprofiled_wall_samples_ms": [
+        3.0944,
+        3.0726,
+        3.2763
+      ],
+      "profiled_wall_ms": 3.4342,
+      "profile_output_bit_identical": true,
+      "events": [
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_flags_kernel(double const *, int, int*)",
+          "duration_ms": 0.07004600000000001,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_finish_kernel(int const *, int, int*)",
+          "duration_ms": 0.00368,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.0015680000000000002,
+          "kind": "copy"
+        },
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.001023,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_cdf_gather_reset_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, double*, double*, double*, double*, double*, double*, double*, double*, int, int, gnss_gpu::pfd_uniform_cdf_segment const *, __int64 const *, int)",
+          "duration_ms": 0.713298,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_fill_weights_kernel(double*, int, double)",
+          "duration_ms": 0.014816000000000001,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_flags_kernel(double const *, int, int*)",
+          "duration_ms": 0.03702300000000001,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_finish_kernel(int const *, int, int*)",
+          "duration_ms": 0.0031680000000000002,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.000896,
+          "kind": "copy"
+        },
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.000416,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_cdf_gather_reset_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, double*, double*, double*, double*, double*, double*, double*, double*, int, int, gnss_gpu::pfd_uniform_cdf_segment const *, __int64 const *, int)",
+          "duration_ms": 0.844591,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_fill_weights_kernel(double*, int, double)",
+          "duration_ms": 0.029247000000000002,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_estimate_kernel(double const *, double const *, double const *, double const *, double const *, double*, double*, double*, int)",
+          "duration_ms": 0.5563089999999999,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_estimate_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.043871,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.0010880000000000002,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_estimate_kernel(double const *, double const *, double const *, double const *, double const *, double*, double*, double*, int)",
+          "duration_ms": 0.279835,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_estimate_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.025056000000000002,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.00128,
+          "kind": "copy"
+        }
+      ],
+      "summary": {
+        "gnss_gpu::pfd_uniform_cdf_gather_reset_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, double*, double*, double*, double*, double*, double*, double*, double*, int, int, gnss_gpu::pfd_uniform_cdf_segment const *, __int64 const *, int)": {
+          "calls": 2,
+          "total_ms": 1.5578889999999999
+        },
+        "gnss_gpu::pfd_estimate_kernel(double const *, double const *, double const *, double const *, double const *, double*, double*, double*, int)": {
+          "calls": 2,
+          "total_ms": 0.836144
+        },
+        "gnss_gpu::pfd_uniform_weights_flags_kernel(double const *, int, int*)": {
+          "calls": 2,
+          "total_ms": 0.10706900000000003
+        },
+        "gnss_gpu::pfd_finalize_estimate_kernel(double const *, double const *, double const *, double*, int)": {
+          "calls": 2,
+          "total_ms": 0.068927
+        },
+        "gnss_gpu::pfd_fill_weights_kernel(double*, int, double)": {
+          "calls": 2,
+          "total_ms": 0.044063000000000005
+        },
+        "gnss_gpu::pfd_uniform_weights_finish_kernel(int const *, int, int*)": {
+          "calls": 2,
+          "total_ms": 0.006848
+        },
+        "[CUDA memcpy DtoH]": {
+          "calls": 4,
+          "total_ms": 0.004832
+        },
+        "[CUDA memcpy HtoD]": {
+          "calls": 2,
+          "total_ms": 0.001439
+        }
+      },
+      "raw_sha256": "64cb4907c69ce5a9f6b5aaad09e534ebdcb1421eaeb9d4420b1003b3b32f82be",
+      "console_sha256": "e5a5e28058f0c01158d280d1650a9ee8a01c447f4acacd1627aae9356d2aa0a1",
+      "trace_duration_units": "us",
+      "unit_conversion_to_ms_applied": true
+    },
+    "public_pool_posterior": {
+      "stage": "public_pool_posterior",
+      "extension_sha256": "48572e69d6bf1bd4b8257988b88a270c86c19be81c49b5a1e24e4dcfc785df52",
+      "source_sha256": {
+        "src/particle_filter/pf_device.cu": "a20de06f6a6081670d39677b265d6fa58eb64baf69d816cb8173ea68aad9a7fe",
+        "include/gnss_gpu/pf_device.h": "9616ae2e4fb898b562143f04405e1006586548b98d461881eb37e11d57b51d85",
+        "python/gnss_gpu/_pf_device_bindings.cpp": "24ea505b9fbd1171f073d56db239f63fe23f0ed65f65c83c2df61383c0521c59",
+        "python/gnss_gpu/pf_device_runtime.py": "7a3ada45383ad7cc2377b43f6bf92b6ac75be101a5f319337819ab0dc8cd1361",
+        "python/gnss_gpu/pf_device_config.py": "6b7e40d0e3f519e6454845ac1e348431d7769e143b95cf7c7b062134733a7c99",
+        "python/gnss_gpu/realtime_runtime.py": "143efce522df61877f02dee7f4ff6eea0158add40405f6f1aade51c3bea426a9"
+      },
+      "count": 1000000,
+      "input_output": {
+        "input_sha256": "cf6d5770f28e78a946169fe9f61c318e78b40709f4ab292c07b04cb6c61827d4",
+        "output_sha256": "17065b59e93deadc97aa7f1d87c0c9fcf12b7195205e2a3f9e4907266a7a1889"
+      },
+      "unprofiled_wall_samples_ms": [
+        22.563,
+        21.1013,
+        22.6998
+      ],
+      "profiled_wall_ms": 22.7747,
+      "profile_output_bit_identical": true,
+      "events": [
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_flags_kernel(double const *, int, int*)",
+          "duration_ms": 0.069727,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_finish_kernel(int const *, int, int*)",
+          "duration_ms": 0.003616,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.00128,
+          "kind": "copy"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 1.454468,
+          "kind": "copy"
+        },
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.94971,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_pool_cdf_indices_kernel(double const *, int, int*, int)",
+          "duration_ms": 0.263131,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_megopolis_gather_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, double*, double*, double*, double*, double*, double*, double*, int const *, int, bool)",
+          "duration_ms": 0.402616,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_reset_weights_kernel(double*, int)",
+          "duration_ms": 0.015296,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_fill_weights_kernel(double*, int, double)",
+          "duration_ms": 0.015232,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_flags_kernel(double const *, int, int*)",
+          "duration_ms": 0.037023,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_finish_kernel(int const *, int, int*)",
+          "duration_ms": 0.003168,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.001344,
+          "kind": "copy"
+        },
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.000705,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_cdf_gather_reset_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, double*, double*, double*, double*, double*, double*, double*, double*, int, int, gnss_gpu::pfd_uniform_cdf_segment const *, __int64 const *, int)",
+          "duration_ms": 0.845328,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_fill_weights_kernel(double*, int, double)",
+          "duration_ms": 0.029056,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_estimate_kernel(double const *, double const *, double const *, double const *, double const *, double*, double*, double*, int)",
+          "duration_ms": 0.553493,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_estimate_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.043999,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.00112,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_estimate_kernel(double const *, double const *, double const *, double const *, double const *, double*, double*, double*, int)",
+          "duration_ms": 0.27993,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_estimate_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.024928,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.00112,
+          "kind": "copy"
+        }
+      ],
+      "summary": {
+        "[CUDA memcpy DtoH]": {
+          "calls": 5,
+          "total_ms": 1.459332
+        },
+        "[CUDA memcpy HtoD]": {
+          "calls": 2,
+          "total_ms": 0.950415
+        },
+        "gnss_gpu::pfd_uniform_cdf_gather_reset_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, double*, double*, double*, double*, double*, double*, double*, double*, int, int, gnss_gpu::pfd_uniform_cdf_segment const *, __int64 const *, int)": {
+          "calls": 1,
+          "total_ms": 0.845328
+        },
+        "gnss_gpu::pfd_estimate_kernel(double const *, double const *, double const *, double const *, double const *, double*, double*, double*, int)": {
+          "calls": 2,
+          "total_ms": 0.833423
+        },
+        "gnss_gpu::pfd_megopolis_gather_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, double*, double*, double*, double*, double*, double*, double*, int const *, int, bool)": {
+          "calls": 1,
+          "total_ms": 0.402616
+        },
+        "gnss_gpu::pfd_pool_cdf_indices_kernel(double const *, int, int*, int)": {
+          "calls": 1,
+          "total_ms": 0.263131
+        },
+        "gnss_gpu::pfd_uniform_weights_flags_kernel(double const *, int, int*)": {
+          "calls": 2,
+          "total_ms": 0.10675
+        },
+        "gnss_gpu::pfd_finalize_estimate_kernel(double const *, double const *, double const *, double*, int)": {
+          "calls": 2,
+          "total_ms": 0.068927
+        },
+        "gnss_gpu::pfd_fill_weights_kernel(double*, int, double)": {
+          "calls": 2,
+          "total_ms": 0.044288
+        },
+        "gnss_gpu::pfd_reset_weights_kernel(double*, int)": {
+          "calls": 1,
+          "total_ms": 0.015296
+        },
+        "gnss_gpu::pfd_uniform_weights_finish_kernel(int const *, int, int*)": {
+          "calls": 2,
+          "total_ms": 0.006784
+        }
+      },
+      "raw_sha256": "c9f9bc5501326563cd51bdbc6d85e177c92f17a9e364b16e6c5e63704cbb883b",
+      "console_sha256": "12cbe0a72c8122c401e6b0c59c1ce9b81cce9e6ff5317c6d198b826eb1d2f648",
+      "trace_duration_units": "ms",
+      "unit_conversion_to_ms_applied": true
+    },
+    "public_pool_PR_five": {
+      "stage": "public_pool_PR_five",
+      "extension_sha256": "48572e69d6bf1bd4b8257988b88a270c86c19be81c49b5a1e24e4dcfc785df52",
+      "source_sha256": {
+        "src/particle_filter/pf_device.cu": "a20de06f6a6081670d39677b265d6fa58eb64baf69d816cb8173ea68aad9a7fe",
+        "include/gnss_gpu/pf_device.h": "9616ae2e4fb898b562143f04405e1006586548b98d461881eb37e11d57b51d85",
+        "python/gnss_gpu/_pf_device_bindings.cpp": "24ea505b9fbd1171f073d56db239f63fe23f0ed65f65c83c2df61383c0521c59",
+        "python/gnss_gpu/pf_device_runtime.py": "7a3ada45383ad7cc2377b43f6bf92b6ac75be101a5f319337819ab0dc8cd1361",
+        "python/gnss_gpu/pf_device_config.py": "6b7e40d0e3f519e6454845ac1e348431d7769e143b95cf7c7b062134733a7c99",
+        "python/gnss_gpu/realtime_runtime.py": "143efce522df61877f02dee7f4ff6eea0158add40405f6f1aade51c3bea426a9"
+      },
+      "count": 1000000,
+      "input_output": {
+        "input_sha256": "9ca63e3ddd72deda088d7c301ae26d205e9f1f6e896ff10271953ca4c6d7c31d",
+        "output_sha256": "667037a3ebfda72a106d358d6170281b6e1819334f82cef2b6a0748f9b2debfd"
+      },
+      "unprofiled_wall_samples_ms": [
+        61.2785,
+        61.3065,
+        62.4112
+      ],
+      "profiled_wall_ms": 63.3681,
+      "profile_output_bit_identical": true,
+      "events": [
+        {
+          "name": "void gnss_gpu::pfd_predict_kernel<bool=0, bool=0>(double*, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, double, double, double, double, double, double, double, double, double, int, __int64, int)",
+          "duration_ms": 2.083737,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.001696,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_weight_gaussian_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int, int, double)",
+          "duration_ms": 3.072165,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_ess_kernel(double const *, double*, double*, double*, int)",
+          "duration_ms": 0.363865,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_ess_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.032127,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.0008,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_megopolis_coalesced_kernel(double const *, int*, int, __int64, int)",
+          "duration_ms": 1.574306,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_pack_common_resample_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.469015,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_gather_common_packed_kernel(double const *, int const *, double*, double*, double*, double*, double*, double*, double*, double*, int)",
+          "duration_ms": 0.817232,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_estimate_kernel(double const *, double const *, double const *, double const *, double const *, double*, double*, double*, int)",
+          "duration_ms": 0.434903,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_estimate_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.035199,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.000672,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_flags_kernel(double const *, int, int*)",
+          "duration_ms": 0.054303,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_finish_kernel(int const *, int, int*)",
+          "duration_ms": 0.002944,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.001056,
+          "kind": "copy"
+        },
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.000864,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_cdf_gather_reset_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, double*, double*, double*, double*, double*, double*, double*, double*, int, int, gnss_gpu::pfd_uniform_cdf_segment const *, __int64 const *, int)",
+          "duration_ms": 0.722899,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_fill_weights_kernel(double*, int, double)",
+          "duration_ms": 0.014624,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_flags_kernel(double const *, int, int*)",
+          "duration_ms": 0.029631,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_finish_kernel(int const *, int, int*)",
+          "duration_ms": 0.002592,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.0008,
+          "kind": "copy"
+        },
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.00032,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_cdf_gather_reset_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, double*, double*, double*, double*, double*, double*, double*, double*, int, int, gnss_gpu::pfd_uniform_cdf_segment const *, __int64 const *, int)",
+          "duration_ms": 0.849616,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_fill_weights_kernel(double*, int, double)",
+          "duration_ms": 0.028863,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_estimate_kernel(double const *, double const *, double const *, double const *, double const *, double*, double*, double*, int)",
+          "duration_ms": 0.434231,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_estimate_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.035232,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.00064,
+          "kind": "copy"
+        },
+        {
+          "name": "void gnss_gpu::pfd_predict_kernel<bool=0, bool=0>(double*, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, double, double, double, double, double, double, double, double, double, int, __int64, int)",
+          "duration_ms": 2.082776,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.001024,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_weight_gaussian_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int, int, double)",
+          "duration_ms": 3.072133,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_ess_kernel(double const *, double*, double*, double*, int)",
+          "duration_ms": 0.326906,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_ess_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.032127,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.000768,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_megopolis_coalesced_kernel(double const *, int*, int, __int64, int)",
+          "duration_ms": 1.574146,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_gather_resample_covariance_kernel(double const *, double*, int const *, int)",
+          "duration_ms": 0.889007,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_pack_common_resample_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.470295,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_gather_common_packed_kernel(double const *, int const *, double*, double*, double*, double*, double*, double*, double*, double*, int)",
+          "duration_ms": 0.75573,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_estimate_kernel(double const *, double const *, double const *, double const *, double const *, double*, double*, double*, int)",
+          "duration_ms": 0.435319,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_estimate_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.035136,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.000672,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_flags_kernel(double const *, int, int*)",
+          "duration_ms": 0.054367,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_finish_kernel(int const *, int, int*)",
+          "duration_ms": 0.00304,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.0008,
+          "kind": "copy"
+        },
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.000608,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_cdf_gather_reset_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, double*, double*, double*, double*, double*, double*, double*, double*, int, int, gnss_gpu::pfd_uniform_cdf_segment const *, __int64 const *, int)",
+          "duration_ms": 0.721779,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_fill_weights_kernel(double*, int, double)",
+          "duration_ms": 0.014528,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_flags_kernel(double const *, int, int*)",
+          "duration_ms": 0.029471,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_finish_kernel(int const *, int, int*)",
+          "duration_ms": 0.002623,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.000768,
+          "kind": "copy"
+        },
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.000608,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_cdf_gather_reset_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, double*, double*, double*, double*, double*, double*, double*, double*, int, int, gnss_gpu::pfd_uniform_cdf_segment const *, __int64 const *, int)",
+          "duration_ms": 0.84536,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_fill_weights_kernel(double*, int, double)",
+          "duration_ms": 0.0288,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_estimate_kernel(double const *, double const *, double const *, double const *, double const *, double*, double*, double*, int)",
+          "duration_ms": 0.435192,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_estimate_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.035071,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.00064,
+          "kind": "copy"
+        },
+        {
+          "name": "void gnss_gpu::pfd_predict_kernel<bool=0, bool=0>(double*, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, double, double, double, double, double, double, double, double, double, int, __int64, int)",
+          "duration_ms": 2.083096,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.001024,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_weight_gaussian_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int, int, double)",
+          "duration_ms": 3.072166,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_ess_kernel(double const *, double*, double*, double*, int)",
+          "duration_ms": 0.326425,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_ess_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.031968,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.0008,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_megopolis_coalesced_kernel(double const *, int*, int, __int64, int)",
+          "duration_ms": 1.572353,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_gather_resample_covariance_kernel(double const *, double*, int const *, int)",
+          "duration_ms": 0.794353,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_pack_common_resample_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.470231,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_gather_common_packed_kernel(double const *, int const *, double*, double*, double*, double*, double*, double*, double*, double*, int)",
+          "duration_ms": 0.626772,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_estimate_kernel(double const *, double const *, double const *, double const *, double const *, double*, double*, double*, int)",
+          "duration_ms": 0.434712,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_estimate_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.035135,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.000672,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_flags_kernel(double const *, int, int*)",
+          "duration_ms": 0.054271,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_finish_kernel(int const *, int, int*)",
+          "duration_ms": 0.003136,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.000768,
+          "kind": "copy"
+        },
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.000608,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_cdf_gather_reset_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, double*, double*, double*, double*, double*, double*, double*, double*, int, int, gnss_gpu::pfd_uniform_cdf_segment const *, __int64 const *, int)",
+          "duration_ms": 0.722194,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_fill_weights_kernel(double*, int, double)",
+          "duration_ms": 0.014816,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_flags_kernel(double const *, int, int*)",
+          "duration_ms": 0.029599,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_finish_kernel(int const *, int, int*)",
+          "duration_ms": 0.002624,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.0008,
+          "kind": "copy"
+        },
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.00032,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_cdf_gather_reset_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, double*, double*, double*, double*, double*, double*, double*, double*, int, int, gnss_gpu::pfd_uniform_cdf_segment const *, __int64 const *, int)",
+          "duration_ms": 0.857648,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_fill_weights_kernel(double*, int, double)",
+          "duration_ms": 0.0288,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_estimate_kernel(double const *, double const *, double const *, double const *, double const *, double*, double*, double*, int)",
+          "duration_ms": 0.435192,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_estimate_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.035071,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.00064,
+          "kind": "copy"
+        },
+        {
+          "name": "void gnss_gpu::pfd_predict_kernel<bool=0, bool=0>(double*, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, double, double, double, double, double, double, double, double, double, int, __int64, int)",
+          "duration_ms": 2.082905,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.000992,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_weight_gaussian_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int, int, double)",
+          "duration_ms": 3.072102,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_ess_kernel(double const *, double*, double*, double*, int)",
+          "duration_ms": 0.326681,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_ess_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.032032,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.000768,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_megopolis_coalesced_kernel(double const *, int*, int, __int64, int)",
+          "duration_ms": 1.573858,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_gather_resample_covariance_kernel(double const *, double*, int const *, int)",
+          "duration_ms": 0.780082,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_pack_common_resample_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.470424,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_gather_common_packed_kernel(double const *, int const *, double*, double*, double*, double*, double*, double*, double*, double*, int)",
+          "duration_ms": 0.601844,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_estimate_kernel(double const *, double const *, double const *, double const *, double const *, double*, double*, double*, int)",
+          "duration_ms": 0.435416,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_estimate_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.035199,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.000928,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_flags_kernel(double const *, int, int*)",
+          "duration_ms": 0.054367,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_finish_kernel(int const *, int, int*)",
+          "duration_ms": 0.003008,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.001088,
+          "kind": "copy"
+        },
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.000608,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_cdf_gather_reset_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, double*, double*, double*, double*, double*, double*, double*, double*, int, int, gnss_gpu::pfd_uniform_cdf_segment const *, __int64 const *, int)",
+          "duration_ms": 0.721714,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_fill_weights_kernel(double*, int, double)",
+          "duration_ms": 0.014623,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_flags_kernel(double const *, int, int*)",
+          "duration_ms": 0.029279,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_finish_kernel(int const *, int, int*)",
+          "duration_ms": 0.00256,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.000768,
+          "kind": "copy"
+        },
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.00032,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_cdf_gather_reset_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, double*, double*, double*, double*, double*, double*, double*, double*, int, int, gnss_gpu::pfd_uniform_cdf_segment const *, __int64 const *, int)",
+          "duration_ms": 0.851504,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_fill_weights_kernel(double*, int, double)",
+          "duration_ms": 0.028928,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_estimate_kernel(double const *, double const *, double const *, double const *, double const *, double*, double*, double*, int)",
+          "duration_ms": 0.435544,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_estimate_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.034943,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.000671,
+          "kind": "copy"
+        },
+        {
+          "name": "void gnss_gpu::pfd_predict_kernel<bool=0, bool=0>(double*, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, double, double, double, double, double, double, double, double, double, int, __int64, int)",
+          "duration_ms": 2.083352,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.000992,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_weight_gaussian_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int, int, double)",
+          "duration_ms": 3.07191,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_ess_kernel(double const *, double*, double*, double*, int)",
+          "duration_ms": 0.326745,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_ess_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.032031,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.018208,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_megopolis_coalesced_kernel(double const *, int*, int, __int64, int)",
+          "duration_ms": 1.575682,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_gather_resample_covariance_kernel(double const *, double*, int const *, int)",
+          "duration_ms": 0.772753,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_pack_common_resample_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.470103,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_gather_common_packed_kernel(double const *, int const *, double*, double*, double*, double*, double*, double*, double*, double*, int)",
+          "duration_ms": 0.592053,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_estimate_kernel(double const *, double const *, double const *, double const *, double const *, double*, double*, double*, int)",
+          "duration_ms": 0.435319,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_estimate_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.035136,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.000672,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_flags_kernel(double const *, int, int*)",
+          "duration_ms": 0.054303,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_finish_kernel(int const *, int, int*)",
+          "duration_ms": 0.003008,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.000768,
+          "kind": "copy"
+        },
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.000608,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_cdf_gather_reset_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, double*, double*, double*, double*, double*, double*, double*, double*, int, int, gnss_gpu::pfd_uniform_cdf_segment const *, __int64 const *, int)",
+          "duration_ms": 0.722419,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_fill_weights_kernel(double*, int, double)",
+          "duration_ms": 0.014784,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_flags_kernel(double const *, int, int*)",
+          "duration_ms": 0.02944,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_weights_finish_kernel(int const *, int, int*)",
+          "duration_ms": 0.002591,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.00112,
+          "kind": "copy"
+        },
+        {
+          "name": "[CUDA memcpy HtoD]",
+          "duration_ms": 0.00032,
+          "kind": "copy"
+        },
+        {
+          "name": "gnss_gpu::pfd_uniform_cdf_gather_reset_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, double*, double*, double*, double*, double*, double*, double*, double*, int, int, gnss_gpu::pfd_uniform_cdf_segment const *, __int64 const *, int)",
+          "duration_ms": 0.850704,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_fill_weights_kernel(double*, int, double)",
+          "duration_ms": 0.028864,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_estimate_kernel(double const *, double const *, double const *, double const *, double const *, double*, double*, double*, int)",
+          "duration_ms": 0.435064,
+          "kind": "kernel"
+        },
+        {
+          "name": "gnss_gpu::pfd_finalize_estimate_kernel(double const *, double const *, double const *, double*, int)",
+          "duration_ms": 0.034975,
+          "kind": "kernel"
+        },
+        {
+          "name": "[CUDA memcpy DtoH]",
+          "duration_ms": 0.000672,
+          "kind": "copy"
+        }
+      ],
+      "summary": {
+        "gnss_gpu::pfd_weight_gaussian_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int, int, double)": {
+          "calls": 5,
+          "total_ms": 15.360475999999998
+        },
+        "void gnss_gpu::pfd_predict_kernel<bool=0, bool=0>(double*, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, gnss_gpu::pfd_predict_kernel<bool=0, bool=0>, double, double, double, double, double, double, double, double, double, int, __int64, int)": {
+          "calls": 5,
+          "total_ms": 10.415866
+        },
+        "gnss_gpu::pfd_megopolis_coalesced_kernel(double const *, int*, int, __int64, int)": {
+          "calls": 5,
+          "total_ms": 7.870345
+        },
+        "gnss_gpu::pfd_uniform_cdf_gather_reset_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, double*, double*, double*, double*, double*, double*, double*, double*, int, int, gnss_gpu::pfd_uniform_cdf_segment const *, __int64 const *, int)": {
+          "calls": 10,
+          "total_ms": 7.865837000000001
+        },
+        "gnss_gpu::pfd_estimate_kernel(double const *, double const *, double const *, double const *, double const *, double*, double*, double*, int)": {
+          "calls": 10,
+          "total_ms": 4.350892
+        },
+        "gnss_gpu::pfd_gather_common_packed_kernel(double const *, int const *, double*, double*, double*, double*, double*, double*, double*, double*, int)": {
+          "calls": 5,
+          "total_ms": 3.393631
+        },
+        "gnss_gpu::pfd_gather_resample_covariance_kernel(double const *, double*, int const *, int)": {
+          "calls": 4,
+          "total_ms": 3.2361950000000004
+        },
+        "gnss_gpu::pfd_pack_common_resample_kernel(double const *, double const *, double const *, double const *, double const *, double const *, double const *, double*, int)": {
+          "calls": 5,
+          "total_ms": 2.3500680000000003
+        },
+        "gnss_gpu::pfd_ess_kernel(double const *, double*, double*, double*, int)": {
+          "calls": 5,
+          "total_ms": 1.670622
+        },
+        "gnss_gpu::pfd_uniform_weights_flags_kernel(double const *, int, int*)": {
+          "calls": 10,
+          "total_ms": 0.419031
+        },
+        "gnss_gpu::pfd_finalize_estimate_kernel(double const *, double const *, double const *, double*, int)": {
+          "calls": 10,
+          "total_ms": 0.35109699999999994
+        },
+        "gnss_gpu::pfd_fill_weights_kernel(double*, int, double)": {
+          "calls": 10,
+          "total_ms": 0.21763
+        },
+        "gnss_gpu::pfd_finalize_ess_kernel(double const *, double const *, double const *, double*, int)": {
+          "calls": 5,
+          "total_ms": 0.160285
+        },
+        "[CUDA memcpy DtoH]": {
+          "calls": 25,
+          "total_ms": 0.036959
+        },
+        "gnss_gpu::pfd_uniform_weights_finish_kernel(int const *, int, int*)": {
+          "calls": 10,
+          "total_ms": 0.028126
+        },
+        "[CUDA memcpy HtoD]": {
+          "calls": 15,
+          "total_ms": 0.010912000000000002
+        }
+      },
+      "raw_sha256": "bee61b20f12c5866f47f0ed715d3f79b98a6318c02be973cbf9483d852f9c9a7",
+      "console_sha256": "41f8be708a2b6f659c75b911a36ff0fb366c24994d4fd7d0d754d10f7a2383ce",
+      "trace_duration_units": "ms",
+      "unit_conversion_to_ms_applied": true
+    },
+    "parsing_provenance": {
+      "script_sha256": "517c9cf96d4af9cd58f106377034911e30b994fd7bfbfa64dd375a4996f2d549",
+      "initial_parser_fixed_to_read_each_trace_duration_unit": true
+    }
+  },
+  "posterior_cProfile": {
+    "schema_version": 1,
+    "source_sha256": {
+      "src/particle_filter/pf_device.cu": "a20de06f6a6081670d39677b265d6fa58eb64baf69d816cb8173ea68aad9a7fe",
+      "include/gnss_gpu/pf_device.h": "9616ae2e4fb898b562143f04405e1006586548b98d461881eb37e11d57b51d85",
+      "python/gnss_gpu/_pf_device_bindings.cpp": "24ea505b9fbd1171f073d56db239f63fe23f0ed65f65c83c2df61383c0521c59",
+      "python/gnss_gpu/pf_device_runtime.py": "7a3ada45383ad7cc2377b43f6bf92b6ac75be101a5f319337819ab0dc8cd1361",
+      "python/gnss_gpu/pf_device_config.py": "6b7e40d0e3f519e6454845ac1e348431d7769e143b95cf7c7b062134733a7c99",
+      "python/gnss_gpu/realtime_runtime.py": "143efce522df61877f02dee7f4ff6eea0158add40405f6f1aade51c3bea426a9"
+    },
+    "extension_sha256": "48572e69d6bf1bd4b8257988b88a270c86c19be81c49b5a1e24e4dcfc785df52",
+    "unprofiled_wall_samples_ms": [
+      20.5407,
+      20.6282,
+      21.2572
+    ],
+    "profiled_wall_ms": 24.7339,
+    "output": {
+      "input_sha256": "cf6d5770f28e78a946169fe9f61c318e78b40709f4ab292c07b04cb6c61827d4",
+      "output_sha256": "17065b59e93deadc97aa7f1d87c0c9fcf12b7195205e2a3f9e4907266a7a1889"
+    },
+    "profile_output_bit_identical": true,
+    "functions": [
+      {
+        "file": "realtime_runtime.py",
+        "line": 418,
+        "name": "_migrate",
+        "primitive_calls": 2,
+        "total_calls": 2,
+        "exclusive_ms": 10.3092,
+        "cumulative_ms": 22.773000000000003
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<built-in method _gnss_gpu_pf_device.pf_device_get_log_weights>",
+        "primitive_calls": 1,
+        "total_calls": 1,
+        "exclusive_ms": 2.5782000000000003,
+        "cumulative_ms": 2.5782000000000003
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<built-in method _gnss_gpu_pf_device.pf_device_gather_from_cdf>",
+        "primitive_calls": 1,
+        "total_calls": 1,
+        "exclusive_ms": 2.5095,
+        "cumulative_ms": 2.5095
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<method 'cumsum' of 'numpy.ndarray' objects>",
+        "primitive_calls": 1,
+        "total_calls": 1,
+        "exclusive_ms": 2.3555,
+        "cumulative_ms": 2.3555
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<method 'reduce' of 'numpy.ufunc' objects>",
+        "primitive_calls": 3,
+        "total_calls": 3,
+        "exclusive_ms": 1.701,
+        "cumulative_ms": 1.701
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<method 'copy' of 'numpy.ndarray' objects>",
+        "primitive_calls": 1,
+        "total_calls": 1,
+        "exclusive_ms": 1.5110000000000001,
+        "cumulative_ms": 1.5110000000000001
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<built-in method _gnss_gpu_pf_device.pf_device_try_gather_uniform_weights>",
+        "primitive_calls": 2,
+        "total_calls": 2,
+        "exclusive_ms": 1.4105,
+        "cumulative_ms": 1.4105
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<built-in method _gnss_gpu_pf_device.pf_device_estimate>",
+        "primitive_calls": 2,
+        "total_calls": 2,
+        "exclusive_ms": 0.9973,
+        "cumulative_ms": 0.9973
+      },
+      {
+        "file": "realtime_runtime.py",
+        "line": 378,
+        "name": "activate",
+        "primitive_calls": 2,
+        "total_calls": 2,
+        "exclusive_ms": 0.8825000000000001,
+        "cumulative_ms": 23.6599
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<built-in method _gnss_gpu_pf_device.pf_device_fill_log_weights>",
+        "primitive_calls": 2,
+        "total_calls": 2,
+        "exclusive_ms": 0.0808,
+        "cumulative_ms": 0.0808
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<built-in method numpy.empty>",
+        "primitive_calls": 1,
+        "total_calls": 1,
+        "exclusive_ms": 0.0601,
+        "cumulative_ms": 0.0601
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<built-in method builtins.getattr>",
+        "primitive_calls": 62,
+        "total_calls": 62,
+        "exclusive_ms": 0.056100000000000004,
+        "cumulative_ms": 0.056100000000000004
+      },
+      {
+        "file": "realtime_runtime.py",
+        "line": 406,
+        "name": "_migration_numpy_reuse_allowed",
+        "primitive_calls": 2,
+        "total_calls": 2,
+        "exclusive_ms": 0.028700000000000003,
+        "cumulative_ms": 0.0971
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<method 'disable' of '_lsprof.Profiler' objects>",
+        "primitive_calls": 1,
+        "total_calls": 1,
+        "exclusive_ms": 0.0283,
+        "cumulative_ms": 0.0283
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<built-in method numpy._core._multiarray_umath._get_extobj_dict>",
+        "primitive_calls": 2,
+        "total_calls": 2,
+        "exclusive_ms": 0.0246,
+        "cumulative_ms": 0.0246
+      },
+      {
+        "file": "realtime_runtime.py",
+        "line": 394,
+        "name": "_set_migration_log_weights",
+        "primitive_calls": 2,
+        "total_calls": 2,
+        "exclusive_ms": 0.0165,
+        "cumulative_ms": 0.11900000000000001
+      },
+      {
+        "file": "fromnumeric.py",
+        "line": 89,
+        "name": "_wrapreduction_any_all",
+        "primitive_calls": 1,
+        "total_calls": 1,
+        "exclusive_ms": 0.0125,
+        "cumulative_ms": 0.146
+      },
+      {
+        "file": "bench_pf_fused_uniform_compare.py",
+        "line": 63,
+        "name": "operation",
+        "primitive_calls": 1,
+        "total_calls": 1,
+        "exclusive_ms": 0.012100000000000001,
+        "cumulative_ms": 24.677
+      },
+      {
+        "file": "fromnumeric.py",
+        "line": 69,
+        "name": "_wrapreduction",
+        "primitive_calls": 2,
+        "total_calls": 2,
+        "exclusive_ms": 0.012,
+        "cumulative_ms": 1.582
+      },
+      {
+        "file": "realtime_runtime.py",
+        "line": 412,
+        "name": "<genexpr>",
+        "primitive_calls": 20,
+        "total_calls": 20,
+        "exclusive_ms": 0.0111,
+        "cumulative_ms": 0.0111
+      },
+      {
+        "file": "fromnumeric.py",
+        "line": 2338,
+        "name": "sum",
+        "primitive_calls": 1,
+        "total_calls": 1,
+        "exclusive_ms": 0.011000000000000001,
+        "cumulative_ms": 1.0958
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<built-in method builtins.any>",
+        "primitive_calls": 2,
+        "total_calls": 2,
+        "exclusive_ms": 0.008400000000000001,
+        "cumulative_ms": 0.0195
+      },
+      {
+        "file": "_ufunc_config.py",
+        "line": 108,
+        "name": "geterr",
+        "primitive_calls": 2,
+        "total_calls": 2,
+        "exclusive_ms": 0.0082,
+        "cumulative_ms": 0.0364
+      },
+      {
+        "file": "pf_device_runtime.py",
+        "line": 926,
+        "name": "set_uniform_log_weights",
+        "primitive_calls": 2,
+        "total_calls": 2,
+        "exclusive_ms": 0.0078,
+        "cumulative_ms": 0.097
+      },
+      {
+        "file": "pf_device_runtime.py",
+        "line": 803,
+        "name": "estimate",
+        "primitive_calls": 2,
+        "total_calls": 2,
+        "exclusive_ms": 0.007700000000000001,
+        "cumulative_ms": 1.0050000000000001
+      },
+      {
+        "file": "pf_device_runtime.py",
+        "line": 898,
+        "name": "get_log_weights",
+        "primitive_calls": 1,
+        "total_calls": 1,
+        "exclusive_ms": 0.007500000000000001,
+        "cumulative_ms": 2.6458000000000004
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<built-in method time.perf_counter_ns>",
+        "primitive_calls": 2,
+        "total_calls": 2,
+        "exclusive_ms": 0.007500000000000001,
+        "cumulative_ms": 0.007500000000000001
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<built-in method builtins.all>",
+        "primitive_calls": 2,
+        "total_calls": 2,
+        "exclusive_ms": 0.0068000000000000005,
+        "cumulative_ms": 0.011200000000000002
+      },
+      {
+        "file": "fromnumeric.py",
+        "line": 2589,
+        "name": "all",
+        "primitive_calls": 1,
+        "total_calls": 1,
+        "exclusive_ms": 0.0061,
+        "cumulative_ms": 0.1521
+      },
+      {
+        "file": "fromnumeric.py",
+        "line": 51,
+        "name": "_wrapfunc",
+        "primitive_calls": 1,
+        "total_calls": 1,
+        "exclusive_ms": 0.006,
+        "cumulative_ms": 2.3622
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<built-in method _gnss_gpu_pf_device.pf_device_sync>",
+        "primitive_calls": 1,
+        "total_calls": 1,
+        "exclusive_ms": 0.0053,
+        "cumulative_ms": 0.0053
+      },
+      {
+        "file": "fromnumeric.py",
+        "line": 3052,
+        "name": "max",
+        "primitive_calls": 1,
+        "total_calls": 1,
+        "exclusive_ms": 0.0048000000000000004,
+        "cumulative_ms": 0.5030000000000001
+      },
+      {
+        "file": "realtime_runtime.py",
+        "line": 409,
+        "name": "<genexpr>",
+        "primitive_calls": 10,
+        "total_calls": 10,
+        "exclusive_ms": 0.0044,
+        "cumulative_ms": 0.0044
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<method 'get' of 'dict' objects>",
+        "primitive_calls": 2,
+        "total_calls": 2,
+        "exclusive_ms": 0.0044,
+        "cumulative_ms": 0.0044
+      },
+      {
+        "file": "fromnumeric.py",
+        "line": 2879,
+        "name": "cumsum",
+        "primitive_calls": 1,
+        "total_calls": 1,
+        "exclusive_ms": 0.0043,
+        "cumulative_ms": 2.3665000000000003
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<method 'pop' of 'dict' objects>",
+        "primitive_calls": 4,
+        "total_calls": 4,
+        "exclusive_ms": 0.0036000000000000003,
+        "cumulative_ms": 0.0036000000000000003
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<built-in method numpy.asarray>",
+        "primitive_calls": 1,
+        "total_calls": 1,
+        "exclusive_ms": 0.0035000000000000005,
+        "cumulative_ms": 0.0035000000000000005
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<built-in method builtins.callable>",
+        "primitive_calls": 9,
+        "total_calls": 9,
+        "exclusive_ms": 0.0027,
+        "cumulative_ms": 0.0027
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<method 'items' of 'dict' objects>",
+        "primitive_calls": 3,
+        "total_calls": 3,
+        "exclusive_ms": 0.0025,
+        "cumulative_ms": 0.0025
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<built-in method math.log>",
+        "primitive_calls": 2,
+        "total_calls": 2,
+        "exclusive_ms": 0.0021000000000000003,
+        "cumulative_ms": 0.0021000000000000003
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<built-in method builtins.max>",
+        "primitive_calls": 1,
+        "total_calls": 1,
+        "exclusive_ms": 0.0014000000000000002,
+        "cumulative_ms": 0.0014000000000000002
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<method 'values' of 'dict' objects>",
+        "primitive_calls": 2,
+        "total_calls": 2,
+        "exclusive_ms": 0.0013,
+        "cumulative_ms": 0.0013
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "name": "<built-in method builtins.isinstance>",
+        "primitive_calls": 1,
+        "total_calls": 1,
+        "exclusive_ms": 0.0010000000000000002,
+        "cumulative_ms": 0.0010000000000000002
+      },
+      {
+        "file": "fromnumeric.py",
+        "line": 3047,
+        "name": "_max_dispatcher",
+        "primitive_calls": 1,
+        "total_calls": 1,
+        "exclusive_ms": 0.0008,
+        "cumulative_ms": 0.0008
+      },
+      {
+        "file": "fromnumeric.py",
+        "line": 2333,
+        "name": "_sum_dispatcher",
+        "primitive_calls": 1,
+        "total_calls": 1,
+        "exclusive_ms": 0.0007000000000000001,
+        "cumulative_ms": 0.0007000000000000001
+      },
+      {
+        "file": "fromnumeric.py",
+        "line": 2584,
+        "name": "_all_dispatcher",
+        "primitive_calls": 1,
+        "total_calls": 1,
+        "exclusive_ms": 0.0005000000000000001,
+        "cumulative_ms": 0.0005000000000000001
+      },
+      {
+        "file": "fromnumeric.py",
+        "line": 2875,
+        "name": "_cumsum_dispatcher",
+        "primitive_calls": 1,
+        "total_calls": 1,
+        "exclusive_ms": 0.00030000000000000003,
+        "cumulative_ms": 0.00030000000000000003
+      }
+    ],
+    "method": "cProfile of one restored public posterior roundtrip after four warm calls; no method, hook, NumPy policy or identity changes. Native call time includes synchronization. Inclusive call times overlap and must not be summed."
+  },
+  "interpretation": "Gaussian weight/predict/resample are the largest normal-step kernels; the Doppler KF kernel is the largest KF-step component. Posterior migration includes substantial host work and transfers. cProfile exclusive Python-frame time includes NumPy ufunc work not separately visible to cProfile. Native times include synchronization; inclusive call times overlap. These diagnostics are not speedup or hardware-counter evidence.",
+  "hardware_counters_obtained": false,
+  "public_device_product_fields_omitted": true,
+  "accuracy": "Every profiled output matches its unprofiled restored snapshot. Long real-data positioning accuracy was not newly measured."
+}

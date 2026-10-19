@@ -1,0 +1,29 @@
+{
+  "timestamp_utc": "2026-10-17T03:00:55.131200+00:00",
+  "verified": true,
+  "report_sha256": "694f4a9f93bb0915aeaf2e909fe0888c5c37a91a42aa43aeb68c5ff3f1b06c67",
+  "tests_passed": 158,
+  "actual_saved_score_batches": 394,
+  "timed_calls": 59100,
+  "warm_calls": 3940,
+  "actual_saved_PF_states": 400,
+  "all_saved_state_trajectory_cfg_prior_metadata_equal": true,
+  "component_gate_met": true,
+  "complete_PF_step_screen_executed": true,
+  "new_CXX_or_CUDA_binary": false,
+  "new_CUDA_sanitizer_runs": [],
+  "product_adoption": false,
+  "default_changed": false,
+  "production_changes": [],
+  "no_completed_timing_retry": true,
+  "measured_sources_frozen": true,
+  "original_measurement_count_assertion_failure_preserved": true,
+  "measurement_summary_reconstructed_from_complete_raw": true,
+  "Ruff_compile_EOL_diff_checks_passed": true,
+  "public_text_files_checked": 3299,
+  "public_device_product_names_absent": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  }
+}

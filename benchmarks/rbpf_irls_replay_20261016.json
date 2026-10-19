@@ -1,0 +1,1580 @@
+{
+  "timestamp_utc": "2026-10-16T11:05:59.370545+00:00",
+  "experiment": "D243 complete actual likelihood corpus, controlled exact IRLS identity reuse",
+  "product_adoption": false,
+  "default_changed": false,
+  "production_changes": [],
+  "component_only": true,
+  "CPU_component_passes": 0,
+  "GPU_joint_component_passes": 0,
+  "AA_failures": 0,
+  "initial_audit_diagnosis": {
+    "runner_sha256": "75098518d6c0168abae1856e0d7b6e5f5d4205440258f3c221c9bde7c301a9fe",
+    "initial_auditor_sha256": "0cf4f86362283928a467de7c9131c4ab76ae3778ede9bb0972c87a4ec50dfee0",
+    "initial_audit_exit_code": 1,
+    "error": "AssertionError at line47 comparing independently grouped contrast dicts. Initial auditor used ordinary += accumulation; benchmark uses Python3.12 sum(), which uses compensated float accumulation.",
+    "source_input_binary_unchanged": true,
+    "raw_measurements_unchanged": true,
+    "no_timing_retry": true,
+    "numerical_score_bit_checks_unchanged": true,
+    "max_round_percentage_point_difference": 3.410605131648481e-13,
+    "max_median_percentage_point_difference": 2.5579538487363607e-13,
+    "all_screen_and_AA_decisions_identical": true,
+    "compensated_sum_equals_math_fsum_all210corpus_groups": true,
+    "compensated_sum_matches_integer_nanosecond_reaggregation_abs_seconds_below": 1e-14,
+    "repair": "Keep original auditor and failure record;new v2 auditor collects lists then sum(),with independent math.fsum and integer-nanosecond cross-check. No tolerance on numerical outputs."
+  },
+  "benchmark_audit": {
+    "timestamp_utc": "2026-10-16T11:05:46.059466+00:00",
+    "runner_sha256": "87c2d8f7ad8c9961d5455a27649d994c9937049465fee4236cfdc8033e7c273b",
+    "measurement_sha256": "c6caaec1357dc4924490fb3e1f9778c2ad41f8dcc6bfab8ccc66d83850aded61",
+    "plan_sha256": "fcb04291156ea29a8fd9039116f57f973b020713ab5cd813f25b6ca352c7a8d1",
+    "calls_sha256": "8297ed5050045a540f04751d162307c5ae3192449b3ce07a4bb3f1ababd38403",
+    "conditions": {
+      "0": {
+        "contrasts": {
+          "cpu_control": {
+            "reference": "off_cpu",
+            "candidate": "on_cpu",
+            "round_paired_percent": [
+              2.150711445286535,
+              2.291557435364866,
+              3.1606362148484446,
+              3.5521935460012366,
+              2.30359765716428
+            ],
+            "median_paired_percent": 2.30359765716428,
+            "improving_rounds": 5,
+            "numeric_screen": false
+          },
+          "cpu_prior": {
+            "reference": "old_cpu",
+            "candidate": "on_cpu",
+            "round_paired_percent": [
+              -1.703239468072426,
+              -2.1233655791671247,
+              2.7144739096695014,
+              0.33416664099257254,
+              -0.45168102672545896
+            ],
+            "median_paired_percent": -0.45168102672545896,
+            "improving_rounds": 2,
+            "numeric_screen": false
+          },
+          "gpu_control": {
+            "reference": "off_gpu",
+            "candidate": "on_gpu",
+            "round_paired_percent": [
+              -0.04036113108383255,
+              -0.04350605007432673,
+              1.3432583463777625,
+              0.7377114490051961,
+              0.7992833181533654
+            ],
+            "median_paired_percent": 0.7377114490051961,
+            "improving_rounds": 3,
+            "numeric_screen": false
+          },
+          "gpu_prior": {
+            "reference": "old_gpu",
+            "candidate": "on_gpu",
+            "round_paired_percent": [
+              -1.7115826359425323,
+              -0.5021211463514863,
+              -0.22617010001584337,
+              -0.4538500306596971,
+              -0.7209730802948622
+            ],
+            "median_paired_percent": -0.5021211463514863,
+            "improving_rounds": 0,
+            "numeric_screen": false
+          },
+          "gpu_vs_cpu": {
+            "reference": "on_cpu",
+            "candidate": "on_gpu",
+            "round_paired_percent": [
+              -110.1744886508368,
+              -158.76348814396377,
+              -145.42348783111163,
+              -211.35111006107735,
+              -178.13789985733322
+            ],
+            "median_paired_percent": -158.76348814396377,
+            "improving_rounds": 0,
+            "numeric_screen": false
+          },
+          "cpu_aa": {
+            "reference": "old_cpu",
+            "candidate": "old_cpu_aa",
+            "round_paired_percent": [
+              -1.3874084144419374,
+              0.15202831306567743,
+              4.823988755500464,
+              0.5589179739918348,
+              -2.781512362032079
+            ],
+            "median_paired_percent": 0.15202831306567743,
+            "improving_rounds": 3,
+            "numeric_screen": false
+          }
+        },
+        "aa_valid": true,
+        "cpu_component_pass": false,
+        "gpu_component_pass": false,
+        "median_corpus_seconds": {
+          "old_cpu": 0.3633628,
+          "off_cpu": 0.3713483,
+          "on_cpu": 0.374816,
+          "old_gpu": 0.8740321,
+          "off_gpu": 0.8780388,
+          "on_gpu": 0.8784208,
+          "old_cpu_aa": 0.3613319
+        },
+        "warm_native_totals": {
+          "off_cpu": {
+            "batches": 197,
+            "hypotheses": 4166,
+            "identical_hypotheses": 0,
+            "skipped_normal_solves": 0
+          },
+          "on_cpu": {
+            "batches": 197,
+            "hypotheses": 4166,
+            "identical_hypotheses": 1401,
+            "skipped_normal_solves": 2802
+          },
+          "off_gpu": {
+            "batches": 197,
+            "hypotheses": 4166,
+            "identical_hypotheses": 0,
+            "skipped_normal_solves": 0
+          },
+          "on_gpu": {
+            "batches": 197,
+            "hypotheses": 4166,
+            "identical_hypotheses": 1401,
+            "skipped_normal_solves": 2802
+          }
+        },
+        "timed_native_totals": {
+          "off_cpu": {
+            "batches": 2955,
+            "hypotheses": 62490,
+            "identical_hypotheses": 0,
+            "skipped_normal_solves": 0
+          },
+          "on_cpu": {
+            "batches": 2955,
+            "hypotheses": 62490,
+            "identical_hypotheses": 21015,
+            "skipped_normal_solves": 42030
+          },
+          "off_gpu": {
+            "batches": 2955,
+            "hypotheses": 62490,
+            "identical_hypotheses": 0,
+            "skipped_normal_solves": 0
+          },
+          "on_gpu": {
+            "batches": 2955,
+            "hypotheses": 62490,
+            "identical_hypotheses": 21015,
+            "skipped_normal_solves": 42030
+          }
+        }
+      },
+      "1": {
+        "contrasts": {
+          "cpu_control": {
+            "reference": "off_cpu",
+            "candidate": "on_cpu",
+            "round_paired_percent": [
+              5.082760403225539,
+              4.512386486985164,
+              3.0408767283131244,
+              3.8717099913765374,
+              3.697229969244953
+            ],
+            "median_paired_percent": 3.8717099913765374,
+            "improving_rounds": 5,
+            "numeric_screen": false
+          },
+          "cpu_prior": {
+            "reference": "old_cpu",
+            "candidate": "on_cpu",
+            "round_paired_percent": [
+              2.438810751466214,
+              0.816925295288562,
+              -0.5023130150038302,
+              2.8842192728271265,
+              -0.5433432270177896
+            ],
+            "median_paired_percent": 0.816925295288562,
+            "improving_rounds": 3,
+            "numeric_screen": false
+          },
+          "gpu_control": {
+            "reference": "off_gpu",
+            "candidate": "on_gpu",
+            "round_paired_percent": [
+              -0.241928665713953,
+              -2.2540892208898544,
+              -0.2137412925302895,
+              -0.4032187941695353,
+              2.972489308137949
+            ],
+            "median_paired_percent": -0.241928665713953,
+            "improving_rounds": 1,
+            "numeric_screen": false
+          },
+          "gpu_prior": {
+            "reference": "old_gpu",
+            "candidate": "on_gpu",
+            "round_paired_percent": [
+              0.5087773636841209,
+              -4.872205180700773,
+              -0.8693666708167846,
+              -0.3567332512792287,
+              2.8028202887285025
+            ],
+            "median_paired_percent": -0.3567332512792287,
+            "improving_rounds": 2,
+            "numeric_screen": false
+          },
+          "gpu_vs_cpu": {
+            "reference": "on_cpu",
+            "candidate": "on_gpu",
+            "round_paired_percent": [
+              -102.73054770901355,
+              -109.02924318826818,
+              -101.31996696203495,
+              -111.37644882278019,
+              -95.21340587062102
+            ],
+            "median_paired_percent": -102.73054770901355,
+            "improving_rounds": 0,
+            "numeric_screen": false
+          },
+          "cpu_aa": {
+            "reference": "old_cpu",
+            "candidate": "old_cpu_aa",
+            "round_paired_percent": [
+              2.5532910559182054,
+              0.0318291478741739,
+              -0.44429953063089833,
+              -0.007357209592617764,
+              -0.7937784696370853
+            ],
+            "median_paired_percent": -0.007357209592617764,
+            "improving_rounds": 2,
+            "numeric_screen": false
+          }
+        },
+        "aa_valid": true,
+        "cpu_component_pass": false,
+        "gpu_component_pass": false,
+        "median_corpus_seconds": {
+          "old_cpu": 0.5038243,
+          "off_cpu": 0.5188497,
+          "on_cpu": 0.5026944,
+          "old_gpu": 1.2200286,
+          "off_gpu": 1.2325115,
+          "on_gpu": 1.2359543,
+          "old_cpu_aa": 0.5015463
+        },
+        "warm_native_totals": {
+          "off_cpu": {
+            "batches": 197,
+            "hypotheses": 4063,
+            "identical_hypotheses": 0,
+            "skipped_normal_solves": 0
+          },
+          "on_cpu": {
+            "batches": 197,
+            "hypotheses": 4063,
+            "identical_hypotheses": 1329,
+            "skipped_normal_solves": 2658
+          },
+          "off_gpu": {
+            "batches": 197,
+            "hypotheses": 4063,
+            "identical_hypotheses": 0,
+            "skipped_normal_solves": 0
+          },
+          "on_gpu": {
+            "batches": 197,
+            "hypotheses": 4063,
+            "identical_hypotheses": 1329,
+            "skipped_normal_solves": 2658
+          }
+        },
+        "timed_native_totals": {
+          "off_cpu": {
+            "batches": 2955,
+            "hypotheses": 60945,
+            "identical_hypotheses": 0,
+            "skipped_normal_solves": 0
+          },
+          "on_cpu": {
+            "batches": 2955,
+            "hypotheses": 60945,
+            "identical_hypotheses": 19935,
+            "skipped_normal_solves": 39870
+          },
+          "off_gpu": {
+            "batches": 2955,
+            "hypotheses": 60945,
+            "identical_hypotheses": 0,
+            "skipped_normal_solves": 0
+          },
+          "on_gpu": {
+            "batches": 2955,
+            "hypotheses": 60945,
+            "identical_hypotheses": 19935,
+            "skipped_normal_solves": 39870
+          }
+        }
+      }
+    },
+    "timed_calls": 41370,
+    "warm_calls": 2758,
+    "all_same_backend_output_diagnostic_bits_equal": true,
+    "every_timed_skipped_vector_verified": true,
+    "CPU_component_passes": 0,
+    "GPU_component_passes": 0,
+    "AA_failures": 0,
+    "component_only": true,
+    "PF_speed_established": false,
+    "default_changed": false,
+    "no_completed_timing_retry": true,
+    "initial_audit_diagnosis_sha256": "16a6e64899580f85b28d734b3f7659b03c1f71793abf0b36655f215fe1c29458",
+    "compensated_sum_equals_math_fsum_and_integer_nanosecond_crosscheck": true
+  },
+  "capture_audit": {
+    "runner_sha256": "193b7f8bb465ed1092f6199c890e2fb88fa4057b15ec4ae33c276a002fd42000",
+    "plan_sha256": "6f46c0b503f679efbaf51de2b4db9f9a78380346add3395fc23140328de43780",
+    "cases": {
+      "r3_seed0_capture_cpu_c0": {
+        "paired_steps": 200,
+        "batches": 197,
+        "corpus_path": "dist/rbpf_irls_replay_capture_20261016/r3_seed0_capture_cpu_c0.corpus.jsonl.gz",
+        "corpus_sha256": "7172b4db3f50435f24c19c92056d22baf436442cf3315a02ee18a46271128e66",
+        "all_state_trajectory_cfg_prior_metadata_equal": true,
+        "trajectory_arrays": {
+          "ne": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "tow": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "week": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "sol_xyz": {
+            "dtype": "<f8",
+            "shape": [
+              400,
+              3
+            ],
+            "bits_equal": true
+          },
+          "witness_xyz": {
+            "dtype": "<f8",
+            "shape": [
+              400,
+              3
+            ],
+            "bits_equal": true
+          },
+          "witness_err3d": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "smode": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "err3d": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "nsat_dd": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "flt_err3d": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "flt_xyz": {
+            "dtype": "<f8",
+            "shape": [
+              400,
+              3
+            ],
+            "bits_equal": true
+          },
+          "map_err3d": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "ar_ratio": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "ar_raw_nb": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "ar_phase": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "gamma": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "second_gamma": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "gamma_pair": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_nb": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_nbasins": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_ess": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_ok": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_npairs": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_nheld": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_spawn": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "base_xyz": {
+            "dtype": "<f8",
+            "shape": [
+              3
+            ],
+            "bits_equal": true
+          },
+          "rb_n": {
+            "dtype": "<i8",
+            "shape": [],
+            "bits_equal": true
+          },
+          "rb_k": {
+            "dtype": "<i8",
+            "shape": [],
+            "bits_equal": true
+          },
+          "rb_beta": {
+            "dtype": "<f8",
+            "shape": [],
+            "bits_equal": true
+          },
+          "rb_gamma": {
+            "dtype": "<f8",
+            "shape": [],
+            "bits_equal": true
+          },
+          "rb_min_nb": {
+            "dtype": "<i8",
+            "shape": [],
+            "bits_equal": true
+          },
+          "rb_seed": {
+            "dtype": "<i8",
+            "shape": [],
+            "bits_equal": true
+          },
+          "rb_ddpr_dpos": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_ddpr_qual": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_fix_dpr": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_min_info": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_rep_dpr": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_witness_chi": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_loo_max_m": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_loo_med_m": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_loo_n": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_delay_5s_m": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_delay_20s_m": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_delay_corr_cos": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_delay_cross_cos": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_delayed_rejuv_trigger": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_shadow_promote": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_shadow_n": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "ckpt_phase2_valid": {
+            "dtype": "<i8",
+            "shape": [],
+            "bits_equal": true
+          },
+          "ckpt_pose_R": {
+            "dtype": "<f8",
+            "shape": [
+              3,
+              3
+            ],
+            "bits_equal": true
+          },
+          "ckpt_pose_t": {
+            "dtype": "<f8",
+            "shape": [
+              3
+            ],
+            "bits_equal": true
+          },
+          "ckpt_vel_enu": {
+            "dtype": "<f8",
+            "shape": [
+              3
+            ],
+            "bits_equal": true
+          },
+          "ckpt_bias_acc": {
+            "dtype": "<f8",
+            "shape": [
+              3
+            ],
+            "bits_equal": true
+          },
+          "ckpt_bias_gyro": {
+            "dtype": "<f8",
+            "shape": [
+              3
+            ],
+            "bits_equal": true
+          },
+          "ckpt_imu_idx": {
+            "dtype": "<i8",
+            "shape": [],
+            "bits_equal": true
+          },
+          "ckpt_week": {
+            "dtype": "<i8",
+            "shape": [],
+            "bits_equal": true
+          },
+          "ckpt_tow": {
+            "dtype": "<f8",
+            "shape": [],
+            "bits_equal": true
+          }
+        },
+        "record_sha256": "31a715964cf3f0088e1889136d027f315599664e2bd5e48919a593608738eda0",
+        "capture_sha256": "68fc6ea6c1700b6521890421f8c7304bcea80240f4a03fe00b34e8745f1ccf5e",
+        "reference_record_sha256": "60a5fa7cb6e62db3c7ae1c0d8aebde2936ea658d38e04f1e5be152ae386bac5a"
+      },
+      "r3_seed0_capture_cpu_c1": {
+        "paired_steps": 200,
+        "batches": 197,
+        "corpus_path": "dist/rbpf_irls_replay_capture_20261016/r3_seed0_capture_cpu_c1.corpus.jsonl.gz",
+        "corpus_sha256": "75d747605bde5bc389d14ce07ed34e3163d5c0f2b0d42f2348e54c7e2183ba18",
+        "all_state_trajectory_cfg_prior_metadata_equal": true,
+        "trajectory_arrays": {
+          "ne": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "tow": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "week": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "sol_xyz": {
+            "dtype": "<f8",
+            "shape": [
+              400,
+              3
+            ],
+            "bits_equal": true
+          },
+          "witness_xyz": {
+            "dtype": "<f8",
+            "shape": [
+              400,
+              3
+            ],
+            "bits_equal": true
+          },
+          "witness_err3d": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "smode": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "err3d": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "nsat_dd": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "flt_err3d": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "flt_xyz": {
+            "dtype": "<f8",
+            "shape": [
+              400,
+              3
+            ],
+            "bits_equal": true
+          },
+          "map_err3d": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "ar_ratio": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "ar_raw_nb": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "ar_phase": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "gamma": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "second_gamma": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "gamma_pair": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_nb": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_nbasins": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_ess": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_ok": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_npairs": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_nheld": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_spawn": {
+            "dtype": "<i8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "base_xyz": {
+            "dtype": "<f8",
+            "shape": [
+              3
+            ],
+            "bits_equal": true
+          },
+          "rb_n": {
+            "dtype": "<i8",
+            "shape": [],
+            "bits_equal": true
+          },
+          "rb_k": {
+            "dtype": "<i8",
+            "shape": [],
+            "bits_equal": true
+          },
+          "rb_beta": {
+            "dtype": "<f8",
+            "shape": [],
+            "bits_equal": true
+          },
+          "rb_gamma": {
+            "dtype": "<f8",
+            "shape": [],
+            "bits_equal": true
+          },
+          "rb_min_nb": {
+            "dtype": "<i8",
+            "shape": [],
+            "bits_equal": true
+          },
+          "rb_seed": {
+            "dtype": "<i8",
+            "shape": [],
+            "bits_equal": true
+          },
+          "rb_ddpr_dpos": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_ddpr_qual": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_fix_dpr": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_min_info": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_rep_dpr": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_witness_chi": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_loo_max_m": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_loo_med_m": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_loo_n": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_delay_5s_m": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_delay_20s_m": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_delay_corr_cos": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_delay_cross_cos": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_delayed_rejuv_trigger": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_shadow_promote": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "rb_shadow_n": {
+            "dtype": "<f8",
+            "shape": [
+              400
+            ],
+            "bits_equal": true
+          },
+          "ckpt_phase2_valid": {
+            "dtype": "<i8",
+            "shape": [],
+            "bits_equal": true
+          },
+          "ckpt_pose_R": {
+            "dtype": "<f8",
+            "shape": [
+              3,
+              3
+            ],
+            "bits_equal": true
+          },
+          "ckpt_pose_t": {
+            "dtype": "<f8",
+            "shape": [
+              3
+            ],
+            "bits_equal": true
+          },
+          "ckpt_vel_enu": {
+            "dtype": "<f8",
+            "shape": [
+              3
+            ],
+            "bits_equal": true
+          },
+          "ckpt_bias_acc": {
+            "dtype": "<f8",
+            "shape": [
+              3
+            ],
+            "bits_equal": true
+          },
+          "ckpt_bias_gyro": {
+            "dtype": "<f8",
+            "shape": [
+              3
+            ],
+            "bits_equal": true
+          },
+          "ckpt_imu_idx": {
+            "dtype": "<i8",
+            "shape": [],
+            "bits_equal": true
+          },
+          "ckpt_week": {
+            "dtype": "<i8",
+            "shape": [],
+            "bits_equal": true
+          },
+          "ckpt_tow": {
+            "dtype": "<f8",
+            "shape": [],
+            "bits_equal": true
+          }
+        },
+        "record_sha256": "e18ee8ee993d5116d2a53314508f95fb163f0dc21868f5303e59392bced3ba16",
+        "capture_sha256": "9f78e8cd95ba442e8495b3a92f34b43ec9f4fba5736f4f87b9ef3bde6c33f412",
+        "reference_record_sha256": "8cc4db4e16ff0aaf8f7ea6d67013ac82b5623d40588341d748ce35ca409926de"
+      }
+    },
+    "paired_steps": 400,
+    "batches": 394,
+    "all_state_trajectory_cfg_prior_metadata_equal": true,
+    "performance_inference": false,
+    "scope": "Original D236 CPU actual prefix,all calls in both cluster configs captured by copying values only. No extra scorer callback. Byte-identical saved states and arrays;scalar NaN codec limitation inherited. Capture timer contains copy/serialization and is unusable for speed."
+  },
+  "tests": {
+    "passed": 122,
+    "known_configuration_warnings": 1,
+    "record": {
+      "exit_code": 0,
+      "plan_sha256": "105ba8e9341372c205739af06d46898f0773adc096d01660af812d7b6aa981e2",
+      "log_sha256": "906d6b78ca8242eb6e6ec516d29c916a83650475f6440b170abda249597856bd",
+      "sources_binaries_unchanged": true
+    },
+    "plan_sha256": "105ba8e9341372c205739af06d46898f0773adc096d01660af812d7b6aa981e2"
+  },
+  "CUDA_checks": {
+    "runner_sha256": "642e0119162826494dd4374904eaf9e1623df7f2fcf3a5210101f3cf09cfad08",
+    "serial_GPU_checks": true,
+    "checks": [
+      {
+        "kind": "memcheck",
+        "exit_code": 0,
+        "summary": [
+          "========= LEAK SUMMARY: 0 bytes leaked in 0 allocations",
+          "========= ERROR SUMMARY: 0 errors"
+        ],
+        "report_sha256": "3ef41833580c07952672569330729d3a908130c68e7a514d721c5b0a3ddbd7d6",
+        "testlog_sha256": "4897e371df9bfc518241c46d375b35b086784b0d57a3fb2f95e0ff812b0c428e",
+        "job_sha256": "c57904cc70f3fabdbfb4bd09965f519f0d6720dfb38cbc7a913196d5d0f5a891"
+      },
+      {
+        "kind": "racecheck",
+        "exit_code": 0,
+        "summary": [
+          "========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)"
+        ],
+        "report_sha256": "c69d09b31a66173faf98f267db57c7eb988035ce364fa0f0f184ffc933c541a7",
+        "testlog_sha256": "8cb8ca937e5ffaedf621555444a71e29f9ba9867607ae54907c05cb5446e87be",
+        "job_sha256": "dcd9ad15db81b0ccae6d19eb30790739a06a9c67549ce5d995174d76cc527b52"
+      },
+      {
+        "kind": "synccheck",
+        "exit_code": 0,
+        "summary": [
+          "========= ERROR SUMMARY: 0 errors"
+        ],
+        "report_sha256": "adba10db853bd67fe9009b776eefe7b61210d2cbe3eee029ba6fa188978b5832",
+        "testlog_sha256": "73742e0508a34c6d4c8e119c944750c5592537e6de464f23dbe7f9630133bd74",
+        "job_sha256": "0f6074df5e059c6d7797a5ef8a49a0f67893785531f998f353e5375db940a8e4"
+      }
+    ]
+  },
+  "source_proof": {
+    "generator_sha256": "1525d9110873908219c185d098d95915571a7c5bb58c70ebffda6bff81972cbf",
+    "D242_source_sha256": "055de55d89dfd98a18e880f585c868fce06f012d40f57f43e8574d3eda43ca39",
+    "D226_source_path": "benchmarks/probes/rbpf_likelihood_pageable/probe.cu",
+    "D226_source_sha256": "c3e757381f8faa6a8178aca79ac3aba814560636a179223a92bdf727bcdba5d7",
+    "candidate_source_sha256": "4425ee0c02fe14a466521b61d84b6ef7949dd0ea9d618b4abbf0df17cca5d428",
+    "full_source_undo_equal": true,
+    "changes": [
+      [
+        "__host__ __device__ bool identical_bits(",
+        "__host__ __device__ void reweight_original(Scratch& s, int r, const double* cfg) {\n    const double weight = fmin(1.0, cfg[2] / fmax(fabs(residual(s,r)), 1e-12));\n    const double sw = sqrt(weight);\n    s.bw[r] = s.b[r] * sw;\n    for (int j = 0; j < s.dimension; ++j) s.Aw[r*MAX_D+j] = s.A[r*MAX_D+j] * sw;\n}\n\n__host__ __device__ bool identical_bits("
+      ],
+      [
+        "double* output, int* status, int* skipped, double* diagnostic) {",
+        "double* output, int* status, int* skipped, double* diagnostic, bool identity) {"
+      ],
+      [
+        "                if (lane == 0) s.changed = 0;\n                __syncthreads();\n                for (int r = lane; r < s.count; r += blockDim.x)\n                    if (reweight_row(s,r,cfg)) atomicExch(&s.changed, 1);\n                __syncthreads();\n                // Aw and bw bits are unchanged: the same ordered normal/RHS,\n                // pivoted LU, solution and all remaining weights recur exactly.\n                if (!s.changed) { if (lane == 0) s.skipped = stages-stage-1; break; }",
+        "                if (identity) {\n                    if (lane == 0) s.changed = 0;\n                    __syncthreads();\n                    for (int r = lane; r < s.count; r += blockDim.x)\n                        if (reweight_row(s,r,cfg)) atomicExch(&s.changed, 1);\n                    __syncthreads();\n                    // Aw and bw bits are unchanged: the same ordered normal/RHS,\n                    // pivoted LU, solution and all remaining weights recur exactly.\n                    if (!s.changed) { if (lane == 0) s.skipped = stages-stage-1; break; }\n                } else {\n                    for (int r = lane; r < s.count; r += blockDim.x) reweight_original(s,r,cfg);\n                    __syncthreads();\n                }"
+      ],
+      [
+        "int capacity, last_count = 0;",
+        "int capacity, last_count = 0;\n    bool identity = false;"
+      ],
+      [
+        "                        bool changed = false;\n                        for (int r = 0; r < s.count; ++r) changed |= reweight_row(s,r,cfg);\n                        if (!changed) { s.skipped = stages-stage-1; break; }",
+        "                        if (w->identity) {\n                            bool changed = false;\n                            for (int r = 0; r < s.count; ++r) changed |= reweight_row(s,r,cfg);\n                            if (!changed) { s.skipped = stages-stage-1; break; }\n                        } else {\n                            for (int r = 0; r < s.count; ++r) reweight_original(s,r,cfg);\n                        }"
+      ],
+      [
+        "diagnostic ? reinterpret_cast<double*>(w->device_output+diagnostic_offset) : nullptr);",
+        "diagnostic ? reinterpret_cast<double*>(w->device_output+diagnostic_offset) : nullptr, w->identity);"
+      ],
+      [
+        "// Read counters already returned",
+        "\n// Explicit per-workspace diagnostic control; default off, no CUDA operation.\nextern \"C\" __declspec(dllexport) int rbpf_identity_enable(void* pointer, int enabled) {\n    Workspace* w = static_cast<Workspace*>(pointer);\n    if (!w || (enabled != 0 && enabled != 1)) return -1;\n    w->identity = enabled != 0;\n    return 0;\n}\n\n// Read counters already returned"
+      ]
+    ],
+    "original_reweight_body": "__host__ __device__ void reweight_original(Scratch& s, int r, const double* cfg) {\n    const double weight = fmin(1.0, cfg[2] / fmax(fabs(residual(s,r)), 1e-12));\n    const double sw = sqrt(weight);\n    s.bw[r] = s.b[r] * sw;\n    for (int j = 0; j < s.dimension; ++j) s.Aw[r*MAX_D+j] = s.A[r*MAX_D+j] * sw;\n}"
+  },
+  "build": {
+    "plan_sha256": "4e4a70d7e41102e1b425df73887b39496b9d8ea8eb42848ee2da62ddd45e5f36",
+    "source_sha256": {
+      "benchmarks/probes/rbpf_irls_replay/CMakeLists.txt": "ab99dd02b9228f44099cbe41f13299b3f98331c9e615b05070ecc0a549bf3522",
+      "benchmarks/probes/rbpf_irls_replay/probe.cu": "4425ee0c02fe14a466521b61d84b6ef7949dd0ea9d618b4abbf0df17cca5d428",
+      "benchmarks/probes/rbpf_irls_replay/README.md": "2e9939e6783ec5e03533169cba570102ba0927f405897bff21df02c28b0601c1"
+    },
+    "dll_sha256": "c1c55cd1a5d59aac4d8691ecab6a895805ee49c7810a827851db5310d0abfc59",
+    "log_sha256": "83bcb3e49a7d8bd2dd5389ab67955cc26b5d11275aa76613730669efd798350e",
+    "exit_codes": [
+      0,
+      0
+    ],
+    "source_unchanged": true
+  },
+  "preservation": {
+    "timestamp_utc": "2026-10-16T10:51:33.253668+00:00",
+    "runner_sha256": "a053e7e050de9e1f0ba5da607f06a5444860eed8d2f5f6fe9a7617a1241db120",
+    "production_source_sha256": {
+      "src/raytrace/bvh.cu": "7d9d06f128710f12eea70b09b8f0d475d16223957ddfdf41a7cf5ec77ac09d98",
+      "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+      "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+      "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+      "python/gnss_gpu/urban_signal_sim.py": "d3b332eeaa6b099449cb13ef4517aa4223cd8e561a5b753d8f7c5f99cf146075",
+      "src/signal_sim/signal_sim.cu": "31dc2c2a6e06d9f020c1b054371f0652c777dc3a6724f8a46b99297cda18be41",
+      "include/gnss_gpu/signal_sim.h": "2788f41ff6175da2d6c0db5212470ab3759f4e350d91f977a532e48fc70fa945",
+      "python/gnss_gpu/_signal_sim_bindings.cpp": "524f9460570f0b39f4165f8fb6526af927e6c2c8f39ff661c2731d34ee82bcff",
+      "python/gnss_gpu/signal_sim.py": "f316c47c4a9a9359498e6905f8d6afa8046f7b631f876e258074d44d527780d4",
+      "python/gnss_gpu/atmosphere.py": "8c7432e714699ae918f73d49346f43b9eb0a8b36802ad4618e1e042c09ddb76f",
+      "python/gnss_gpu/_atmosphere_bindings.cpp": "36c75159886ae798f28bd17c9d13d3b89e8797f3e81a07d3270aef9ea3b913ef",
+      "src/atmosphere/atmosphere.cu": "95e420949eac72a6ea2866add6a2cff6477c7ea4a27392830e526ebe23e86913",
+      "include/gnss_gpu/atmosphere.h": "e2d54dfb590391b6ca176a8bb9abc0156dc78fe51a330e6321a1579c752e8394",
+      "python/gnss_gpu/raytrace.py": "3d12a36b3db0b79d35fe54d38ed1f0fa0365c6b2064ff89fdaddc6c8140aab18",
+      "python/gnss_gpu/_raytrace_bindings.cpp": "472cae5221d1e5455570da2015a7a2ff8b5247482d540e50f88fb44470481896",
+      "src/raytrace/raytrace.cu": "454f371dd760e663ebb86563014bb56a16023d9bbff9b1df81ad4e54d855c7fa",
+      "include/gnss_gpu/raytrace.h": "02b0d9448a792a851aaa05397ee850748869430ba9c58f8fa998bfbad394b91c",
+      "python/gnss_gpu/double_reflection.py": "7a3950ba7c67efe6e2061f9541d993c8e52212994d0503f192f2d29906d11a80",
+      "python/gnss_gpu/diffraction.py": "7e6171943c90c8018bc87fe068533097938c139fbc59e5e2af47c9ca087aa52a",
+      "python/gnss_gpu/input_validation.py": "c1c4c08f1830edc254d38bcbdb05414041af2670f628f119cf7792759d2ea824",
+      "python/gnss_gpu/_diffraction_bindings.cpp": "94c12c172df10f32c0beb6f9409810996b932d3b9b3165bc1a21a4b62975c39a",
+      "src/diffraction/diffraction.cu": "f886d1cbc445707fabfc9e3dc5492ff1eebe82b27306d8a21ccf00404b43ff88",
+      "src/diffraction/utd.cu": "1ef9507efebb3c4fbc87e650d74a94067cdf6ab956ab0c8b0230a2a7bad34f82",
+      "include/gnss_gpu/diffraction.h": "3d276a6545b3db34f50fd2e7a4714e0b0e8cca1fbfa9dbe2fb28e3c256ccd5a9",
+      "python/gnss_gpu/reflection_diffraction.py": "90078b4ac1905bc291a7699c9ff7ccda7b723bcfdf10853e05f9a5ad4e2e39f8",
+      "src/particle_filter/pf_device.cu": "a20de06f6a6081670d39677b265d6fa58eb64baf69d816cb8173ea68aad9a7fe",
+      "include/gnss_gpu/pf_device.h": "9616ae2e4fb898b562143f04405e1006586548b98d461881eb37e11d57b51d85",
+      "python/gnss_gpu/_pf_device_bindings.cpp": "24ea505b9fbd1171f073d56db239f63fe23f0ed65f65c83c2df61383c0521c59",
+      "python/gnss_gpu/pf_device_runtime.py": "7a3ada45383ad7cc2377b43f6bf92b6ac75be101a5f319337819ab0dc8cd1361",
+      "python/gnss_gpu/realtime_runtime.py": "997b670f9186e01d6e6c9468d8804df47a39390b6a087ef92ae3978694a2432a",
+      "src/positioning/fgo.cu": "860deb60bbf03c3c0e7f25bda5d39a29f489284e1c081c45f63eb64a66e0f1b9",
+      "include/gnss_gpu/fgo.h": "443ffe8845dc85d8454704debef8e36bcddb7927d728871b91bfc0c3c203a6ee",
+      "python/gnss_gpu/fgo.py": "2eb5cefde7a7c91eef4b88e7175c0e00e6c85e9abd8883c00b2abfe11219e1c4",
+      "python/gnss_gpu/_bindings.cpp": "99eacd7c53fab0eb693c00699f97a0549bb06651c2b9907bf3b4fbf4f7546efd",
+      "experiments/rbpf_fgo/rbpf_fgo.py": "c977508d6a20413f7669efb39dfb1d87d74b254ce89cf1f57ae8681d7d6b8bb6",
+      "experiments/rbpf_fgo/gtsam_rtk_standalone.py": "1cdf4a7931bce541a3ad0c41a7d7e7e5aa404ca11e47bacdbbd832b17e5f8f38"
+    },
+    "production_extension_sha256": {
+      "_raytrace.cp312-win_amd64.pyd": "f9b3f83aede53d8cc03dff03c937529431b5143398f24ddc2aa1a2f50d0c2516",
+      "_gnss_gpu_signal_sim.cp312-win_amd64.pyd": "3ae8d0dc0c6136167fe4e1adde91972ce75fe0f00f3714021bd5bed851bfd5c6",
+      "_gnss_gpu_diffraction.cp312-win_amd64.pyd": "ca28ef50c132edd2ba87965ba934c6c6c274737f7a6b436ceea55a64c4cb6542",
+      "_gnss_gpu_pf_device.cp312-win_amd64.pyd": "48572e69d6bf1bd4b8257988b88a270c86c19be81c49b5a1e24e4dcfc785df52",
+      "_gnss_gpu.cp312-win_amd64.pyd": "8cc9cf532a0073bc2978ffc8b8daefe11f5195230bc23c269422ce4209c3f429"
+    },
+    "PF_build_PE_sha256": "48572e69d6bf1bd4b8257988b88a270c86c19be81c49b5a1e24e4dcfc785df52",
+    "prototype_DLL_sha256": "520258d5bccf5c921d29152004c19e25a19003c8bfe6eb986be4b43b784ad097",
+    "previous_reports_preserved": {
+      "benchmarks/double_geometry_gpu_20261016.json": "948b8797191d7c351e2710bec4578c749ea8893f6656f3f0e8cbe96fdbeabc7d",
+      "benchmarks/double_geometry_completion_check_20261016.json": "73c2f397ef645200090ae51346a9b9000d400767cc092d17a8ffe564553354e7",
+      "benchmarks/double_predicates_rejected_20261016.json": "309c46bed95ebc240657d54f591ea1b345575959ba2804c70ba8a5ca96a02f89",
+      "benchmarks/double_predicates_rejected_completion_check_20261016.json": "254bbf04216c7d24d602b42f530887b9fa93abb8e9f4760900e551e2ac43928b",
+      "benchmarks/diffraction_loss_rejected_20261016.json": "68680726625e1ddc840e6dabc4afb1cb02f90ac2547f21045687960b743faa8f",
+      "benchmarks/diffraction_loss_rejected_completion_check_20261016.json": "3dea35c50471c13fb0b18879fd9244d0e8447a83af8615d34f52ec16a577c4ec",
+      "benchmarks/composite_geometry_gpu_20261016.json": "d62537d0cf6fadcc546d7f4de78ac466829ffdde1b38a8b068cc36daab318747",
+      "benchmarks/composite_geometry_completion_check_20261016.json": "c1d2a40ed0144701fa8844dea1abf0116b308bd48749f56aa1fd2e495cf30203",
+      "benchmarks/pf_certified_division_rejected_20261016.json": "a9bef86816e1e420f9d9ecf8074bbf9c7a27d4510030798fd3d03accb823bfba",
+      "benchmarks/pf_certified_division_completion_check_20261016.json": "79bf4bff65429c904aeac6defff8f070d539d7c4179db9bc6a466340e86dfeeb",
+      "benchmarks/rbpf_fgo_gpu_feasibility_20261016.json": "feb4eeb242ce40f06975e4f1bb03c6b6610915aafb1a1d9737f4a1ccf12517de",
+      "benchmarks/rbpf_fgo_gpu_feasibility_completion_check_20261016.json": "17653b9558bcb84d144342ff40ee34a8cef3ea46d2880afd28613e40a3c60598",
+      "benchmarks/rbpf_likelihood_gpu_prototype_20261016.json": "6a6591cff2c515a31e02691032b6b20709064d56203264b5934010e7c8c48e07",
+      "benchmarks/rbpf_likelihood_gpu_prototype_completion_check_20261016.json": "305d24817650e54cd9185a235fe97a0f1bc6a7c2c4185850b207cff0a1fbae49",
+      "benchmarks/rbpf_move_batch_integration_20261016.json": "72f8c88908a0ea73757ffe54e7b7c0539ea7145442181f16292fe42a6eee4648",
+      "benchmarks/rbpf_move_batch_integration_completion_check_20261016.json": "80580c866e6e03f285f8476e74cfe9089bc8431ad3c86b82a74bd0bb6b4b3e68",
+      "benchmarks/rbpf_move_reuse_20261016.json": "8578f86a8c072194c5281bc48d94981ecc40272051ac9e228ac987c9f7c4c54f",
+      "benchmarks/rbpf_move_reuse_completion_check_20261016.json": "478e434ec64a61b5783367bc00fffe98efb3105b2db542034975fd6cb6b2c618",
+      "benchmarks/rbpf_epoch_memo_20261016.json": "e1b9079bee4fdcbff3c64cf2e9fc8b48544f61191dd70d2c19111ff2e6bb1915",
+      "benchmarks/rbpf_epoch_memo_completion_check_20261016.json": "103b960dd652e505d34f52dd02bec8e002cb8dd3d2d40591cc92669ee30cc26a",
+      "benchmarks/rbpf_proposal_reuse_20261016.json": "0be7ca23fdb752405e30307dfb43e30059b70e5646aef3851f7d32098b1c78a7",
+      "benchmarks/rbpf_proposal_reuse_completion_check_20261016.json": "a212f0813ce5f54e0129fb714e72eb03974a8346d01bf3c90513cd38c1bdf89e",
+      "benchmarks/rbpf_warp_likelihood_20261016.json": "3b502ebaa61172cad83a364878285b2b74110b6e0692e64d33638a038bfbe699",
+      "benchmarks/rbpf_warp_likelihood_completion_check_20261016.json": "c16af302ed55d6c517948410b3d8d6879b4b0a36e62555436b90b86ef46fb137",
+      "benchmarks/rbpf_dd_pack_20261016.json": "3541e177c7b9aab9588e9f5f370002d0b88273ea26617ad5dc49368dbe959f2f",
+      "benchmarks/rbpf_dd_pack_completion_check_20261016.json": "215126a7b5c5c2d3c0ed1830565ed599b0b87a698c5c2396405fed1a0b7565ee",
+      "benchmarks/rbpf_native_canonical_20261016.json": "80782b6be0ae8ac4360ff680666eab3338a412cfe699c139412d6b79a571e818",
+      "benchmarks/rbpf_native_canonical_completion_check_20261016.json": "a729d1b3c809a2f8b145cba4761c39e9fa663d399daf01494ac335c7ce89a51b",
+      "benchmarks/rbpf_parent_score_20261016.json": "827f9f71733661870fcd4092059153d785ce10007af9950d3efbd4a6163718d9",
+      "benchmarks/rbpf_parent_score_completion_check_20261016.json": "976d3f6f39a2ec9f4b20ae143d55a4361499c0136cb2499047d71212b9676a36",
+      "benchmarks/rbpf_component_mass_20261016.json": "21ce17d5b7912ea9ac67e5deaa80f951d989fe602bc348503c66804df7ea4a5b",
+      "benchmarks/rbpf_component_mass_completion_check_20261016.json": "7638a89c0021b4022ed80e065ddc8bf1382d15c1eb8897b00afab6f0e126ac2f",
+      "benchmarks/rbpf_feedback_mass_20261016.json": "860f6ed1c3685c4e37fe0164eb502518de017aeb8d6e3506b2ee41559404281f",
+      "benchmarks/rbpf_feedback_mass_completion_check_20261016.json": "a683d0410915d2959ced3223aaf9678832f4bd25817394d630ade3c2a8cccb08",
+      "benchmarks/rbpf_shrink_20261016.json": "e9ab9e68198ad1a7fa6391bbce9016e0e2963fce8c53f9bd249b190645854466",
+      "benchmarks/rbpf_shrink_completion_check_20261016.json": "aa1faf02b3f231d131f876f6ae5bed9e88eebeb0ec95358dc9a38596a2599424",
+      "benchmarks/rbpf_phase_profile_20261016.json": "c874f3cf0c21ab1ccc7600e5ca20854de9eb081b309695468f4c3b7f83809a05",
+      "benchmarks/rbpf_phase_profile_completion_check_20261016.json": "4f50c9b45476944a5947604d0fe734f5dd40d93c6fab1c54dd78e2956986d1a5",
+      "benchmarks/rbpf_score_index_memo_20261016.json": "1ef7247da4743550f13d0a3cddd40878106b61a978b74e15fac4923017534fa6",
+      "benchmarks/rbpf_score_index_memo_completion_check_20261016.json": "4c1446ceb4ac79f6cd8d4efde7417c03138dd74a2a765f40971f47279000c92d",
+      "benchmarks/rbpf_ordered_keys_20261016.json": "7383d0185865ad422bbd6476b285d7829036d3f5fa61acbeab42f21443b5a1f0",
+      "benchmarks/rbpf_ordered_keys_completion_check_20261016.json": "ee0bbb979af88aaaf3c1435fe6f93b20b932477ff8e9439ebb71d71a169c7494",
+      "benchmarks/rbpf_native_staging_20261016.json": "87e816c273deaca1fd23e26dc52c69e2cbeda554aaf34dc5da1e3d41b4435b7e",
+      "benchmarks/rbpf_native_staging_completion_check_20261016.json": "ec28a3c6acd32f3f716ecde1e75c693ba96d26843c5c31442e453fa066edbad0",
+      "benchmarks/rbpf_irls_identity_20261016.json": "a3f322e47a5f7b674c8a569e9f2848f3bed13642eeb032e0da5a0ff31da029b8",
+      "benchmarks/rbpf_irls_identity_completion_check_20261016.json": "3b0eac874ecee69fa432ae5e3b60c55dd388b091541899ce1b5d88046cfd20a9"
+    },
+    "archives_verified": {
+      "composite_geometry_candidate": {
+        "files": 305,
+        "manifest_sha256": "c5a0d912f148921b170b05f8eb1f4c0a0fa774ed62e4e278f2b672bf8b441b6e"
+      },
+      "pf_certified_division_rejected_20261016": {
+        "files": 94,
+        "manifest_sha256": "bdae75c0d2e7587e98dc2f6dfc86ca6d533d4604f25aee93c2398a68a0d24b05"
+      },
+      "rbpf_fgo_gpu_feasibility_20261016": {
+        "files": 149,
+        "manifest_sha256": "6854719596359dd1129e3c19bc74fef0f30830132d0f728e2b4667ae32c0f1ab"
+      },
+      "rbpf_likelihood_gpu_prototype_20261016": {
+        "files": 161,
+        "manifest_sha256": "e338e38ff4f52e9c11aaa0d4667ba60842e3902e0223ea1b25ded5805c4eb03c"
+      },
+      "rbpf_move_batch_integration_20261016": {
+        "files": 74,
+        "manifest_sha256": "ac31a335946f8b78909c41c837fcf35a5dfcc7a599ab79e34d4c9f9d925a28e8"
+      },
+      "rbpf_move_reuse_measured_source_20261016": {
+        "files": 1,
+        "manifest_sha256": "6f2dc57a14927150cb1ebb7c3b23c7b466197d17ef1aeea8449becabaf622145"
+      },
+      "rbpf_move_reuse_20261016": {
+        "files": 121,
+        "manifest_sha256": "c7b69513ee6e031774eb230d83a5d7a61fb3bfadd8163e5e97095667b5d93218"
+      },
+      "rbpf_epoch_memo_20261016": {
+        "files": 140,
+        "manifest_sha256": "35ec46c9f34924625376273054b9cb10acc49def9b0a7ccbe640b3ac0a0c435e"
+      },
+      "rbpf_proposal_reuse_20261016": {
+        "files": 84,
+        "manifest_sha256": "38ef475c10b65a1c208f6153cdedeb63a0d9ff35d7fcfc6c185ec962f305049b"
+      },
+      "rbpf_warp_likelihood_20261016": {
+        "files": 96,
+        "manifest_sha256": "4ed5c84af854b3e7414e912961a768551278d7d9086ba68ff9bf3ad615def45a"
+      },
+      "rbpf_warp_likelihood_text_correction_20261016": {
+        "files": 4,
+        "manifest_sha256": "d75888f7db8571ce798c6504b6c79a739dcbd8937710851027296c166d930075"
+      },
+      "rbpf_dd_pack_20261016": {
+        "files": 139,
+        "manifest_sha256": "8c6e10d94457fdaa6c73d825a86a679a0abc2e1dcbf87d77630eafd7fb0de0e5"
+      },
+      "rbpf_native_canonical_20261016": {
+        "files": 101,
+        "manifest_sha256": "d4cd45b5ffc110c931804314c60786aeb77391f9eec08f77cc0f273ea64ba91d"
+      },
+      "rbpf_parent_score_20261016": {
+        "files": 161,
+        "manifest_sha256": "25696234a36f1253c294ba92d0fceff2c799c7e9aee1ff45aae95feb7071e728"
+      },
+      "rbpf_component_mass_20261016": {
+        "files": 143,
+        "manifest_sha256": "3f1ec07899d1e991db9b120fe076d55b47b7648aaee487edaeb88edb7864daf9"
+      },
+      "rbpf_feedback_mass_20261016": {
+        "files": 130,
+        "manifest_sha256": "f44dad77d66367d2b70821fb033fc64e5a869a4647fbc225c033ca529c5c0da7"
+      },
+      "rbpf_shrink_20261016": {
+        "files": 157,
+        "manifest_sha256": "b812f3c78df09f769b68cd62318b0e437ed8cdb015af5093b2d5898de919dad3"
+      },
+      "rbpf_phase_profile_20261016": {
+        "files": 98,
+        "manifest_sha256": "5551e3d8ca990e9d236a8b90bbf93ef02cc63bb4a4e6ba5e9e6dc28d558196c9"
+      },
+      "rbpf_score_index_memo_20261016": {
+        "files": 187,
+        "manifest_sha256": "237a869eecf3ed0262a79194a8cfeea850657781fa8a2c36c1119533eb8d0182"
+      },
+      "rbpf_ordered_keys_20261016": {
+        "files": 154,
+        "manifest_sha256": "ce08a9383b4612471accd02e05039bea6eabf1b4dd3f940b860550953e3aa250"
+      },
+      "rbpf_native_staging_20261016": {
+        "files": 174,
+        "manifest_sha256": "3f3f88e3030b673c7f61cc9e1b64599eab0e254b351365ac6710b248475731be"
+      },
+      "rbpf_irls_identity_20261016": {
+        "files": 198,
+        "manifest_sha256": "f70e798c05dd997e0b9348059515d5a03dccec43d0b84877b5578dfeb5f43c51"
+      }
+    },
+    "product_diff_paths_vs_main": [
+      "python/gnss_gpu/double_reflection.py",
+      "python/gnss_gpu/pf_device_runtime.py",
+      "python/gnss_gpu/raytrace.py",
+      "python/gnss_gpu/realtime_runtime.py",
+      "python/gnss_gpu/reflection_diffraction.py",
+      "python/gnss_gpu/signal_sim.py",
+      "python/gnss_gpu/urban_signal_sim.py",
+      "src/raytrace/bvh.cu"
+    ],
+    "production_changes": [],
+    "default_changed": false
+  },
+  "raw_evidence_sha256": {
+    "dist/audit_rbpf_irls_replay_benchmark_20261016.py": "0cf4f86362283928a467de7c9131c4ab76ae3778ede9bb0972c87a4ec50dfee0",
+    "dist/audit_rbpf_irls_replay_benchmark_v2_20261016.py": "87c2d8f7ad8c9961d5455a27649d994c9937049465fee4236cfdc8033e7c273b",
+    "dist/audit_rbpf_irls_replay_capture_20261016.py": "193b7f8bb465ed1092f6199c890e2fb88fa4057b15ec4ae33c276a002fd42000",
+    "dist/audit_rbpf_irls_replay_preservation_20261016.py": "a053e7e050de9e1f0ba5da607f06a5444860eed8d2f5f6fe9a7617a1241db120",
+    "dist/bootstrap_rbpf_irls_replay_check_20261016.py": "a01eb8999c0b72df90c853a336e5e79198556569a05e4ad9aef4a48c5c38cddf",
+    "dist/build_rbpf_irls_replay_20261016.py": "11eddbea893531cee4c9e7a63df75091927473e7d240a660366b0b907866ff20",
+    "dist/check_rbpf_irls_replay_all_20261016.py": "642e0119162826494dd4374904eaf9e1623df7f2fcf3a5210101f3cf09cfad08",
+    "dist/prepare_rbpf_irls_replay_20261016.py": "1525d9110873908219c185d098d95915571a7c5bb58c70ebffda6bff81972cbf",
+    "dist/rbpf_irls_replay_benchmark_audit_20261016.json": "727b907c3b47dd6620cdd816005faaafb16b4c7e5dd2affe8e387667ad6d0fd4",
+    "dist/rbpf_irls_replay_build_20261016.json": "7853b9366653038c05949693494d05f1a7b3936069490840677e9a4b9c3edfd6",
+    "dist/rbpf_irls_replay_build_20261016.log": "83bcb3e49a7d8bd2dd5389ab67955cc26b5d11275aa76613730669efd798350e",
+    "dist/rbpf_irls_replay_build_20261016.plan.json": "4e4a70d7e41102e1b425df73887b39496b9d8ea8eb42848ee2da62ddd45e5f36",
+    "dist/rbpf_irls_replay_capture_audit_20261016.json": "8f54e6a519988bfe745b5f2bc497455732935852af792b9d06cdf9321c2de69c",
+    "dist/rbpf_irls_replay_cuda_checks_20261016.json": "46cbba84329d8a5415a4e8d9287485fb25e23b9114a05895e23e1ec2d07f518b",
+    "dist/rbpf_irls_replay_initial_audit_diagnosis_20261016.json": "16a6e64899580f85b28d734b3f7659b03c1f71793abf0b36655f215fe1c29458",
+    "dist/rbpf_irls_replay_measurements_20261016.calls.jsonl.gz": "8297ed5050045a540f04751d162307c5ae3192449b3ce07a4bb3f1ababd38403",
+    "dist/rbpf_irls_replay_measurements_20261016.job.json": "f6f5ca0c7ce1fbec33f870010802ed6e07d43ec86fcc1bcf88b667fd6f5d8337",
+    "dist/rbpf_irls_replay_measurements_20261016.json": "c6caaec1357dc4924490fb3e1f9778c2ad41f8dcc6bfab8ccc66d83850aded61",
+    "dist/rbpf_irls_replay_measurements_20261016.log": "5004a99b0351002be08236cca8e5272537371645616635e11ca773c4e5097c66",
+    "dist/rbpf_irls_replay_measurements_20261016.plan.json": "fcb04291156ea29a8fd9039116f57f973b020713ab5cd813f25b6ca352c7a8d1",
+    "dist/rbpf_irls_replay_measurements_20261016.run.json": "a4cdeac5a04806fcb3dde68dec2b3392271e8adc845eb72df97199bd75f16e8d",
+    "dist/rbpf_irls_replay_memcheck_20261016.job.json": "c57904cc70f3fabdbfb4bd09965f519f0d6720dfb38cbc7a913196d5d0f5a891",
+    "dist/rbpf_irls_replay_memcheck_20261016.json": "f2697f6c8a389352124d3e4d1fe02421c788321ffeb98cc8247b77903bc879c4",
+    "dist/rbpf_irls_replay_memcheck_20261016.log": "3ef41833580c07952672569330729d3a908130c68e7a514d721c5b0a3ddbd7d6",
+    "dist/rbpf_irls_replay_memcheck_20261016.pytest.log": "4897e371df9bfc518241c46d375b35b086784b0d57a3fb2f95e0ff812b0c428e",
+    "dist/rbpf_irls_replay_preservation_20261016.json": "b23466587137807e8a130c5b30b32889933997fab84f71bfb0286ffd54e5160f",
+    "dist/rbpf_irls_replay_racecheck_20261016.job.json": "dcd9ad15db81b0ccae6d19eb30790739a06a9c67549ce5d995174d76cc527b52",
+    "dist/rbpf_irls_replay_racecheck_20261016.json": "a724cf2e6c975105037d479fdebb20b8a70f1127f46ccb3876445f0b8c387400",
+    "dist/rbpf_irls_replay_racecheck_20261016.log": "c69d09b31a66173faf98f267db57c7eb988035ce364fa0f0f184ffc933c541a7",
+    "dist/rbpf_irls_replay_racecheck_20261016.pytest.log": "8cb8ca937e5ffaedf621555444a71e29f9ba9867607ae54907c05cb5446e87be",
+    "dist/rbpf_irls_replay_source_proof_20261016.json": "28e2dd4261fdc6b3376af9707f67d0191f8e7d50e5a168206632660fa6316551",
+    "dist/rbpf_irls_replay_synccheck_20261016.job.json": "0f6074df5e059c6d7797a5ef8a49a0f67893785531f998f353e5375db940a8e4",
+    "dist/rbpf_irls_replay_synccheck_20261016.json": "c95ddbed43e91c4097136fdcd9bea32b8265071d6cc0fefa840589870d18d107",
+    "dist/rbpf_irls_replay_synccheck_20261016.log": "adba10db853bd67fe9009b776eefe7b61210d2cbe3eee029ba6fa188978b5832",
+    "dist/rbpf_irls_replay_synccheck_20261016.pytest.log": "73742e0508a34c6d4c8e119c944750c5592537e6de464f23dbe7f9630133bd74",
+    "dist/rbpf_irls_replay_tests_20261016.job.json": "44d9109211ed4a71094e1d54f09d8b0f1a7f08ed98e1574426c0d2813808c1ed",
+    "dist/rbpf_irls_replay_tests_20261016.json": "54fb883ed02f593648cd9e8d3c43b27aa5a689da50666c3a49e9afa325c9196e",
+    "dist/rbpf_irls_replay_tests_20261016.log": "906d6b78ca8242eb6e6ec516d29c916a83650475f6440b170abda249597856bd",
+    "dist/rbpf_irls_replay_tests_20261016.plan.json": "105ba8e9341372c205739af06d46898f0773adc096d01660af812d7b6aa981e2",
+    "dist/repair_rbpf_irls_replay_audit_20261016.py": "75098518d6c0168abae1856e0d7b6e5f5d4205440258f3c221c9bde7c301a9fe",
+    "dist/run_rbpf_irls_replay_benchmark_20261016.py": "f5bd500ed96b5fbb8d918147cccbe160603952ad7e976b06bec40080cf2d1799",
+    "dist/run_rbpf_irls_replay_capture_20261016.py": "7fdb16e9b02501fc57280eea240e3df12780a37467c5b59910b28efe495a711b",
+    "dist/run_rbpf_irls_replay_tests_20261016.py": "46025debb13e0e96debff74f1ca615db9c7ed01dbb0ba6ef21c584c9014174aa",
+    "dist/setup_rbpf_irls_replay_20261016.py": "573c051127fd0022f5e81e6c132db9ff4f2b6913d7c17ec68031678a1ab73797"
+  },
+  "measured_plan": {
+    "timestamp_utc": "2026-10-16T10:58:06.312084+00:00",
+    "source_input_binary_sha256": {
+      "benchmarks/bench_rbpf_irls_replay.py": "55b8f097ddca3894c208d86f13bf569aad7da42e6fbea53c017ce0625d3680d6",
+      "benchmarks/rbpf_irls_replay.py": "fc4f178520685f9ed3aee74b611c9021331b8d93f24da2634e89cd8594e11d02",
+      "benchmarks/rbpf_irls_identity.py": "6a5518b8fe4ff3b785c0e598f3c41d9641e9630f71d3c09726b3ccc46879d8cc",
+      "benchmarks/rbpf_likelihood_batch.py": "7f35ae5b466145f07aa28a3de5b18f95121606b3a27a7bc85b2f9810c88bd663",
+      "benchmarks/rbpf_likelihood_cases.py": "05f91d2540a047347fa6f30b0380cb146daff816ec3ea10d6217b29d9ebceade",
+      "benchmarks/bench_rbpf_move_field.py": "b21c348b72f37c61007a8c0acb7bdcf4114fc2911e9199cbdc279c8336086209",
+      "benchmarks/rbpf_native_canonical.py": "f177e3247617cca70e4aa0c4369f1856dba979703f478d62c1f05cd814c63bd2",
+      "benchmarks/rbpf_parent_score.py": "e888a4244519242e7dd88cf047843a0fcb6cb11f07c4f5aaea9948b005b8ae9d",
+      "experiments/rbpf_fgo/rbpf_fgo.py": "c977508d6a20413f7669efb39dfb1d87d74b254ce89cf1f57ae8681d7d6b8bb6",
+      "benchmarks/bench_pf_private_weights_compare.py": "d7a8db4390ee0b937093d84fe0674f35df5df66e565db38017e3f95a890293e8",
+      "benchmarks/probes/rbpf_irls_replay/CMakeLists.txt": "ab99dd02b9228f44099cbe41f13299b3f98331c9e615b05070ecc0a549bf3522",
+      "benchmarks/probes/rbpf_irls_replay/probe.cu": "4425ee0c02fe14a466521b61d84b6ef7949dd0ea9d618b4abbf0df17cca5d428",
+      "benchmarks/probes/rbpf_irls_replay/README.md": "2e9939e6783ec5e03533169cba570102ba0927f405897bff21df02c28b0601c1",
+      "dist/rbpf_likelihood_pageable_build_20261016/Release/rbpf_likelihood_probe.dll": "520258d5bccf5c921d29152004c19e25a19003c8bfe6eb986be4b43b784ad097",
+      "dist/rbpf_irls_replay_build_20261016/Release/rbpf_likelihood_probe.dll": "c1c55cd1a5d59aac4d8691ecab6a895805ee49c7810a827851db5310d0abfc59",
+      "dist/rbpf_canonical_build_20261016/Release/_rbpf_canonical_probe.cp312-win_amd64.pyd": "0c8a5aa12015a3051f02ff0de88549d9c6df5874f2e0b9888732f9354a7d920f",
+      "dist/rbpf_parent_score_build_20261016/Release/_rbpf_parent_score_probe.cp312-win_amd64.pyd": "61cf9c1504430a020bb674781f0af9b79f63cef01fa3e83be3c7dbd2613f8a63",
+      "dist/rbpf_irls_replay_capture_20261016/r3_seed0_capture_cpu_c0.corpus.jsonl.gz": "7172b4db3f50435f24c19c92056d22baf436442cf3315a02ee18a46271128e66",
+      "dist/rbpf_irls_replay_capture_20261016/r3_seed0_capture_cpu_c1.corpus.jsonl.gz": "75d747605bde5bc389d14ce07ed34e3163d5c0f2b0d42f2348e54c7e2183ba18"
+    },
+    "batches_per_corpus": [
+      197,
+      197
+    ],
+    "modes": [
+      "old_cpu",
+      "off_cpu",
+      "on_cpu",
+      "old_gpu",
+      "off_gpu",
+      "on_gpu",
+      "old_cpu_aa"
+    ],
+    "rounds": 5,
+    "groups": 3,
+    "selection": "All captured batches in order for both original cluster settings; no hit/speed selection.",
+    "timing": "perf_counter_ns around complete score only; includes dedup/packing/native compute/transfers/readback/fallback and on/off completed-counter query/allocation. Input copies/restoration, diagnostics/warmup, equality/hash/counter serialization and setup/control are outside. Synchronous completed results, normal priority, own last allowed CPU, BLAS1, nonexclusive host/GPU; serial calls, no overlap.",
+    "gate": "Per config: median over 5 round medians of 3 paired corpus reductions >=10%, >=4/5 positive, absolute CPU A/A <5%. CPU on must beat same-DLL off and prior. GPU on must beat same-DLL off, priorGPU and onCPU. All exact checks mandatory. Component only; no PF/graph/default adoption.",
+    "counter_rule": "Full per-hypothesis skipped vector saved for EVERY warm and timed on/off call; off must be zero. Active-on counts must equal warm snapshot."
+  },
+  "implementation_sha256": {
+    "benchmarks/rbpf_irls_replay.py": "fc4f178520685f9ed3aee74b611c9021331b8d93f24da2634e89cd8594e11d02",
+    "benchmarks/bench_rbpf_irls_replay.py": "55b8f097ddca3894c208d86f13bf569aad7da42e6fbea53c017ce0625d3680d6",
+    "benchmarks/bench_rbpf_irls_replay_capture.py": "4821232402c3abbe76bca1029912abe52b06fdb603d7051221bf84b56eb69cb0",
+    "tests/test_rbpf_irls_replay.py": "651a64ca7ee9cb9fbcc129fc90b24c5389a548fa9eb5a8b451b09738d0d8ba68",
+    "benchmarks/probes/rbpf_irls_replay/probe.cu": "4425ee0c02fe14a466521b61d84b6ef7949dd0ea9d618b4abbf0df17cca5d428",
+    "benchmarks/probes/rbpf_irls_replay/CMakeLists.txt": "ab99dd02b9228f44099cbe41f13299b3f98331c9e615b05070ecc0a549bf3522",
+    "benchmarks/probes/rbpf_irls_replay/README.md": "2e9939e6783ec5e03533169cba570102ba0927f405897bff21df02c28b0601c1"
+  },
+  "no_completed_timing_retry": true,
+  "all_same_backend_output_bits_equal": true,
+  "all_timed_counter_vectors_verified": true,
+  "full_route_multiseed_accuracy_gate": false,
+  "whole_PF_speed_gate": false,
+  "whole_graph_speed_gate": false,
+  "memory": {
+    "capacity": 512,
+    "host_and_device_staging_bytes_each": 1145400,
+    "extra_staging_bytes_each_vs_D226": 2048,
+    "additional_device_allocations": 0,
+    "benchmark_contexts": "1prior+2controlled",
+    "latest_python_counter_bytes_per_controlled_context": 2048,
+    "host_workspace_ABI_padding_increase_calculated_bytes": 8,
+    "heap_peak_measured": false,
+    "cross_H_or_epoch_cache": false
+  },
+  "limits": [
+    "All394batches of one route/seed prefix in two original cluster configs. Component score replay only;no graph object replay,wholePF/wholegraph speed or fullroute/multiseed accuracy claim.",
+    "Samebackend bit equality;CPU/GPU rounding may differ. Existing tagged codec preserves ndarray bytes and finite scalar bits;scalar NaN payload canonicalization inherited.",
+    "All timed vectors saved and warm-exact. Counts measure skipped work,not a latency ratio. Paired corpus aggregate reductions differ from a ratio of p50s;all rounds and A/A failures retained without retiming.",
+    "Capture copies/serializes inside diagnostic step timer;capture call_seconds are not performance data. Replay includes full score wrapper/counter overhead but input restoration and validation stay outside.",
+    "D242 original source and evidence unchanged;new distinct DLL/corpus/control experiment. Product defaults remain unchanged even if a component screen passes. No rejected optimization combined."
+  ],
+  "next": "No component meets the fixed gate. Lower priority of this shortcut for speed;profile a larger active end-to-end bottleneck instead. Keep all negative evidence and do not retime this corpus to force acceptance."
+}

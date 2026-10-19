@@ -2781,3 +2781,7 @@ GPUの元のsigma reciprocal2/log4をblockで共有し、finite logitsのmax成�
 既存61 SASS/resource全同一、新GMM48register/stack/local0、shared追加48byte・barrier既存1回。
 H2D/allocation/launch/API/既定設定、前回DD gates/BVH/signalを維持。
 raw/device/patch/completionを `benchmarks/pf_gmm_*_20261013.json`、`benchmarks/RESULTS.md` に記録。
+
+## Exact-output performance campaign continuation through D298 (2026-10-19)
+
+Validated BVH/geometry/runtime changes and the complete negative experiments are collected in [the campaign decisions](performance_campaign_decisions_2026_10_19.md). The separate estimator research entries on this branch remain unchanged. D296-D298 reflection group candidates failed their combined acceptance gates and are not adopted in production.

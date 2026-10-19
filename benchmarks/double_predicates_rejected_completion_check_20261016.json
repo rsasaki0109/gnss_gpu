@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-15T16:22:07.820481+00:00",
+  "verified": true,
+  "adopted": false,
+  "restored_D220": true,
+  "report": {
+    "path": "benchmarks/double_predicates_rejected_20261016.json",
+    "sha256": "309c46bed95ebc240657d54f591ea1b345575959ba2804c70ba8a5ca96a02f89"
+  },
+  "source_record_sha256": "59f370da922bb7e2863ed8699691e80ae21c7bcda2e5db91c0e890063a4f3c7f",
+  "all18_source_bytes_restored": true,
+  "native_PE_unchanged": true,
+  "candidate_timed_pairs": 2105,
+  "all_timed_outputs_bit_identical": true,
+  "candidate_tests_passed": 583,
+  "restored_tests_passed": 530,
+  "existing_skips_per_run": 2,
+  "prior_reports_preserved": {
+    "benchmarks/double_geometry_gpu_20261016.json": "948b8797191d7c351e2710bec4578c749ea8893f6656f3f0e8cbe96fdbeabc7d",
+    "benchmarks/double_geometry_completion_check_20261016.json": "73c2f397ef645200090ae51346a9b9000d400767cc092d17a8ffe564553354e7"
+  },
+  "candidate_manifest_sha256": "2d361aa4cc926ac4f20519f6b3f4cfa7500869740740d75bc72291cf9b07f518",
+  "rejected_candidate_patch_unapplied": true,
+  "forward_patch_check_passed": true,
+  "no_new_cuda_sanitizer_runs": true,
+  "no_new_real_data_positioning_accuracy_claim": true,
+  "public_text_files_checked": 2879,
+  "public_device_product_names_absent": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  }
+}

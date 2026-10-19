@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-15T09:03:52.278913+00:00",
+  "verified": true,
+  "adopted": true,
+  "report": {
+    "path": "benchmarks/bvh_los_frontier_gpu_20261015.json",
+    "sha256": "cc3f2b0f5d43e9027e9c80e1dd99065093fb7b5fb0d741d52b40b8f3b8889160"
+  },
+  "source_and_build_PE_match": true,
+  "installed_PE_matches_candidate": false,
+  "installation": {
+    "timestamp_utc": "2026-10-15T09:02:08.649785+00:00",
+    "completed": false,
+    "before_sha256": "0f2e099d9e95c7453feaea2fd664a4b5105ed1ec33b73eb3cb4ab37ad0b7b555",
+    "installed_sha256": "0f2e099d9e95c7453feaea2fd664a4b5105ed1ec33b73eb3cb4ab37ad0b7b555",
+    "candidate_sha256": "6c2b36d9f613df542ccf7755c381dc838310023275c2c7507b80c5216f106908",
+    "error": {
+      "winerror": 32,
+      "description": "In-use installed extension preserved; exact build PE tested by explicit preload."
+    }
+  },
+  "candidate_explicitly_preloaded_for_all_tests": true,
+  "preserved_PF_signal": {
+    "pf_fused_uniform_gpu_20261015.json": {
+      "source_hashes_exact": true,
+      "build_and_installed_PE_exact": true,
+      "extension_sha256": "48572e69d6bf1bd4b8257988b88a270c86c19be81c49b5a1e24e4dcfc785df52"
+    },
+    "signal_wide_static_gpu_20261014.json": {
+      "source_hashes_exact": true,
+      "build_and_installed_PE_exact": true,
+      "extension_sha256": "3ae8d0dc0c6136167fe4e1adde91972ce75fe0f00f3714021bd5bed851bfd5c6"
+    }
+  },
+  "main_Python_type_comments_compiled_identical": true,
+  "existing_D204_D205_D206_D207_D208_reports_unchanged": true,
+  "D209_raw_measurements_unchanged": true,
+  "validation_cases": 529,
+  "timed_pairs": 2510,
+  "all_compared_outputs_bit_identical": true,
+  "regression_tests_passed": 673,
+  "new_independent_stateless_oracle_tests": 48,
+  "sanitizers": {
+    "memcheck": {
+      "tests_passed": 48,
+      "exit_code": 0,
+      "summary": [
+        "========= LEAK SUMMARY: 0 bytes leaked in 0 allocations",
+        "========= ERROR SUMMARY: 0 errors"
+      ]
+    },
+    "racecheck": {
+      "tests_passed": 48,
+      "exit_code": 0,
+      "summary": [
+        "========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)"
+      ]
+    },
+    "synccheck": {
+      "tests_passed": 48,
+      "exit_code": 0,
+      "summary": [
+        "========= ERROR SUMMARY: 0 errors"
+      ]
+    }
+  },
+  "existing_GPU_instruction_bodies_and_resources_unchanged": 10,
+  "new_GPU_functions": 2,
+  "CPU_frontier_metadata_bytes": 900,
+  "additional_persistent_GPU_allocation_bytes": 0,
+  "exact_CRLF_patch_reconstruction": true,
+  "reverse_patch_git_check_passed": true,
+  "public_text_files_checked": 2824,
+  "public_device_product_names_absent": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  },
+  "real_urban_IQ_samples_per_epoch": [
+    2600,
+    26000,
+    260000
+  ],
+  "all_returned_urban_fields_IQ_bit_identical": true,
+  "long_real_data_position_error_curve_newly_evaluated": false,
+  "whole_PF_GNSS_IMU_speedup_newly_measured": false
+}

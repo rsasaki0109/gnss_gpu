@@ -1,0 +1,209 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -2062,6 +2062,152 @@
+     log_weights[tid] += log_w;
+ }
+ 
++// Experimental split: identical ordered geometry/means, coalesced FP64 planes.
++__global__ void pfd_doppler_kf_geometry_planes_kernel(
++    const double* px, const double* py, const double* pz,
++    const double* doppler_data, double* geometry, int N, int n_sat,
++    double wavelength_m) {
++    extern __shared__ double s_data[];
++    double* s_sat = s_data;
++    double* s_sat_vel = s_data + n_sat * 3;
++    double* s_doppler = s_data + n_sat * 6;
++    double* s_weights = s_data + n_sat * 7;
++    for (int i = threadIdx.x; i < n_sat * 8; i += blockDim.x) s_data[i] = doppler_data[i];
++    __syncthreads();
++    int tid = blockIdx.x * blockDim.x + threadIdx.x;
++    if (tid >= N) return;
++    double x = px[tid], y = py[tid], z = pz[tid];
++    double h_mean[3] = {0.0, 0.0, 0.0};
++    double y_mean = 0.0;
++    double weight_sum = 0.0;
++    unsigned int valid_geometry = 0;
++    for (int s = 0; s < n_sat; s++) {
++        double w = fmax(s_weights[s], 0.0);
++        if (w <= 0.0) continue;
++        double dx = s_sat[s * 3 + 0] - x;
++        double dy = s_sat[s * 3 + 1] - y;
++        double dz = s_sat[s * 3 + 2] - z;
++        double r = sqrt(dx * dx + dy * dy + dz * dz);
++        if (r < 1.0) continue;
++        double lx = dx / r;
++        double ly = dy / r;
++        double lz = dz / r;
++        double h0 = -lx;
++        double h1 = -ly;
++        double h2 = -lz;
++        double sv_radial =
++            s_sat_vel[s * 3 + 0] * lx +
++            s_sat_vel[s * 3 + 1] * ly +
++            s_sat_vel[s * 3 + 2] * lz;
++        double obs = -s_doppler[s] * wavelength_m;
++        double y_obs = obs - sv_radial;
++        geometry[(size_t)(s * 4 + 0) * N + tid] = lx;
++        geometry[(size_t)(s * 4 + 1) * N + tid] = ly;
++        geometry[(size_t)(s * 4 + 2) * N + tid] = lz;
++        geometry[(size_t)(s * 4 + 3) * N + tid] = y_obs;
++        valid_geometry |= 1u << s;
++        h_mean[0] += w * h0;
++        h_mean[1] += w * h1;
++        h_mean[2] += w * h2;
++        y_mean += w * y_obs;
++        weight_sum += w;
++    }
++    geometry[(size_t)(n_sat * 4 + 4) * N + tid] = weight_sum <= 0.0 ? 0.0 : (double)valid_geometry;
++    if (weight_sum <= 0.0) return;
++    h_mean[0] /= weight_sum;
++    h_mean[1] /= weight_sum;
++    h_mean[2] /= weight_sum;
++    y_mean /= weight_sum;
++
++    geometry[(size_t)(n_sat * 4 + 0) * N + tid] = h_mean[0];
++    geometry[(size_t)(n_sat * 4 + 1) * N + tid] = h_mean[1];
++    geometry[(size_t)(n_sat * 4 + 2) * N + tid] = h_mean[2];
++    geometry[(size_t)(n_sat * 4 + 3) * N + tid] = y_mean;
++}
++
++__global__ void pfd_doppler_kf_from_planes_kernel(
++    double* vx, double* vy, double* vz, double* vcov,
++    const double* doppler_data, const double* geometry, double* log_weights,
++    int N, int n_sat, double sigma_mps) {
++    extern __shared__ double s_data[];
++    double* s_weights = s_data;
++    double* s_meas_var = s_data + n_sat;
++    double sigma2 = sigma_mps * sigma_mps;
++    for (int s = threadIdx.x; s < n_sat; s += blockDim.x) {
++        double w = fmax(doppler_data[n_sat * 7 + s], 0.0);
++        s_weights[s] = doppler_data[n_sat * 7 + s];
++        s_meas_var[s] = w > 0.0 ? sigma2 / w : 0.0;
++    }
++    __syncthreads();
++    int tid = blockIdx.x * blockDim.x + threadIdx.x;
++    if (tid >= N) return;
++    unsigned int valid_geometry = (unsigned int)geometry[(size_t)(n_sat * 4 + 4) * N + tid];
++    if (!valid_geometry) return;
++    double h_mean[3] = {
++        geometry[(size_t)(n_sat * 4 + 0) * N + tid],
++        geometry[(size_t)(n_sat * 4 + 1) * N + tid],
++        geometry[(size_t)(n_sat * 4 + 2) * N + tid]};
++    double y_mean = geometry[(size_t)(n_sat * 4 + 3) * N + tid];
++    double mui[3] = {vx[tid], vy[tid], vz[tid]};
++    int cov_off = tid * 9;
++    double P[9];
++    for (int k = 0; k < 9; k++) P[k] = vcov[cov_off + k];
++    double log_w = 0.0;
++    for (int s = 0; s < n_sat; s++) {
++        double obs_weight = fmax(s_weights[s], 0.0);
++        if (obs_weight <= 0.0) continue;
++        double lx, ly, lz, y_obs;
++        if (!(valid_geometry & (1u << s))) continue;
++        lx = geometry[(size_t)(s * 4 + 0) * N + tid];
++        ly = geometry[(size_t)(s * 4 + 1) * N + tid];
++        lz = geometry[(size_t)(s * 4 + 2) * N + tid];
++        y_obs = geometry[(size_t)(s * 4 + 3) * N + tid];
++        double h[3] = {-lx - h_mean[0], -ly - h_mean[1], -lz - h_mean[2]};
++        double y_centered = y_obs - y_mean;
++        double ph0 = P[0] * h[0] + P[1] * h[1] + P[2] * h[2];
++        double ph1 = P[3] * h[0] + P[4] * h[1] + P[5] * h[2];
++        double ph2 = P[6] * h[0] + P[7] * h[1] + P[8] * h[2];
++        double meas_var = s_meas_var[s];
++        double S = h[0] * ph0 + h[1] * ph1 + h[2] * ph2 + meas_var;
++        if (!(S > 1e-18) || !isfinite(S)) {
++            continue;
++        }
++        double pred = h[0] * mui[0] + h[1] * mui[1] + h[2] * mui[2];
++        double innov = y_centered - pred;
++        double K[3] = {ph0 / S, ph1 / S, ph2 / S};
++        mui[0] += K[0] * innov;
++        mui[1] += K[1] * innov;
++        mui[2] += K[2] * innov;
++
++        double hp0 = h[0] * P[0] + h[1] * P[3] + h[2] * P[6];
++        double hp1 = h[0] * P[1] + h[1] * P[4] + h[2] * P[7];
++        double hp2 = h[0] * P[2] + h[1] * P[5] + h[2] * P[8];
++        P[0] -= K[0] * hp0; P[1] -= K[0] * hp1; P[2] -= K[0] * hp2;
++        P[3] -= K[1] * hp0; P[4] -= K[1] * hp1; P[5] -= K[1] * hp2;
++        P[6] -= K[2] * hp0; P[7] -= K[2] * hp1; P[8] -= K[2] * hp2;
++
++        double p01 = 0.5 * (P[1] + P[3]);
++        double p02 = 0.5 * (P[2] + P[6]);
++        double p12 = 0.5 * (P[5] + P[7]);
++        P[1] = P[3] = isfinite(p01) ? p01 : 0.0;
++        P[2] = P[6] = isfinite(p02) ? p02 : 0.0;
++        P[5] = P[7] = isfinite(p12) ? p12 : 0.0;
++        P[0] = (isfinite(P[0]) && P[0] > 1e-12) ? P[0] : 1e-12;
++        P[4] = (isfinite(P[4]) && P[4] > 1e-12) ? P[4] : 1e-12;
++        P[8] = (isfinite(P[8]) && P[8] > 1e-12) ? P[8] : 1e-12;
++
++        log_w += -0.5 * (innov * innov / S + log(S));
++    }
++
++    vx[tid] = mui[0];
++    vy[tid] = mui[1];
++    vz[tid] = mui[2];
++    for (int k = 0; k < 9; k++) {
++        vcov[cov_off + k] = P[k];
++    }
++    log_weights[tid] += log_w;
++}
++
+ template<int CACHE_SATS>
+ __global__ void pfd_doppler_kf_wide_update_kernel(
+     const double* px, const double* py, const double* pz,
+@@ -3153,6 +3299,7 @@
+     // Observation/weight pointers alias the packed satellite allocation.
+     cudaFree(state->d_sat_ecef);
+     cudaFree(state->d_obs_scratch);
++    cudaFree(state->d_kf_planes);
+ 
+     // Free pinned host memory
+     cudaFreeHost(state->h_sat_pinned);
+@@ -3171,6 +3318,8 @@
+     state->d_pcb = nullptr;
+     state->d_log_weights = nullptr;
+     state->d_obs_scratch = nullptr;
++    state->d_kf_planes = nullptr;
++    state->kf_planes_capacity = 0;
+     state->h_obs_scratch = nullptr;
+     state->d_px_tmp = nullptr;
+     state->d_py_tmp = nullptr;
+@@ -4851,7 +5000,24 @@
+     size_t smem = (size_t)n_sat * (n_sat <= MAX_SATS ? 9 : 8) * sizeof(double);
+     // The measurement geometry can now produce distinct particle covariances.
+     state->covariance_uniform = false;
+-    if (n_sat <= 16) {
++    if (N >= 65536 && n_sat <= 16) {
++        size_t required = (size_t)N * (n_sat * 4 + 5);
++        if (required > state->kf_planes_capacity) {
++            CUDA_CHECK(cudaStreamSynchronize(state->stream));
++            CUDA_CHECK(cudaFree(state->d_kf_planes));
++            state->d_kf_planes = nullptr;
++            state->kf_planes_capacity = 0;
++            CUDA_CHECK(cudaMalloc(&state->d_kf_planes, required * sizeof(double)));
++            state->kf_planes_capacity = required;
++        }
++        pfd_doppler_kf_geometry_planes_kernel<<<grid, block, (size_t)n_sat * 8 * sizeof(double), state->stream>>>(
++            state->d_px, state->d_py, state->d_pz, state->d_obs_scratch,
++            state->d_kf_planes, N, n_sat, wavelength_m);
++        CUDA_CHECK_LAST();
++        pfd_doppler_kf_from_planes_kernel<<<grid, block, (size_t)n_sat * 2 * sizeof(double), state->stream>>>(
++            state->d_vx, state->d_vy, state->d_vz, state->d_vcov, state->d_obs_scratch,
++            state->d_kf_planes, state->d_log_weights, N, n_sat, sigma_mps);
++    } else if (n_sat <= 16) {
+         pfd_doppler_kf_update_kernel<16><<<grid, block, smem, state->stream>>>(
+             state->d_px, state->d_py, state->d_pz,
+             state->d_vx, state->d_vy, state->d_vz, state->d_vcov,
+--- a/include/gnss_gpu/pf_device.h
++++ b/include/gnss_gpu/pf_device.h
+@@ -78,6 +78,8 @@
+     // device weight pointer directly without invalidating this result.
+     mutable double cached_ess;
+     mutable bool ess_cached;
++    double* d_kf_planes;
++    size_t kf_planes_capacity;
+ };
+ 
+ // Lifecycle management

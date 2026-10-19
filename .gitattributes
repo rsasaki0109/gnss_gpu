@@ -5,8 +5,32 @@ experiments/rbpf_fgo/*.sh text eol=lf
 # Never convert their line endings (core.autocrlf on Windows would break the
 # hashes); this is a no-op on LF checkouts.
 *.json -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
-*.csv -text
-*.pos -text
+*.csv -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+*.pos -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
 
 # Exact reconstruction patches retain context whitespace and original line endings.
 benchmarks/probes/*.patch -text -whitespace
+
+# Frozen performance artifacts retain the exact measured bytes.
+benchmarks/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+benchmarks/probes/** -text -whitespace
+tests/test_rbpf_*.py -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+tests/test_bvh_*.py -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+tests/rbpf_*.py -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+tests/bvh_frozen_projection_policy.py -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+python/gnss_gpu/_bvh_bindings.cpp -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+python/gnss_gpu/double_reflection.py -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+python/gnss_gpu/raytrace.py -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+python/gnss_gpu/realtime_runtime.py -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+python/gnss_gpu/reflection_diffraction.py -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+python/gnss_gpu/urban_signal_sim.py -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+src/raytrace/bvh.cu -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+benchmarks/probes/*.patch -text -whitespace
+benchmarks/probes/**/*.patch -text -whitespace
+
+# Historical test files retain exact measured bytes.
+tests/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+
+# Two frozen diagnostic fixtures retain their original final blank line.
+tests/test_rbpf_gpu_stages.py whitespace=blank-at-eol,-blank-at-eof,space-before-tab,cr-at-eol
+tests/test_rbpf_gpu_stages_checked.py whitespace=blank-at-eol,-blank-at-eof,space-before-tab,cr-at-eol

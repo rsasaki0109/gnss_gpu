@@ -1,0 +1,15 @@
+{
+  "verified": true,
+  "report_sha256": "c479637145fd15be5223253e6423fc1449b797fac661b2f5fecb6492119c2f85",
+  "functional_tests": 38,
+  "all_device_code_exact": true,
+  "all_numeric_and_actual_accuracy_checks_exact": true,
+  "all398_raw_integer_trace_conservation_and_containment_exact": true,
+  "post_idle_long_H2D_span_observed": true,
+  "no_external_profiler": true,
+  "original_failed_gates_preserved": true,
+  "native_API_or_driver_root_cause_established": false,
+  "new_optimization_speed_gain_established": false,
+  "production_changes": [],
+  "default_changed": false
+}

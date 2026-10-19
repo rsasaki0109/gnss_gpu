@@ -1,9 +1,1580 @@
 # gnss_gpu Performance Benchmark Results
 
+## D298 lazy reflection groups: bulk pass, combined gate FAIL (2026-10-19)
+
+constructorのCPU v0 snapshotを削除し、所有済みGPU geometryから必要時だけbitコピー。既存13関数SASS一致、49tests/CUDA3検査PASS、全3072call返却bit一致。大batch warm元比+25.117/+19.554%、cold+13.655/-2.821%で両control合格。small A/A等は8cold反復でも不合格、全4条件False。製品/defaultへ未反映。[評価](../internal_docs/bvh_lazy_groups_2026_10_19.md)、[結果](bvh_lazy_groups_20261019.json)。
+
+## D297 register-fused reflection groups: bulk gains, combined gate FAIL (2026-10-19)
+
+ray中間cacheをなくし、同じnormal/v0の最大8三角形を1threadで評価。追加metadata72/720kB、39tests/CUDA3checker/全1272call返却bit一致。12k/120k大batch warm元比+25.261/+20.114%、cold+16.868/+2.136%で両control/AA合格。small cold AA不安定等で4条件全体False、製品/default/publicurban採用なし。[評価](../internal_docs/bvh_grouped_candidates_2026_10_19.md)、[結果](bvh_grouped_candidates_20261019.json)。
+
+## D296 exact grouped directions: global-cache screen FAIL (2026-10-19)
+
+元GPU法線/v0の全bit一致で正規化を50%へ削減、36tests/CUDA3checker/全772call返却bit一致。12k大batch warmは元比+23.735%・off比+23.749%、120kは元比-17.409%、両coldも不合格。128MiB中間cacheの費用を含め全体不採用、製品/default維持。[評価](../internal_docs/bvh_grouped_directions_2026_10_19.md)、[結果](bvh_grouped_directions_20261019.json)。
+
+## D295 CPU BVH stack safety: adopted (2026-10-19)
+
+重複三角形の既存CPU stack overflowを、同じSAH/sort/tie/node順の反復schedulerで修正。750unique tests、導入後124tests、legacy90ケースの返却bits一致。共通旧GPU10関数と再build元12関数のSASS/encoding一致。最初のDLL二重初期化14setup errorを保全し、test/helper/PE不変の独立processで解消。製品2source・local BVH PEへ反映、精度/default条件維持、速度利得の主張なし。D294 tileは不採用。[評価](../internal_docs/bvh_iterative_cpu_2026_10_19.md)、[結果](bvh_iterative_cpu_20261019.json)。
+
+## D294 tiled raw reflection inputs: native screen FAIL (2026-10-19)
+
+32要素SoA配置で元頂点bits/法線/交点式/候補順を維持。69testsとCUDA3checker PASS、772全callの返却bits一致。大規模warm元比+0.018/+0.652%で10%gate不通過、採用なし。既存CPU再帰overflowも元PE単独で再現、stack-safe実験はnode/permutation/GPU SASS一致。製品/defaultはこの境界で未変更。[評価](../internal_docs/bvh_tiled_geometry_2026_10_19.md)、[結果](bvh_tiled_geometry_20261019.json)。
+
+## D293 literal compiled RBPF move control: standard screen FAIL (2026-10-19)
+
+4メソッドの元AST/NumPy/RNG順を維持してCython3.1.4でコンパイル。33tests PASS、全PF64warm/960timedの状態・乱数・metadata一致。標準CPU/GPU0/2、A/A不安定で有効な速度利得は未実証。初回計画file名衝突は数値実行前で保持、別orchestrationで出力先だけ修正。実RTK再走/製品/default採用なし。[評価](../internal_docs/rbpf_compiled_moves_2026_10_19.md)、[結果](rbpf_compiled_moves_20261019.json)。
+
+## D292 parent-observed first-update latency screen: FAIL (2026-10-19)
+
+新固定16prefix/6400RTK完走、200accuracy states/16最終boundary/912NPY members一致。初回latency gate FAIL、A/A絶対差中央値15.977%・5%未満2/5。24new tests PASS。子側periodic watchdogなしの新計測で、旧aborted set/既完了FAILを保持。全体throughput/製品/default採用なし。[評価](../internal_docs/rbpf_parent_latency_2026_10_19.md)、[結果](rbpf_parent_latency_20261019.json)。
+
+## D291 parent-only lifecycle: 2 complete400epoch prefixes, normal exit verified (2026-10-19)
+
+none/overlap各400epoch完走、各launcher/worker/OS照会の全6process exit0。最終state2件・114NPZ arrays/rawNPY members完全一致。親monitor6+portable evidence15=21tests PASS。初回directory準備漏れとauditorの2process想定ミスを保持・別版で修正し、数値再走はauditor修正時0。速度gate/過去不合格/精度/製品/default変更なし。[評価](../internal_docs/rbpf_lifecycle_2026_10_19.md)、[結果](rbpf_lifecycle_20261019.json)。
+
+## D290 platform addendum: Windows x64 native-test collection (2026-10-18)
+
+新4policy tests PASS、D290合計18unique。Windows専用native診断3fileだけを非対応環境でskipし、既存cycle guard/無関係なtestsを保持。Windows x64で18件の収集確認、Linux実行は未実施。数値再走/精度/製品変更なし。[評価](../internal_docs/rbpf_crash_isolation_platform_2026_10_18.md)、[結果](rbpf_crash_isolation_platform_20261018.json)。
+
+## D290: Periodic watchdog native fault isolated before estimator loading (2026-10-18)
+
+14tests PASS。新6安全性診断の周期出力あり2件が、CUDA/GTSAM load前に追加watchdog thread/python312.dll内でAV。GPU追加threadなしでも再現。出力なし2本の数値400epoch/2最終境界/114NPY member一致、正常exitまで確認はbaseline1本。最後の親timeout error5/欠落native recordを保持し、別adapterの回帰3件を確認。旧不採用/gate/精度維持、速度再試験・製品採用なし。[評価](../internal_docs/rbpf_crash_isolation_2026_10_18.md)、[結果](rbpf_crash_isolation_20261018.json)。
+
+## D289: Transition wake candidate rejected after access violation (2026-10-18)
+
+27tests PASS、394実score/200accuracy状態/完了2本の最終境界・2軌跡114配列一致。次の候補primaryがaccess violationで中断し、15本の速度setは未成立。memcheck7subsetはpytest完了後に終了停止し、所有targetだけを確認して終了。後出しerror0/leak0/exit15をPASSとせず、失敗/未実行/全sourceを保全。速度再試験・製品/既定採用・精度条件変更なし。[評価](../internal_docs/rbpf_transition_wake_2026_10_18.md)、[結果](rbpf_transition_wake_20261018.json)。
+
+## D288: First CUDA operation after idle with one fresh-process workspace (2026-10-18)
+
+48tests PASS、memcheck9subset/error/leak0。6操作×3巡=18新process/各1workspaceで、15秒idle後のAPI/完了待ち/その後score/両合計を保持。全D286 TU28315bytesと全3device SASS/resource一致、394実入力×6操作の2364score比較と全54trial結果がbit一致。前処理への待ち移動を速度とせず、旧FAIL/製品/既定/精度を維持。新RTK走行/速度採用/driver原因断定なし。[評価](../internal_docs/rbpf_first_api_2026_10_18.md)、[結果](rbpf_first_api_20261018.json)。
+
+## D287: Same-kernel synchronous pinned staging candidate (2026-10-18)
+
+37tests PASS、memcheck12subset/error0。通常全score23640timed/1576warmのscreen0/2、各15秒idleの20call screen=False。全3device SASS/encoding/resourceと元両score bodyを保持し、全返却bit一致。400状態/2最終状態/2軌跡114配列も一致。全raw/負round/旧FAILを保持し、RTK速度・GPU使用率・製品/既定採用は未確立。[評価](../internal_docs/rbpf_pinned_transport_2026_10_18.md)、[結果](rbpf_pinned_transport_20261018.json)。
+
+## D286: Unprofiled native H2D span diagnosis (2026-10-18)
+
+38tests PASS。新DLLの全3device SASS/encoding/resourcesがD236と完全一致、実score394入力もbit一致。全800RTK/400PFで先行native1112.153ms、H2D包含区間1073.550ms、後行native2.891ms。field同環境の4call対照は15秒idle後native903.280ms/H2D868.494msで再発。400状態/2最終状態/2軌跡114配列一致。転送単体時間/driver根因/旧gate再判定/速度採用は未確立。製品/既定/精度維持。[評価](../internal_docs/rbpf_native_call_trace_2026_10_18.md)、[結果](rbpf_native_call_trace_20261018.json)。
+
+## D285: First-valid RTK native latency diagnosis (2026-10-18)
+
+31tests PASS。D284全4800保存時計でepoch203先行側のwall差中央値1.126秒を同定。新2prefix/800RTKの先行native span1.168秒/後行3.234ms、400状態/2最終状態/2軌跡一致。後半全thread CPUの絶対差中央値6.329%も残る。API trace4callはbit一致だが長い待ちは再現せず、所有sessionの終了待ち/stop/exportも保全。原因断定/epoch除外/旧gate再判定/速度採用なし。製品/既定維持。[評価](../internal_docs/rbpf_pair_residuals_2026_10_18.md)、[結果](rbpf_pair_residuals_20261018.json)。
+
+## D284: In-process independent RTK pair calibration (2026-10-18)
+
+51tests PASS。新protocolを同一D236同士の12prefix/4800RTK/2400PFで校正しFAIL。A/A絶対差中央値は全体1.507%/前半0.732%/後半1.871%。400warm状態・12最終状態・12軌跡の数値一致、初期失敗とJSON形状比較修正も保全。連続単独RTK throughputや新最適化の速度向上は未確立。D282FAIL/製品/既定維持。[評価](../internal_docs/rbpf_inprocess_pair_2026_10_18.md)、[結果](rbpf_inprocess_pair_20261018.json)。
+
+## D283: Saved nested PF/RTK clock partition (2026-10-18)
+
+33tests PASS。D282保存24prefix/9600RTK/4800PF時計を再実走なしで全照合し、secondsから元整数nsをexact復元。後半PF比率は旧版53.697%/候補46.979%。PFの旧版A/A絶対差16.908%、PFなし前半35.038%、前半thread CPU24.012%、PF外20.283%。新利得を確定せずD282FAILを維持。過去CPUのIMU観測0.325/0.385%は優先順位資料のみ。新estimator/GPU/timing0、製品/既定維持。[評価](../internal_docs/rbpf_rtk_saved_partition_2026_10_18.md)、[結果](rbpf_rtk_saved_partition_20261018.json)。
+
+## D282: Complete discovery and async GPU scoring (2026-10-18)
+
+76tests PASS、同じ3device kernelのSASS一致、CUDA3checker各16test error0。新規actual200PF state行/軌跡/RNG完全一致、197complete batch/finish・0drain/error。全仮説発見後、GPU実行中にrecordsと各粒子の元prior処理を進める。PF fixture11520timed/768warm:旧GPU比+16.325/+22.401%、matched blocked比+4.684/+4.775%、sameGPU2/2・CPU比較joint1/2。新しい連続RTK24prefix/9600epoch/4800PFは全最終状態/軌跡一致、speed gate=False、cache valid=True。全raw/失敗/基準を保持しretimeなし、製品/既定維持。[評価](../internal_docs/rbpf_discovery_pipeline_2026_10_18.md)、[結果](rbpf_discovery_pipeline_20261018.json)。
+
+## D281: Readiness ceiling for an early GPU batch (2026-10-18)
+
+14tests PASS、保存200call/197有効を再実走せず照合。first particleの固有候補最大4+共通候補という楽観的上界でも、140/197callで全評価対象が未完了、1batch完結の可能性上限57/197（28.934%）で事前90%triage不通過。pending4166に対し準備上界3280/後続下界886。速度・GPU稼働率の上界ではなく、この単純な先行案だけを見送り。estimator/GPU/timing0、製品/既定維持。初回tmp_path setup失敗と別basetemp14PASSを保持。[評価](../internal_docs/rbpf_gpu_frontier_2026_10_18.md)、[結果](rbpf_gpu_frontier_20261018.json)。
+
+## D280: Continuous actual RTK screen of ordered-H plans (2026-10-18)
+
+19tests PASS、4warm+20timed/9600RTKepoch/4800PFcall。全24軌跡・最終状態/RNG/cfg/metadata整合一致。共有warm cache/固定順4arm、全400本体・phase2本体・driver連続時間と両対照の複合速度gate=False。全400短縮中央値-12.049%、phase2 -13.599%、driver -6.962%。全raw/負値/対照・初回cold warmを保持し取り直しなし。製品/既定維持。[評価](../internal_docs/rbpf_move_plan_route_2026_10_18.md)、[結果](rbpf_move_plan_route_20261018.json)。
+
+## D279: Reuse exact ordered-H staging plans (2026-10-18)
+
+33tests PASS、実GPU/c0の200状態/軌跡/cfg/RNG/feedback一致。全logical候補を保ち登録206522→9751（95.278%減）。3作業量mapの実呼出し減を整合検査し、他metadata exact。新candidateの完全PF15360timed/1024warm、16seed/4epoch/8modeでCPU 0/2、GPU同backend 2/2、joint 0/2。全同backend状態一致、初期guard/strict test失敗を保存、別checked sourceのみ使用。製品/既定維持、速度の実RTKへの換算なし。[評価](../internal_docs/rbpf_move_plan_2026_10_18.md)、[結果](rbpf_move_plan_20261018.json)。
+
+## D278: Actual hypothesis copy work and ownership audit (2026-10-18)
+
+読取り専用observer21tests PASS、実GPU/c0の200状態・RNG・feedback・従来metadata・全測位軌跡/cfg一致。copy17298回/内側dict200899個/entry888818件。一時候補で変更しないgroup30307個（15.086%）のみが共有化の削減候補で、事前50%work triage未達。全copyは元どおり実行、境界alias0、共有/数値最適化/速度screen/採用なし。割合は速度ではない。[評価](../internal_docs/rbpf_copy_work_2026_10_18.md)、[結果](rbpf_copy_work_20261018.json)。
+
+## D277: Same-object class dispatch for frozen PF functions (2026-10-18)
+
+54tests PASS、実GPU200状態/全軌跡/cfg/従来metadata一致。元view cacheの明示MethodType生成2972→600（79.812%減）、全200call適用/残留0。処理量triageを通り、全mode計時後captureの4epoch PF2880timed/192warmを実施、全同backend状態/RNG/feedback一致。CPU/GPU同backend/joint各0/2、厳密A/A各0/2。速度未実証、製品/既定維持。次の調査用に仮説複製の件数も保存。[評価](../internal_docs/rbpf_direct_view_2026_10_18.md)、[結果](rbpf_direct_view_20261018.json)。
+
+## D276: GPU RTK A/A with GC phases and thread cycles (2026-10-18)
+
+51unique tests PASS、18prefix/7200RTKepoch/3600PF状態・全軌跡・cfg/従来metadata/入力/source/PE一致、14400protocol event照合。主要5pairのwall絶対差中央値は全400 7.092% /phase2 3.450%、事前安定性gate FAIL。GC位置とscheduled CPU cyclesを別観測、2逆label overhead contrastは参考値。Windows専用2probeのcollection guardを別追加。高速化候補/速度採用なし、製品/既定維持。[評価](../internal_docs/rbpf_gc_clocks_2026_10_18.md)、[結果](rbpf_gc_clocks_20261018.json)。
+
+## D275: Release completed PF bound-method cycles (2026-10-18)
+
+元数値functionを維持しcall-local内部method保持だけをfinally解放。26tests PASS、実GPU元/候補400状態・全軌跡/cfg/従来metadata exact。元は200/200return後に監視method残留、候補は0/200、内部2972method解放。実入力GC診断約10.7%で事前triageを通り、observerなし4epoch連続PF2880timed/192warmを実施、全同backend bits一致。CPU 0/2、GPU同backend 0/2、joint 0/2。参照保持改善を速度向上と混同せず、製品/既定維持。[評価](../internal_docs/rbpf_view_release_2026_10_18.md)、[結果](rbpf_view_release_20261018.json)。
+
+## D274: Exact matrix LU reuse in conditional extension (2026-10-18)
+
+同一行列の全bytesで元NumPy LAPACKのLU/pivotだけをcall内共有し、各右辺/元gather/丸め/全候補/FP64/RNGを保持。52testsと完全PF2880timed/192warmの全同backend状態・従来metadata bits一致。CPU主 0/8、GPU同backend 0/8、joint 0/8。標準条件未達で追加field0状態、製品/既定維持。計測の取り直しなし。[評価](../internal_docs/rbpf_extend_factor_2026_10_18.md)、[結果](rbpf_extend_factor_20261018.json)。
+
+## D273: Group pure common-candidate memo hits (2026-10-18)
+
+共通suffixの純粋な登録hitをC APIでまとめ、全候補/元logical counter/first-seen indexと元weight/RNG/PF tailを保持。47機能tests・CPU ASan35subset PASS。完全PF3840timed/256warmの全同backend状態/従来metadata bits一致。CPU主 0/8、GPU同backend 0/8、joint 0/8。初版null辞書停止・経路未使用・動的候補prior差を別版で修正し全negativeを保存。標準条件不通過で追加field0状態、製品/既定維持。[評価](../internal_docs/rbpf_common_staging_2026_10_18.md)、[結果](rbpf_common_staging_20261018.json)。
+
+## D272: Exact bulk GTSAM cross-covariance stores (2026-10-17)
+
+共分散の二重block取得loopだけを一括storeへ置換し、位置変換/対角/held/全PF数値を保持。64tests、2656layout blocks、CPU2cluster400保存PF状態・全trajectory/config/metadata bits一致。無条件component16個で約67%、48個で約92%短縮、4個の遅延は保持しsize16未満を元loopへ戻す別構成で評価。実np.int32 schema修正前の完走後usage assertと200状態も保存。全RTK交互24prefix gate PASS。通常連続実行の18prefix/7200epochも完了し、事前gateはFAIL。全400短縮中央値 +1.695%、phase1 +6.229%、phase2 +0.808%。全400の対照絶対差中央値 3.437%。 製品/既定維持。[評価](../internal_docs/rbpf_joint_covariance_2026_10_17.md)、[結果](rbpf_joint_covariance_20261017.json)。
+
+## D271: Independent RTK epoch lockstep A/A calibration (2026-10-17)
+
+同じepochを別RTK processで交互に処理し、両doneまで次epoch準備も待機。28tests、12prefix/4800RTKepoch/2400PFcallの全軌跡array・設定/入力/source/PE一致、9600protocol event照合。5pairのwall絶対差中央値は全400 0.809%/phase2 2.033%、事前安定性gate PASS。計測方式の校正のみ、候補/新しい速度採用なし。連続route速度を代替せず、全過去FAIL・製品/既定維持。[評価](../internal_docs/rbpf_epoch_lockstep_2026_10_17.md)、[結果](rbpf_epoch_lockstep_20261017.json)。
+
+## D270: Diagnose RTK timing variability using three clocks (2026-10-17)
+
+元処理のA/Aを経過/プロセスCPU/スレッドCPUで同時記録。18tests、8prefix/3200RTKepoch/1600PFcallの全軌跡array・設定・入力・source/PE一致。phase2のA/A差中央値はwall +6.146%、threadCPU +3.314%。全rawを残し、CPU tickは合計後に比を取る。診断のみで候補/速度採用なし、D269 FAILと製品/既定を維持。[評価](../internal_docs/rbpf_epoch_clocks_2026_10_17.md)、[結果](rbpf_epoch_clocks_20261017.json)。
+
+## D269: Exact QC and ambiguity preprocessing composition (2026-10-17)
+
+数値処理を変えずD247/D268を同RTK classへ接続。157tests、CPU/GPU×cluster0/1の800保存PF状態/全軌跡・設定/全QC・曖昧度capture bits一致。新構成の全RTK18prefix/7200epochでphase2 +27.611%、全400epoch +20.478%、gate FAIL。元の単体FAILと全対照を保持。製品/既定維持。[評価](../internal_docs/rbpf_preprocess_bundle_2026_10_17.md)、[結果](rbpf_preprocess_bundle_20261017.json)。
+
+## D268: Complete observation QC loop batching (2026-10-17)
+
+元のFP64 geometry/QC/GF数値helpersと衛星順・全観測/閾値を保ち、Python/Numba往復を一括化。64tests、実800QC fast-path入力/400保存PF状態/全軌跡・cfg・metadata bits一致。36000timed/2400warm、全QC約50.3%短縮、component2/2。全RTK prefix gate 0/1、全対照と負値を保存、製品/既定維持。[評価](../internal_docs/rbpf_qcedit_batch_2026_10_17.md)、[結果](rbpf_qcedit_batch_20261017.json)。
+
+## D267: Exact initial-system GPU matrix and LU sharing (2026-10-17)
+
+同一score内のfinite-DD support/prior9bitsが一致する11次元初回normal/LUだけをGPU共有し、各候補の右辺・元solve tail・2IRLS・全観測/候補/FP64/診断/閾値を保持。初版Racecheck2hazardを不採用・保全し、別pathでflag同期を修正。修正版110tests、CUDA各36tests PASS/error-hazard-leak0。実394入力41370timed/2758warmの全score・135診断・status/input bits一致。GPU同backend component 0/2、CPU joint 0/2。全対照/負値を保持、製品/既定維持。[評価](../internal_docs/rbpf_initial_share_2026_10_17.md)、[結果](rbpf_initial_share_20261017.json)。
+
+## D266: Row-batched exact particle proposal arithmetic (2026-10-17)
+
+粒子ごとの配列生成/ufuncを同じ候補数の行でまとめ、全prior/score/候補/計算を保持。元のscalar logw更新・粒子順RNG.choice・FP64/閾値/モデルは維持し、確率cache/padding/候補削減なし。97tests PASS、元/literal/一括のCPU/GPU/scalar複数epoch状態/RNG/graph/従来metadata一致。3840timed/256warmの完全PF、CPU 0/8、GPU同backend 0/8、joint 0/8。追加実データ保存状態0件。全負値/対照失敗を保持、D236/製品/既定維持。[評価](../internal_docs/rbpf_weight_rows_2026_10_17.md)、[結果](rbpf_weight_rows_20261017.json)。
+
+## D265: Per-request guarded staging attribute/identity reuse (2026-10-17)
+
+毎requestの辞書/version/type/code guardと元source miss callback/counter/prior/候補順を保持して、同じ属性取得/ID生成をcall内で再利用。63tests/CPU ASan41tests PASS、実CPU/GPU×cluster0/1計800保存PF state/軌跡全配列bits/cfg/従来metadata一致。3840timed/256warmの完全PF、CPU主0/8、GPU同backend副0/8、joint0/8。同一拡張offは旧D244本文を保持し、全不利/対照結果を保存。初版の0粒子でも再現した型辞書null参照を保全し、checked buildだけで評価。D236/製品/既定維持。[評価](../internal_docs/rbpf_versioned_staging_2026_10_17.md)、[結果](rbpf_versioned_staging_20261017.json)。
+
+## D264: Exact extend support and integer assembly (2026-10-17)
+
+`_extend`のsupport抽出/整数辞書組み立てをCPU nativeへまとめ、任意精度整数差→FP64、元solve/行列積/rint値/整数・候補順を維持。51tests PASS、実CPU/GPU×cluster0/1計800保存PF state/全軌跡配列bits/cfg/従来metadata一致。2880timed/192warmの完全PFでCPU主1/8、GPU同backend副0/8、joint0/8。全結果/対照を保持、製品・既定維持。初回fieldの計算後記録エラーも別保全。[評価](../internal_docs/rbpf_extend_support_2026_10_17.md)、[結果](rbpf_extend_support_20261017.json)。
+
+## D263: sparse PF wall boundaries (2026-10-17)
+
+速度採用ではなく、同じD262 scorer上のPF候補生成/score/抽選/位置/feedbackを直接境界で記録する診断。23tests PASS、3構成×16RNG状態×10mode×5round×3groupの7200timed/480warm、負荷校正2/6。実GPU400保存PF状態・軌跡・metadata bits一致、394有効trace全件使用。scoreを含む区間c0/c1 14.838/17.031%、move生成/登録43.837/40.613%。instrumented wall比率で、全PF高速化/純GPU時間/移行率には換算しない。既定・製品維持。[評価](../internal_docs/rbpf_pf_boundaries_2026_10_17.md)、[結果](rbpf_pf_boundaries_20261017.json)。
+
+## D262: RBPF cluster parameter-row reuse (2026-10-17)
+
+同一call内の同じselected stateの12-double parameter rowを再利用。初回の元NumPy式/guard/選択/metadata/FP64を維持。394実入力59100timed/3940warmでcluster1全scoreは元CPU比12.652%・GPU経路比6.865%短縮、D261比追加CPU 3.894%・GPU 2.491%。事前component gate CPU 1/2・sameGPU 0/2・GPUjoint 0/2。158tests PASS、実GPU400保存PF状態/全trajectory bits一致。完全PF-step screen=実施、実RTK/FGO全体の速度は未確立。既定・製品維持。[評価](../internal_docs/rbpf_cluster_parameter_reuse_2026_10_17.md)、[結果](rbpf_cluster_parameter_reuse_20261017.json)。
+
 測定条件と再現コマンドは各節に記載する。過去の `bench_all.py` の表は3回実行の中央値。
 
 統合時の型検査注記はPython 3.12の再帰的compiled module比較で実行コード不変を確認した。
 [統合時の照合記録](optimization_merge_check_20261015.json)。
+
+## D261: Filesystem-free guard for exact batched cluster selection (2026-10-17)
+
+初版のsource/code/path guardを既知filename表記へ絞り、hot Path.resolve6→0。その他guard本文/live globals・C++・NumPy式・PEは同じ。394入力53190timed/3546warmでcluster1全scoreは元CPU比8.850%、元GPU比5.282%短縮、両方5/5改善。初版GPU比37.855%だけで採用せず、事前10%未達でcomponent各0/2・GPU joint0/2、既定維持。144tests PASS、実GPU400保存PF state・全trajectory/cfg/prior metadata bits一致。初回fieldのcounter wrapper停止を保存し、別checked driverで経路確認。全PF/FGO速度・新GPU移行率は未確立。
+記録: [結果](rbpf_cluster_fast_guard_20261017.json)、[完了照合](rbpf_cluster_fast_guard_completion_check_20261017.json)、[範囲と限界](../internal_docs/rbpf_cluster_fast_guard_2026_10_17.md)。
+
+## D260: Batched exact cluster-state selection, rejected initial guard (2026-10-17)
+
+全仮説・親状態の任意精度整数DD比較と元Python除算/閾値/同点/state identityを保って1CPU C APIへ一括化。139tests PASS、394入力47280timed/3152warmの全score/135診断/status/input・logical count一致。ただしcluster1全scoreはCPU79.721%、GPU35.742%遅化、全5roundで遅く不採用。component各0/2、GPU joint0/2。guard内literal確認の別wall診断が約94%で、source/code/path検査に毎batch6回Path.resolveを含む。修正版速度は未測定。CUDA数値/既定/製品維持、field400準備済みだが未実行。
+記録: [結果](rbpf_cluster_batch_20261017.json)、[完了照合](rbpf_cluster_batch_completion_check_20261017.json)、[範囲と限界](../internal_docs/rbpf_cluster_batch_2026_10_17.md)。
+
+## D259: Host statement phases of complete actual-input scores (2026-10-17)
+
+GPU呼び出し前のdedup/packing/DD/状態準備を分ける診断。394保存入力29550timed/1970warm、元code-object cloneと元/計測AAを含む全5対比で両条件較正通過。cluster有効時の状態検索・centre/prior準備22.905%、DD展開8.029%、dedup6.640%。無効時は各1.590/10.828/8.933%。native spanは転送・計算・完了待ち込みで純GPU時間ではない。87tests PASS、全warm score/135診断/status/input bits・全timed返却hash一致。初期collection/test観測FAILと別修正版を保存。新たな最適化採用・CUDA変更・400状態field再走はなく、製品/既定維持。
+記録: [結果](rbpf_score_host_phases_20261017.json)、[完了照合](rbpf_score_host_phases_completion_check_20261017.json)、[範囲と限界](../internal_docs/rbpf_score_host_phases_2026_10_17.md)。
+
+## D258: Complete-input row-capacity shared scratch (2026-10-17)
+
+全入力m<=60/64だけ小容量scratch、65..128はliteral同期修正版。数式/演算順/全観測を保ちshared30904→16216/17080B、64regs維持。342tests/raw7872行列（2357n11）、CUDA各81subset PASS/error/hazard/leak0。394保存入力47280timed/3152warmで同期修正版比+1.830/-1.051%。GPU component0/2、CPU joint0/2。実走400保存PFstate・全trajectory/cfg/従来metadata bits一致。最大active blocksのAPI予測は2→4/3だが入力gridは元の予測上限内。動的占有・全PF/FGO速度は未確立、製品/既定維持。
+記録: [結果](rbpf_compact_scratch_20261017.json)、[完了照合](rbpf_compact_scratch_completion_check_20261017.json)、[範囲と限界](../internal_docs/rbpf_compact_scratch_2026_10_17.md)。
+
+## D257: Corrected register LU phase diagnostics (2026-10-17)
+
+LUをload/guard、分解、保存/log/status、RHS並べ替え、前進・後退代入、最終保存に区切って計測。追加同期だけの対照とtrace転送対照を置き、394保存入力41370timed/2758warmの全score較正は1/2条件。計測totalの上乗せ+6.351/+2.649%。311tests・raw7872行列（n11は2357）で全数値bits一致、CUDA各50subset PASS/error/hazard/leak0。区間値は待ち・追加同期込みの診断値。最適化採用・製品/既定変更・全PF/FGO速度やGPU化率の主張なし。
+記録: [結果](rbpf_lu_phases_20261017.json)、[完了照合](rbpf_lu_phases_completion_check_20261017.json)、[範囲と限界](../internal_docs/rbpf_lu_phases_2026_10_17.md)。
+
+## D256: Block-element128-thread ordered LU (2026-10-17)
+
+11×11 LUを128-thread blockで要素ごとに分担し、pivot/行交換/除算/更新をblock barrierで同期。各要素の演算順とpartial failureを保ち、前進/後退代入は元の逐次solve。315tests（raw8064行列比較、うちdimension11は2549）とCUDA各54subset PASS/error/hazard/leak0。全394入力59100timed/3940warmで全warm診断/input bits・全返却hash一致。旧GPU比+12.715/+9.752%、同期修正版比-0.042/+1.015%。3%増分基準未達で今回の分担変更は不採用。GPU component gate0/2、CPU joint gate0/2。実GPU400保存PFstate・全trajectory/cfg/従来metadata一致。製品・既定維持、全PF/FGO速度未確立。
+記録: [結果](rbpf_block_lu_20261017.json)、[完了照合](rbpf_block_lu_completion_check_20261017.json)、[範囲と限界](../internal_docs/rbpf_block_lu_2026_10_17.md)。
+
+## D255: Register backward-solve broadcast cache (2026-10-17)
+
+同期修正版D253から後退代入の解broadcastをレジスタに保持し、成功したguard内11×11のdouble shuffle呼出しを55→10へ削減。descending-i/ascending-kの減算・division、FP64/両status同期を維持。D254のidentity交換省略は含めない。289tests（raw6912行列、うちdimension11は1792）とCUDA各46subset PASS/error/hazard/leak0。全394入力59100timed/3940warmで全warm診断/input bits・全返却hash一致。旧GPU比+14.700/+11.237%、同期修正版比+0.711/+0.227%。追加cacheは3%増分基準未達で不採用。GPU component gate0/2、CPU joint gate0/2。実GPU400保存PFstate・全trajectory/cfg/従来metadata一致。全PF/FGO速度未確立、製品・既定維持。
+記録: [結果](rbpf_register_lu_back_cache_20261017.json)、[完了照合](rbpf_register_lu_back_cache_completion_check_20261017.json)、[範囲と限界](../internal_docs/rbpf_register_lu_back_cache_2026_10_17.md)。
+
+## D254: Register LU conditional identity exchange (2026-10-17)
+
+同期修正版D253から、pivotが動かないrow/RHS shuffleだけを全warp共通分岐で省略。浮動小数点演算順/FP64/両status同期を維持。271tests（raw6336行列、うちdimension11は1216）とCUDA各28subset PASS/error/hazard/leak0。全394入力59100timed/3940warmで全score/全warm診断/input bits・返却hash一致。同期修正版を同じ実験内で初めて計測し、旧GPU比+14.048/+12.435%、同期修正版比+0.555/+0.458%。交換省略単体は3%増分基準未達で不採用。旧GPU差を今回の省略だけの効果とは呼ばない。CPU所要時間は約2.032/1.617倍。GPU component gate0/2、CPU joint gate0/2。実GPU400保存PFstate・全trajectory/cfg/従来metadata一致。全PF/FGO速度未確立、製品・既定は維持。
+記録: [結果](rbpf_register_lu_skip_swap_20261017.json)、[完了照合](rbpf_register_lu_skip_swap_completion_check_20261017.json)、[範囲と限界](../internal_docs/rbpf_register_lu_skip_swap_2026_10_17.md)。
+
+## D253: Register-row11 ordered GPU LU and solves (2026-10-17)
+
+11×11 LUをwarp各laneのregisterへ置き、shuffleでrow/pivotを受け渡し、前進代入も各rowの減算順を保って並行化。後退代入はascending kを維持。元numeric prefix/CPU body/通常kernel5144命令は不変。初版の追加Racecheckで9警告群を検出して不採用。別sourceでstatus orderingを修正し、265tests（raw6144行列含む）、CUDA各22subset PASS/error/hazard/leak0。全394入力47280timed/3152warm、同backend全warm診断/input bits・全返却hash一致。旧GPU比 +9.267/+4.997%。GPU-only gate0/2、CPU joint gate0/2。修正版の速度は未計測。各versionの実GPU400保存PFstate・全trajectory/cfg/従来metadata一致。製品・既定は維持、全PF/FGO速度は未確立。
+記録: [結果](rbpf_register_lu_20261017.json)、[完了照合](rbpf_register_lu_completion_check_20261017.json)、[範囲と限界](../internal_docs/rbpf_register_lu_2026_10_17.md)。
+
+## D252: Fixed11 ordered GPU LU (2026-10-17)
+
+D251でLU/求解がblock内サイクル約74%。全394実入力の6685/8229 uniqueが11×11で、同サイズのLU/solveをcompile-time展開。他サイズ・数値順序・pivot/prior/FP64/IRLS/閾値/RNGは保持。198tests（raw3744行列含む）とCUDA各16subset PASS/error/hazard/leak0。全score47280timed/3152warm、同backend全warm診断/input bits・全返却hash一致。旧GPU比 +7.384/+4.239%。GPU-only gate0/2、CPU joint gate0/2。実GPU400保存PFstate・全trajectory/cfg/従来metadata一致。製品/既定は維持し、全PF/FGO速度は未確立。
+記録: [結果](rbpf_fixed_lu_20261017.json)、[完了照合](rbpf_fixed_lu_completion_check_20261017.json)、[範囲と限界](../internal_docs/rbpf_fixed_lu_2026_10_17.md)。
+
+## D251: GPU likelihood stage elapsed-cycle diagnostic (2026-10-17)
+
+元GPUの数値関数/CPU body/通常kernel5144命令を保持し、別kernelに既存同期位置でclock64記録を追加。83tests PASS、CUDA各15subset PASS/error/hazard/leak0。初版testのstrict例外捕捉漏れ2FAILは別fileで修正し、初版/logは保持。実394入力で35460timed/2364warmの同backend全返却hash/全warm diagnostic/input bits一致。校正6対照のabsmedian<5%を満たした設定は2/2。区間比率はSM上のblock内経過cycleでstall/time-slicingを含み、全score/全PFのGPU時間配分には換算しない。Nsight Systems smokeは180秒で出力待ちを停止し、失敗保持。速度改善/新規数値offload/製品・既定の変更はない。
+記録: [結果](rbpf_gpu_stages_20261017.json)、[完了照合](rbpf_gpu_stages_completion_check_20261017.json)、[範囲と限界](../internal_docs/rbpf_gpu_stages_2026_10_17.md)。
+
+## D250: Ordered structural-zero GPU normal products (2026-10-17)
+
+Aw/bwのfinite/magnitude/structure guard下でgroup別の行を元順に加算し、0との積を省くGPU kernelを実装。元CPU body/数値prefix/同DLL元kernel5144命令は不変。FP64、全候補/観測、full prior、IRLS/pivot/閾値/RNGを保持。153tests（raw normal2292行列含む）PASS、CUDA検査各17subset PASS/error/hazard/leak0。
+全394実入力、47280timed/3152warmで同backendの全score/diagnostic/input bitsとtimed hash一致。別788counter callで139259646積を省いたが、旧GPU比-0.08/+0.63%、同kernel dense比+0.52/+0.85%、CPUにも未達。A/A・同DLL元GPU対照は両設定PASS、joint gate0/2で不採用。位置列の全row依存長は維持し、演算数から速度へ換算しない。
+実GTSAM+新GPUの400保存PF state・全trajectory/cfg/従来metadataは旧GPUと一致。全route/multiseed/GPU既定採用とPF/FGO全体速度は未確立。
+記録: [結果](rbpf_sparse_normal_20261017.json)、[完了照合](rbpf_sparse_normal_completion_check_20261017.json)、[範囲と限界](../internal_docs/rbpf_sparse_normal_2026_10_17.md)。
+
+## D249: Pinned three-node CUDA Graph RBPF likelihood (2026-10-17)
+
+H2D→既存尤度kernel→D2Hを1Graph launchにまとめ、同DLL固定メモリstreamを対照に全scoreを比較した。Graph1個のみを保持し、形状更新費用をtimer内に含む。数値prefix/CPU body/5144normalized GPU命令は元と一致、FP64/IRLS/全観測・候補・prior・閾値・RNGを維持。83tests PASS、CUDA検査各15subset PASS、error/hazard/leak0。
+全394実入力、41370timed/2758warmで同backend score/途中値bits・timed hash一致。Graph短縮率はc0:oldGPU -5.08%,pinned -0.94%,CPU -122.20%; c1:oldGPU -3.31%,pinned +0.21%,CPU -75.84%。事前の元GPU・固定stream・CPU各10%以上とA/A条件を満たす設定0/2、採用しない。実GTSAM+Graphの計400保存PF state・全trajectory/cfg/既存metadataが旧GPUと一致、394実Graph launch/fallback0。FGOはCPU、全体性能/GPU既定採用は未完了。
+記録: [結果](rbpf_gpu_graph_20261017.json)、[完了照合](rbpf_gpu_graph_completion_check_20261017.json)、[範囲と限界](../internal_docs/rbpf_gpu_graph_2026_10_17.md)。
+
+## D248: Dedicated-stream RBPF GPU likelihood transport (2026-10-16)
+
+GPU尤度の転送/launch/完了待ちをworkspace所有nonblocking streamで接続し、同DLL default controlと比較した。数値prefix byte/SASS5144命令は元と一致、FP64/2IRLS/全観測/候補/prior/閾値/RNGを保持。81tests PASS、CUDA memcheck/racecheck/synccheck各13subset PASS、error/hazard/leak0。
+実入力全394batch、35460timed/2364warmで全同backend返却/途中値bits一致。旧GPU比+0.94/+0.76%、同DLL default比+0.014/+0.407%、最適化CPUより約2.1〜2.6倍遅い。GPU/CPU A/A・default controlは両設定PASSだが、速度gate0/2で採用しない。別788event診断のkernel区間は約1.27〜1.32ms、profile値を速度やGPU化率へ換算しない。
+実GTSAM+GPUのcluster0/1計400PF保存state・全trajectory/cfg/既存metadataが旧D236 GPUとbit一致。計394nonempty GPU score call/fallback0。FGOはCPUのまま、製品/既定/fullroute/multiseedへの採用は未完了。
+記録: [結果](rbpf_gpu_stream_20261016.json)、[完了照合](rbpf_gpu_stream_completion_check_20261016.json)、[範囲と限界](../internal_docs/rbpf_gpu_stream_2026_10_16.md)。
+
+## D247: Batch independent integer ambiguity bookkeeping (2026-10-16)
+
+周波数ごとに全衛星のoutc更新とreset対象抽出をまとめ、元と同じ昇順でinitx/resetを実行する。元の観測/FP式・全粒子/候補/prior/閾値/RNGを保持し、alias/overflow/read-only/custom callback等は元loopへ戻す。AST undoと69tests PASS。D246の全RTK FAILは維持し、初期化候補との差を別対照で評価した。
+全400実入力を5mode/5round/3group、30000timed/2000warmで比較し、component gate 2/2。追加短縮と元処理からの短縮は[全条件](../internal_docs/rbpf_ambiguity_bookkeeping_2026_10_16.md)参照。実走cluster0/1計400保存PF state・全trajectory/cfg/従来metadataと400component captureが元D236/凍結captureに完全一致。
+全RTKのcluster0 prefix比較は3warm+15timed、全7200epochのtrajectory一致。phase2 +18.23%、A/A -8.36%。全400epoch +20.48%、A/A -2.71%。gate FAIL、RTK全体の効果が確認できないため全体の高速化として採用しない。製品/既定は維持、fullroute/multiseed/GPU gateは未完了。同じ測定をやり直して採用に寄せない。
+記録: [結果](rbpf_ambiguity_bookkeeping_20261016.json)、[完了照合](rbpf_ambiguity_bookkeeping_completion_check_20261016.json)。
+
+## D246: Batch covariance initialization stores in actual RTK (2026-10-16)
+
+観測/IMU等の粗い区間診断から曖昧度更新を選び、initxの逐要素zero storeをC/F contiguous FP64行/列代入にまとめた。元の全曖昧度更新loop、FP演算、観測/PF候補/prior/RNG/閾値は維持。保護版は巨大整数/custom/wider scalarを元処理へ戻し、conversion error時の途中stateも保つ。初版はこの特殊入力の途中Pに差があり不採用、source/negative control/全測定を保持する。
+保護版38tests、診断7tests PASS。実走保護版cluster0/1計400保存state/全trajectory bits/cfg/既存metadataがD236 CPUに一致し、初版との全400component captureも一致。全400実入力の曖昧度更新18,000timed/1,200warmで約62〜64%短縮、5/5round改善、A/A基準PASS。初版18,000timed/1,200warmと31testsも別に保全し、現行のPASSへ足し合わせない。
+snapshot/encodingを除いた実RTK processの制御比較は3warm+5round×3mode=18prefix、全軌跡/cfg bits一致。phase2 +4.82%、全400epoch +4.94%、全体gate FAIL。A/Aもphase2 +8.05%、全400epoch +5.16%動いており、全体効果は未確認。cluster0/1route/1seedのprefixの範囲。製品/既定は維持し、GPU/fullroute/multiseed gateは未完了。
+記録: [全結果](rbpf_ambiguity_initx_20261016.json)、[完了照合](rbpf_ambiguity_initx_completion_check_20261016.json)、[全条件と限界](../internal_docs/rbpf_ambiguity_initx_2026_10_16.md)。
+
+## D245: Diagnose actual PF/RTK work with coarse spans (2026-10-16)
+
+速度採用0、D236/製品/既定を維持。詳細cProfileは実走200callに対し181/recursive176を記録し、負荷校正も約88〜122%だったため全call treeを不採用とする。別方式の関数トレースなし区間記録を追加し、初回異常と全条件を保全した。区間方式のPF校正差約2.8〜6.2%、abs5%超1/3で厳密な比率には使わない。
+53tests PASS。2方式×cluster0/1、計800paired PF保存state/全trajectory dtype-shape-bytes/全cfg/従来metadataがD236 CPUに一致。cProfileなしphase2でPF排他約49〜54%、未分類約24〜27%を観測。次は観測準備/IMU/motion factorの境界を調べる。明示snapshot spanを除いた計測内の比率で、無計測速度・全GTSAM割合・GPU高速化の予測ではない。起動時の遅いepochも除外せず保存。
+記録: [全結果](rbpf_call_profile_20261016.json)、[完了照合](rbpf_call_profile_completion_check_20261016.json)、[全条件と限界](../internal_docs/rbpf_call_profile_2026_10_16.md)。
+
+## D244: Fuse pure memo/index hits within candidate registration (2026-10-16)
+
+同じC++登録call内で既存メモhitとbuiltin-keyの完了済み番号検索をまとめ、source miss callback/全logical counter/全候補/prior/元weight/RNGを保った。735timed完全PF-step/49warmでCPU主0/7、GPU副/主0/7、A/A失敗3/7。最大CPU+3.74%は基準未達、default-like−1.09%。同一拡張off対照も含め全条件を残し、再測定せずD236/製品/既定を維持する。
+101tests PASS、memcheck24PASS/errors/leaks0。実走cluster0/1×CPU/GPU計800paired保存state/軌跡全配列bits・全cfg/全既存metadataがD236に一致。初版95PASS/6FAILは元fixtureがbuiltin空tupleをcustom-key labelとして扱えない観測不備で、実装/PE/数値判定を変えず試験だけ修正した。
+記録: [全結果](rbpf_fused_staging_20261016.json)、[完了照合](rbpf_fused_staging_completion_check_20261016.json)、[全条件・限界](../internal_docs/rbpf_fused_staging_2026_10_16.md)。
+
+## D243: Controlled IRLS replay on every actual score batch (2026-10-16)
+
+実走全394score batchを固定し、同一DLLの省略off/onと元版をCPU/GPUそれぞれ比較。41370timed/2758warm call、全同一backendの出力bits一致、全timedの省略vectorを保存・照合。CPU component 0/2、GPU joint component 0/2、A/A失敗0/2。全PF/FGO速度へは換算せず、D236/製品/既定を維持する。
+入力保存あり・なしの実走400paired PF state/軌跡全配列bits・全cfg/既存metadata一致。122tests、memcheck90/racecheck20/synccheck20 PASS/errors/leaks/hazards0。初回測定の負条件を含め全記録を保持し、再測定しない。
+記録: [全結果](rbpf_irls_replay_20261016.json)、[完了照合](rbpf_irls_replay_completion_check_20261016.json)、[全条件・限界](../internal_docs/rbpf_irls_replay_2026_10_16.md)。
+
+## D242: Reuse bit-identical IRLS states without claiming inactive-path speedups (2026-10-16)
+
+Aw/bwの全binary64 bitsが解いたsystemと同じ場合だけ、同じordered normal/LU/solveの再計算を省く。元の最大2IRLS更新規則・全FP式/順序・出力/statusを維持し、epsilon打切りなし。全source undoと9math関数の一致を再確認した。108tests、memcheck74/racecheck12/synccheck12 PASS/errors/leaks/hazards0。
+525timed完全PF-step/35warmのCPU数値screen1/7（+13.45%、4/5、A/A+2.80%）、GPU副/主0/7、A/A失敗3/7。ただし全14CPU/GPU warm snapshotで省略0。この省略による利得と認定せず、数値screenは残して帰属可能screen0/採用0、D236/製品/既定を維持する。再測定しない。
+実走cluster0/1×CPU/GPU計800paired全保存state/軌跡配列bits・全cfg・既存metadata一致。default各backend4166score inputs中1401で2802duplicate solveを省いたが、counterを速度比へ換算しない。適用される実測入力の制御replay速度が次の課題。全route/multi-seed/graph速度gate未完了。counter staging各+2048bytes/context(cap512)。
+記録: [全結果](rbpf_irls_identity_20261016.json)、[完了照合](rbpf_irls_identity_completion_check_20261016.json)、[全条件・限界](../internal_docs/rbpf_irls_identity_2026_10_16.md)、[probe/API](probes/rbpf_irls_identity/README.md)。
+
+## D241: Screen literal native candidate staging and keep D236 (2026-10-16)
+
+コピーは3fixture/15profiled stepで約0.3〜1.1%のwall診断となり、単独移植を見送った。候補登録全体をC++ Python C APIへまとめ、全canonical/value hash/lookup・first-seen H/pending・元move順、Python prior加算/除算順、raw score/weight/RNG tail、全従来metadataを保持した。D239/D240/profiler/共通record・確率cacheは併用しない。
+525timed完全PF-step/35warmのCPU主0/7、GPU副/主0/7、A/A失敗3/7。最大CPU+7.79%も基準未達で、全不利な条件を保持し再測定せずD236/製品/既定を維持する。
+最終60tests PASS、memcheck24PASS/errors/leaks0。初版59PASS/1FAILはsetup100callbackを片側だけ数えた試験の修正で、controller/C++/binaryは初回から不変。元cluster0/1×CPU/GPU計800paired保存state/軌跡全配列bits・全cfg・全既存metadataがD236と一致。全route/multi-seed/graph速度gate未完了。
+記録: [全結果](rbpf_native_staging_20261016.json)、[完了照合](rbpf_native_staging_completion_check_20261016.json)、[全条件・限界](../internal_docs/rbpf_native_staging_2026_10_16.md)、[probe/API](probes/rbpf_native_staging/README.md)。
+
+## D240: Preserve ordered integer keys and reject an unproven default speedup (2026-10-16)
+
+D236を基準に、挿入順/絶対gauge/任意精度int objectを保つkey作成と、不要なtupleを作らない型確認をCPU-only C++化した。canonical/memo分岐/counter、元raw move/確率/RNG/全候補/FP64/2IRLS/閾値は不変。原helper codeと6bindingを毎要求確認し、custom bindingは原callback/例外へfallbackする。profiler/score番号aliasは併用しない。
+525timed完全PF-step/35warmのCPU主screen0/7、GPU副/主screen0/7、A/A失敗4/7。CPU+18.23%/+10.78%もA/A基準外で採用せず、全不利なroundを残し再測定しない。D236/製品/既定を維持する。
+75tests PASS、memcheck39PASS/errors/leaks0。元cluster0/1×CPU/GPU各200、800paired保存state/軌跡全配列bits・全cfg・全既存metadataがD236と一致。初回compile失敗source/logも保存し、修正v2のみを初回テスト/測定した。全route/multi-seed/graph速度gateは未完了。
+記録: [全結果](rbpf_ordered_keys_20261016.json)、[完了照合](rbpf_ordered_keys_completion_check_20261016.json)、[実装・全条件・限界](../internal_docs/rbpf_ordered_keys_2026_10_16.md)、[probe/API](probes/rbpf_ordered_keys/README.md)。
+
+## D239: Refine move profiling and reject score-index aliases as a default speedup (2026-10-16)
+
+元式/ASTを保持してmoveをstaging/score/choice、scorerをpack/native/finishへ細分化した。実走の粗いexclusive spanはstaging CPU39.08%/GPU33.39%、choice11.78/10.85%。較正135timed/9warmの補助flag1/3・A/A失敗1/3を含め全rawを保持し、比率を高速化率へ換算しない。計測器41tests PASS、実走400paired state/軌跡bits・全cfg/既存metadata一致。
+計測器を外し、不変key objectからscore番号へのcall内C++ aliasを実装。canonical要求・全候補・元weight/choice/RNG・全既存metadataを維持する。525timed完全step/35warmのCPU主screen0/7、GPU副screen1/7、候補CPUを含むGPU主screen0/7、A/A失敗2/7。全小利得/負値/失敗を保存し再測定せず、D236/製品/既定を維持する。
+候補54tests PASS、memcheck18PASS/errors/leaks0。元cluster0/1×CPU/GPU各200、計800paired保存state/全軌跡配列bits・全cfg・全既存metadataがD236に一致。custom hash/error順、GC/refcountsも確認。新FP/CUDA演算なし、全route/multi-seed/graph速度gateは未完了。
+記録: [全結果](rbpf_score_index_memo_20261016.json)、[完了照合](rbpf_score_index_memo_completion_check_20261016.json)、[実装・全条件・限界](../internal_docs/rbpf_score_index_memo_2026_10_16.md)、[build/API](probes/rbpf_score_index/README.md)。
+
+## D238: Measure actual D236 phases before choosing another optimization (2026-10-16)
+
+local viewへ粗いnested wall spansを加え、元の実extract/整数探索/RTK callback込みのCPU/GPU各200stepを記録した。全197valid stepのmedian exclusive fractionで、extractはCPU4.62%/GPU4.47%、moves残部はCPU60.22%/GPU61.03%。距離計算は既にNumba化されており、再利用実装を見送り、staging/score/weight/choiceの細分化を優先する。数値/候補/prior/閾値/RNGの変更はなく、新高速化の採用は0。
+19tests PASS。実走400paired保存state/全軌跡配列bits・全cfg・既存metadataがD236と一致し、全spanのexclusive整数ns和がrootに厳密一致。追加コスト較正135timed/9warmも一致。A/A flag3/3、低overhead補助flag2/3（+2.95/+5.31/−3.17%の全観測保持）。比率にはtracing/schedulingを含み、最適化率・CPU cycle帰属・CPU対GPU速度比へ換算しない。extract/search fixtureの較正限界、全route/multi-seed/graph速度未完了を残し、D236/製品/既定を維持する。
+記録: [全結果](rbpf_phase_profile_20261016.json)、[完了照合](rbpf_phase_profile_completion_check_20261016.json)、[計測API・全phase・限界](../internal_docs/rbpf_phase_profile_2026_10_16.md)。
+
+## D237: Do not adopt native worst-CP selection without a passing full-step gate (2026-10-16)
+
+`_shrink_worst`の全pair DD展開/CP行走査をC++へまとめ、任意精度整数差→FP64、元の演算順・最初のstrict最大値・元のcopy/drop tailを維持した。未対応型/配列/数値域は元処理へfallback。D236の既存3拡張/数値DLL・粒子/候補/prior/閾値/RNGを維持する。
+525timed完全step/35warmを同backend D236と比較し、CPU/GPU同backend副screen/GPU主screenは全て0/7。A/A失敗5/7を含む全raw/負値を保持。CPU+21.15/+22.48/+14.02%の観測も採用せず、A/A合格の2条件は−0.23/+6.51%で10%未達。完了測定の再試行なし、D236/製品/既定を維持する。
+84tests PASS、memcheck18PASS/errors/leaks0。実CPU/GPU×元cluster0/1各200、計800paired保存state/軌跡bits・全cfg・従来全metadataがD236と一致し、新native呼出し正/fallback0。初回2fixture失敗とtimed前のhelper label失敗も保存し、別v2へ修正した。全route/multi-seed/graph速度gateは未完了。
+記録: [全結果](rbpf_shrink_20261016.json)、[完了照合](rbpf_shrink_completion_check_20261016.json)、[実装・全条件・限界](../internal_docs/rbpf_shrink_2026_10_16.md)、[build/API](probes/rbpf_shrink/README.md)。
+
+## D236: Exact held-DD feedback masses add two CPU wins (2026-10-16)
+
+D235の不変C++ kernelでhold解除用DD展開/質量を集計し、元のrounding、粒子順和、strict解除閾値/streak/majority/commit/graph順を維持する。preludeを1回実行した後に最新のH/holdを読み、前段DD cacheは共有しない。CPP/3拡張/数値DLLは不変、新buildなし。
+6feedback有効/事前hold条件+1無効control、525timed完全step/35warm。D235 CPU比で2/6有効条件が19.28%/14.70%短縮、双方5/5round。全体CPU2/7、旧GPU副screen2/7、GPU対最適化CPUを含む主screen0/7。A/A失敗2、小利得、無効controlの−2.28%を保持、再測定なし。過去D235とはworkloadが異なるので短縮率を足さない。
+79tests PASS、memcheck18PASS/errors/leaks0。実CPU/GPU×cluster0/1各200、計800paired保存state/軌跡bitsと全cfgが同backendのD235と一致。既定設定でも新処理/held target正、fallback0。全route/multi-seed/実graph速度gateは未完了、製品・モデル・既定は維持。
+記録: [全結果](rbpf_feedback_mass_20261016.json)、[完了照合](rbpf_feedback_mass_completion_check_20261016.json)、[実装・全条件・API・限界](../internal_docs/rbpf_feedback_mass_2026_10_16.md)。
+
+## D235: Fused exact DD/component mass improves three CPU conditions (2026-10-16)
+
+全粒子DD展開とFIX成分一致質量をC++へまとめ、元の任意精度整数減算→FP64変換、粒子順FP64加算、dict順、厳密な閾値/RNGを維持する。非targetのoverflowも保持し、型/binding/layout等は元blockへfallback。DD/key/mass cacheなし。D234の最適化CPU/GPUを基準に450timed完全step/30warmを保存した。
+CPU主screen3/6で21.58〜23.16%短縮、各5/5round。うち2条件はcluster無効。旧GPU同士の副screen3/6、GPU対最適化後CPUを含む主screen0/6。A/A失敗1、高多様性の小利得、負値を保持し、再測定なし。全条件/graphへ一般化しない。
+86tests PASS、memcheck17PASS/errors/leaks0。実CPU/GPU×cluster0/1で各200、計800paired保存state/軌跡bitsが同backendのD234と一致し、既定構成でも新処理call正を確認。初回object-dtype fixture失敗と補助buffer-domain fixture失敗は原source/logと別修正validatorを保存した。実装/buildは不変。全route/multi-seed gateは未完了、製品・モデル・既定は維持。
+記録: [全結果](rbpf_component_mass_20261016.json)、[完了照合](rbpf_component_mass_completion_check_20261016.json)、[全条件・精度・限界](../internal_docs/rbpf_component_mass_2026_10_16.md)、[build/API](probes/rbpf_component_mass/README.md)。
+
+## D234: Exact native parent overlap on D233 (2026-10-16)
+
+高多様性条件（128粒子/128初期仮説/128行/8group）のCPU paired短縮は59.14%、5/5round改善、CPU主screenはFAIL。 CPU主screen0/6、旧GPU副screen0/6、GPU主screen0/6、A/A失敗4/6。最初の4条件は新score呼出し0の対照で、そこでの値を照合処理の利得としない。D233の最適化CPU/GPUを基準に450timed完全step/30warmを保存し、全失敗も保持、再測定なし。
+共通衛星の整数差を任意精度のままC++で比較し、元cluster選択のcode/閾値/同点/state identity、全候補/prior/数値DLL/FP64/RNGを維持する。追加の入力/key cacheなし。71tests PASS、memcheck13PASS/errors/leaks0。既定構成の実CPU/GPU各200ではparent呼出し0で非回帰のみ。別途cluster_relin=1を新旧双方へ指定し、その他cfg同一/新処理call正を確認した各200も全保存state・軌跡bitsが同backendのD233と一致した。計800paired stepの精度prefixで、全route/multi-seed/実graph速度gateは未完了。高負荷合成条件の利得を元のtop2実走へ一般化しない。製品・モデル・既定は不変。
+記録: [全結果](rbpf_parent_score_20261016.json)、[完了照合](rbpf_parent_score_completion_check_20261016.json)、[全条件・限界](../internal_docs/rbpf_parent_score_2026_10_16.md)、[build/API](probes/rbpf_parent_score/README.md)。
+
+## D233: Native integer keys improve two complete-step CPU conditions (2026-10-16)
+
+CPython C++拡張で元と同じ任意精度整数canonical key/hashを生成する。型/helper/例外は元へfallbackし、H/key cacheを追加しない。D229のmove/RNG/commit、FP64/2IRLS、数値DLLを維持。D231 warp/D232 DDは併用せず、製品/凍結runtime/既定は不変。
+450timed完全step/30warm statesを保存。64/128粒子・32初期仮説・64行・4groupのCPU同士で10.27%/13.21%短縮、各5of5round。CPU主screen2/6、旧GPU同士の副screen1/6、GPU対旧GPU/最適化CPUの主screen0/6。2A/A失敗、高多様性slowdownを保持、再測定なし。全PF/graphへ一般化しない。
+65tests PASS（1config+元underflow2warnings）、memcheck14PASS/1warning/errors/leaks0。実CPU/GPU各200、計400PF stepで同backendのD229へ全保存state・軌跡配列bitsが一致。実走は精度のみ、全route/multi-seed gate未完了。CPP入力寿命は10,000call参照数とCPython3.12.10のGC100callback stressも確認した。
+記録: [全結果](rbpf_native_canonical_20261016.json)、[完了照合](rbpf_native_canonical_completion_check_20261016.json)、[実装・全条件・限界](../internal_docs/rbpf_native_canonical_2026_10_16.md)、[build/API](probes/rbpf_canonical/README.md)。
+
+## D232: Native exact DD expansion helps larger batches; keep PF defaults (2026-10-16)
+
+Python仮説辞書→DD配列をC++/CPython C APIへ移し、任意精度整数の差→FP64一回変換、NaN/order、全候補/FP64/2IRLS/モデルを維持した。D226の数値/転送DLLは不変、D231 warpと併用しない。未対応型/custom hookは元処理へ戻す。
+675完全バッチと450完全PF-stepを測定。64rows/64uniqueで旧GPU比25.14%、最適化後C++比24.22%短縮、各5of5round。バッチ主GPU screen3/9、C++2/9合格。ただし全step CPU/GPU screen0/6、各測定群の3条件がA/A不合格。全raw/失敗を保持、再測定なし。バッチ利得を全PF/FGOへ外挿せず、既定を維持する。
+測定版を凍結し、同じSHAの元ソースのmodule/isolated AST compile形を正確に照合する実走variantを分離した。guard以外のASTは同一で、variantは未測定。最初の実走guard拒否とtest fixture誤りも保持。実走対応129tests PASS（基礎127を再使用+2追加）、memcheck基礎16/実走18PASS、各CUDA errors/leaks0。実CPU/GPU各200、合計400PF stepの保存stateと軌跡配列が同じbackendのD229と一致した。実走は精度のみ、全route/multi-seed gate未完了。
+記録: [全結果](rbpf_dd_pack_20261016.json)、[完了照合](rbpf_dd_pack_completion_check_20261016.json)、[実装・全条件・限界](../internal_docs/rbpf_dd_pack_2026_10_16.md)、[build/API](probes/rbpf_dd_pack/README.md)。
+
+## D231: Preserve exact warp LU/log parallelism as an explicit experiment (2026-10-16)
+
+GPU尤度のserial LUをwarp内の独立row更新と対角logへ並列化し、pivot/各演算/最後の加算順、全候補、2IRLS、FP64を維持した。pageable転送/CPU/旧serial kernelは同じで、旧kernel全5144 SASS instructionもopcode/operandが同一。warpは5080命令、register56/shared30904B/stack32B/spill0は同じ。製品/凍結runtime/既定変更なし。
+完全バッチ9条件×5round×3group×5mode=675timed calls、warp/AA/新serial対照比較は各135。64rows/21uniqueで旧GPU比7.19%、C++比12.66%短縮、各5/5round。64uniqueは5.60%/23.14%。ただし両baseline比10%以上の主gateは0/9合格、5AA/4serial対照が不合格。全失敗/roundを保存して再測定せず、既定適用を見送る。kernelのみの時間やC++比の大きな値で追加利得基準を置き換えない。
+79新tests PASS・設定warning1、11,440直接LU行列と全GPU score/diagnosticがbit一致。CUDA3checker各11PASS・各warning1・error/hazard/leak0。実run3/seed20260710/400epochのGPU200PF stepも旧D229 GPUと全保存state/軌跡配列が一致、197有効batch/fallback0。旧対照は精度のみで全route/multi-seed gate未完了。
+記録: [全結果](rbpf_warp_likelihood_20261016.json)、[完了照合](rbpf_warp_likelihood_completion_check_20261016.json)、[実装・全条件・限界](../internal_docs/rbpf_warp_likelihood_2026_10_16.md)、[build/API](probes/rbpf_likelihood_warp/README.md)。
+
+## D230: Reject common RBPF proposal-template reuse as a default optimization (2026-10-16)
+
+D229に共通候補stagingと同じ提案確率の呼出内再利用を加え、全粒子/候補/prior/RNG/commit/FP64を維持した。完全step450timed calls、候補比較180、A/A90。C++対D229とGPU対候補C++はともに0/6主gate合格、最良C++6.10%・3/5round。1条件のA/A中央値-8.18%を含む全round/失敗を保持し、再測定しない。D229を維持し、製品/既定変更なし。
+参考GPU同backend比では2条件17.33%/17.70%短縮だが、主gateとは別で、候補C++へのGPU優位を示さない。全450timed state/42warm stateが同じbackendとbit一致、候補scalarもliteral元scalarと一致。
+実run3/seed20260710/400epochの追加200PF stepで全保存state/軌跡配列bitが一致。12,608提案要求を850実計算へ、206,522 canonical要求を45,179へ減らしたが、各1回のunpinned実走を速度gateにはしない。速度screen不合格後は準備済み7job案を実行せず、精度確認2jobに限定した。全route/multi-seed gate未完了。
+新76tests PASS・設定warning1、memcheck12PASS・warning1・error/leak0。数値source/DLLと36製品source/5extensions/PF build PE、過去report/archiveは不変。実験用sourceと全rawを保存する。
+記録: [全結果](rbpf_proposal_reuse_20261016.json)、[完了照合](rbpf_proposal_reuse_completion_check_20261016.json)、[実装・全条件・限界](../internal_docs/rbpf_proposal_reuse_2026_10_16.md)。
+
+## D229: Memoize RBPF canonical keys locally; retain the full-epoch/DD experiment (2026-10-16)
+
+D228へ追加する明示`MoveKeyMemoStep`を実装。move staging中だけ同じH objectのcanonical keyを再利用し、元bound method/global・全粒子/move/prior/RNG/commit・数値式は保持する。先に試したfull-epoch canonical/DD版も全結果を保存する。製品/凍結runtime/既定変更なし。
+2実験計900timed complete steps、新候補比較450、固定full対照90、A/A180。軽量C++は重複の多い2条件でD228比12.19%/12.72%短縮、各5/5round・A/A合格。残る4条件には約7%遅延もあり自動適用しない。full版は1/6、全step canonicalのみも1/6合格。3つの最初のA/A不合格を保持する。DD追加分とGPU対各C++は0/6合格。後の固定full対照で最初の採否を上書きしない。
+軽量C++は実run1/run2/run3・2seedのprefix計1200 PF step、full C++と軽量GPUは各200stepで、同じbackendのD228と保存state/全軌跡配列bitが一致。軽量C++では1,253,697要求moveを保持した。過去の対照は精度のみ、単回unpinned PF時間は診断値でwhole-graph速度gateにはしない。全route/multi-seed精度gate未完了。
+新97tests PASS（68/29、各設定warning1）、CUDA memcheck12PASS・warning1・error/leak0。native数値source/DLL、36製品source、5installed extensionsとPF build PE、過去report/archiveは不変。再利用変更は同じbackendへ許容差なし、元NumPy/nativeの微小差とscalar NaN payloadのcodec制限は従来どおり。
+記録: [全結果](rbpf_epoch_memo_20261016.json)、[完了照合](rbpf_epoch_memo_completion_check_20261016.json)、[実装・全条件・再現](../internal_docs/rbpf_epoch_memo_2026_10_16.md)。
+
+## D228: Reuse identical pure RBPF move construction without dropping moves (2026-10-16)
+
+同一epochの同じ整数辞書から作るextend/shrinkだけを再利用する明示callerを実装。gauge・辞書順・絶対整数値を保つ厳密keyを使い、非標準型は再利用せず元methodへ戻す。D227のmove/weight/choiceコードはそのまま使い、全粒子・move・prior・RNG・commit順を維持。製品/凍結runtime/既定変更なし。
+完全step合成6条件×5round×3group×7mode、630timed calls、再利用3方式の比較270、A/A90。重複の多い64粒子/初期6Hで、既存C++から29.58%（64rows）/36.11%（128rows）のpaired短縮、各5/5round・A/A合格。残る4条件は改善不足・高多様性の遅延・A/A不合格を含め全保持し、再試行しない。GPU対再利用C++は0/6合格。
+実run2/run3・2seedの400/400/800epoch、合計1000 PF stepで既存C++と再利用C++の保存state/全軌跡配列がbit一致。GPUも凍結GPU200stepと全保存state一致。各extend/shrinkは計62,361→10,152call（各prefix約83〜87%削減）、全1,041,720要求moveを保持。実走の単回時間差は約3〜22%だがunpinned・compile/cache/負荷/順序を統制せず、全体速度gateに数えない。全route精度gate未完了。
+新65tests PASS・設定warning1。新caller memcheck10PASS・warning1・error/leak0。数値source/DLLはD226と同一。再利用変更は同じbackendに対して許容差なしのbit一致を要求。測定後の時間外hash helperだけのlint修正は、測定sourceとtimed AST同一性を保存し、再測定していない。
+記録: [全結果](rbpf_move_reuse_20261016.json)、[完了照合](rbpf_move_reuse_completion_check_20261016.json)、[実装・限界・再現](../internal_docs/rbpf_move_reuse_2026_10_16.md)。
+
+## D227: Connect batched likelihood to the complete frozen RBPF step (2026-10-16)
+
+extend/shrinkを各held particleにつき各1回生成し、全候補・prior・粒子順・乱数順を維持する明示callerを実装。元stepのmove評価部分だけを置換し、条件付き位置・FIX・feedback・resamplingは元の処理を使う。製品/凍結runtime/既定変更なし。
+実Tokyo run3/seed20260710の400epoch（実PF200step、有効197）を元実装/GPUで比較。報告位置・float位置・Nav/conditional covariance・FIX・粒子・RNG・保持状態が一致、位置/Pの配列bitも一致。gamma/ESS等は最大5.97e-13差。native197batch、fallback0、unique中央値21。全区間・multi-seed精度は未検証。
+完全step合成比較6条件×5round×3group×5modeの450timed calls（候補270/A/A90）。C++/GPUは対元screen各5/6条件PASS。64rows/4groupではC++22.25〜49.29%、GPU17.95〜41.98%のpaired短縮。GPU対C++は全6条件で不合格、3.54〜15.78%遅い。部品のGPU利得をcaller全体へ外挿せず、既定GPU化は保留する。
+新65tests PASS・設定warning1。新caller memcheck8PASS・warning1・error/leak0。CUDA数値source/DLLはD226と同一。実走の各1回のPF時間12.960→11.742sは診断値であり、統制された全体速度gateとは扱わない。初期strict期待値失敗と全rawを保持。
+記録: [全結果](rbpf_move_batch_integration_20261016.json)、[完了照合](rbpf_move_batch_integration_completion_check_20261016.json)、[接続・採否・再現](../internal_docs/rbpf_move_batch_integration_2026_10_16.md)。
+
+## D226: Implement explicit fused RBPF likelihood C++/GPU prototypes (2026-10-16)
+
+元のRBPF尤度の残差〜初期solve〜2IRLS〜mixture/Laplace計算を1CUDA launchに融合。同じ式のC++ CPU baseline、要求順dedup/scatter API、異なるsourceを拒否する明示adapterを追加した。step/graph/particle/RNG・製品source/PE/既定は変更しない。
+3transport版の数値source/SASS全5144命令と返却bitsは同じ。3実験計2520timed batch calls、1440candidate/540AA比較。pack・転送・返却込み。全raw/不合格/個別roundを保持する。
+最終同一比較の64観測では、32uniqueがC++1.360ms→GPU1.198ms（paired12.09%/5of5）、64uniqueが2.745→2.344ms（17.31%/5of5）。21uniqueは1.044→.979msだがpaired5.27%で10%gate未達。大処理や8groupも一様には改善せず、既定GPU化は不採用。元NumPyに対する一括化の効果とGPU対C++の効果を分ける。
+元NumPyとはLL最大9.09e-13差がありbit完全一致ではない。54途中値診断/各backend432conditionalでoffset差最大4.22e-15。7同点/近傍ケースの順位は一致したが、実測位精度や完全RBPFの離散/RNG一致は未評価。
+共通72tests（初回版65、後続2版各72）PASS、各設定warning1。pageable版のCUDA3checker各16PASS・error/hazard/leak0、初回版memcheckも16PASS・error/leak0。workspace payloadとpinned/pageable追加host量、初期build/試験失敗も記録する。
+記録: [全raw/診断JSON](rbpf_likelihood_gpu_prototype_20261016.json)、[完了検証](rbpf_likelihood_gpu_prototype_completion_check_20261016.json)、[実装と採否](../internal_docs/rbpf_likelihood_gpu_prototype_2026_10_16.md)、[再現/API](probes/rbpf_likelihood_batch/README.md)。
+
+## D225: RBPF/FGO GPU feasibility, no product change (2026-10-16)
+
+既存FGO off/on/auto/同一off A/Aを8条件5round×3groupで再測定。alloc・transfer・全実行反復・同期host返却を含む480timed calls。
+VD/Doppler/IMUは512状態で114.128→40.295ms、800状態で431.337→78.180ms（各p50）、paired短縮64.69%/82.69%、各5/5round改善。40/160状態のGPU強制は遅い。
+全A/A条件中央値abs5%以内。native accepted-step objective低下、合成位置更新を別診断で確認した。最終位置bit/反復数/MSEはCPU/GPU一致するが、全状態には最大8.53e-14差がある。
+**basic全4条件は初期値のまま終了したため有効な最適化の高速化に数えない。** 全rawを保存し、都合のよい入力へ変えて測り直さない。
+別Nsight診断でDpotrf/Dpotrs各6call/GPU実行を確認。91既存FGO/wrapper tests PASS、warning2件。別の同一first-step CPU LAPACK比較も残すが、CPU部品時間をwhole FGO時間とは比較しない。
+比較baselineは既存scalar Choleskyであり、最適CPUやRBPF全体への利得ではない。製品/既定/精度gate変更、実PPC/GTSAM RBPFの新規軌跡評価、CUDA checkerは行っていない。
+
+RBPFの優先案は、実unique仮説の残差〜既存IRLS〜求解〜尤度の融合batch、次に履歴別連続rootのFP64 QR/triangular solveとworkspace常駐化。共有可能な行列だけ共有し、整数domain・tail確率境界・全候補・RNGは保つ。過去N64/unique21のNumPy負例を新CUDA実装の測定と混同しない。
+記録: [全raw/診断JSON](rbpf_fgo_gpu_feasibility_20261016.json)、[完了検証](rbpf_fgo_gpu_feasibility_completion_check_20261016.json)、[検討と実装順序](../internal_docs/rbpf_fgo_gpu_feasibility_2026_10_16.md)、[比較helper](bench_rbpf_fgo_gpu_feasibility.py)、[CPU LAPACK probe](bench_fgo_lapack_probe.py)。
+
+## D224: Reject certified FP64 division-sharing component probes (2026-10-16)
+
+**3方式とも不採用。製品変更なし、D223採用版を維持する。** PF Doppler幾何の3つの同一分母除算を狙い、正しく丸めたFP64逆数を共有し、元のRN除算と同じbitになると保証できた場合だけ採用する方式を分離DLLで検証した。
+初回は有向FMAのresidual区間とRN residualの隣接区間。別source/planでは補正商の丸めcellをexactな2の冪thresholdで保証する方式を試した。未保証・範囲外・例外値は元のRN除算へ戻す。2回目のmode2は初回有向区間の遅い対照であり、第4の方式ではない。
+
+測定前に両サイズの12回反復でpaired中央値10%以上かつ4/5round以上改善、同一baseline同士A/Aの全条件中央値差5%未満、全返却bit一致を要求した。部品gate通過後にも別のPF全体評価が必要とし、再確認retryは行わない。
+65,536/1,000,000行×1/12反復、5交互round×5group、各groupでbaseline/候補2つ/同一baselineを順次回転して測定する。各sampleはwarm1launch＋timed3launchのCUDA event時間。計数instrumentationはtiming時off、setup・alloc・H2D/D2H・hash・参照計算は時間外。自processだけ最後の許可CPUへpin、normal priority、host/GPUは非占有。
+
+paired短縮率（負値は遅延、各方式/条件とも改善0/5round）:
+
+| 方式 | 65,536行 / 1回 | 65,536行 / 12回 | 1M行 / 1回 | 1M行 / 12回 |
+|:---|---:|---:|---:|---:|
+| 有向FMA residual区間 | -67.03% | -59.71% | -86.16% | -60.79% |
+| RN residualの隣接区間 | -111.31% | -70.23% | -141.10% | -71.12% |
+| 補正商＋丸めcell保証 | -63.29% | -53.34% | -78.99% | -54.05% |
+| 初回有向区間の再掲対照 | -72.03% | -59.26% | -88.06% | -60.60% |
+
+同一baseline A/Aの4条件中央値は初回-1.00%, +0.02%, +0.10%, -0.02%、2回目+0.41%, +0.03%, +0.46%, +0.18%。
+全条件中央値は5%以内だが、2回目の個別20roundのうち3roundは5%を超え、最大絶対差27.97%だった。この揺れを含めた全rawを保持し、追加測定で合格へ寄せない。独立した絶対時間中央値もJSONへ残すが、その比をpaired推定量とは扱わない。
+
+各experiment/variantで単発**1,188,864商のbit**と、12回反復の**393,216累積返却値**がnative RN baselineと一致。後者の内部商4,718,592個は個別dump比較ではない。geometry・広いnormal scale・raw IEEE・NaN/Inf/符号付きzero等を使い、有限値subset42,785商はPython exact Fractionでも確認した。両experimentの入力/seedは同じで、独立な追加coverageと重複計上しない。
+timingでも全返却hashを照合し、計400候補比較＋200同一baseline A/A比較が一致した。これは全入力の網羅証明や新しい実データ測位誤差評価ではない。
+
+分離DLLの同一baselineの通常12反復hot loopにMUFU.RCP64Hが3つ残ることをSASSで確認した。製品PFの機械語を今回確認したという意味ではない。
+timed kernelのregister数はbaseline53、有向区間57、隣接区間57、丸めcell55。全kernelでstack/spill0。今回の実測では逆数共有による節約を保証処理等の負担が上回り、PFへ組み込む根拠がない。
+未測定のsigned-zero fixture修正、測定前ctypes DLL依存load失敗もsource/plan/logとともに保存した。
+
+30製品source、4installed native PE、PF build PEは測定前後のSHA一致。D220/D221/D222/D223のreportとarchiveも保持する。製品は変更していないため今回の製品regression/CUDA checker再実行は行わず、前回の試験結果を今回の新規PASSとは数えない。
+記録: [全raw入り不採用JSON](pf_certified_division_rejected_20261016.json)、[完了検証](pf_certified_division_completion_check_20261016.json)、[保証の導出と再現手順](probes/certified_division/README.md)、[初回helper](bench_pf_certified_division.py)、[丸めcell helper](bench_pf_rounding_cell.py)。
+今回の結果は合成部品kernelのscreenであり、PF全体の速度/測位精度や別GPUの評価ではない。
+
+## D223: Reuse bounded exact composite reflection-diffraction geometry (2026-10-16)
+
+反射→回折(RD)/回折→反射(DR)の複合経路で、同じ三角形のnormal・receiver/satellite鏡像、同じray方向/長さ、edge/source-edge定数、点内判定の不変3dotを呼出内だけで再利用する。
+**全三角形×edge×RD/DR候補、幾何/point/距離predicateの入力・順序・閾値、FP64の演算、stable最終sort/既存limits、独立返却点、元の物理モデル、samples/RNGを保持**。
+既存12 scalar helpersはASTまで元と同じで、非適用時は元のscalar loop/callを通る。適用時は別のprepared helpersを使う。D222のloss再利用は行わず、元のloss/amplitude呼出数も同じ。
+変更はreflection_diffraction.pyのみ。D220、D221/D222不採用判断、一回/二回反射・GPU回折・UTD・PF/native PE/CUDA/H/CPPは同一。
+
+64三角形以下、512edge以下、三角形×edge<=8192、pair×衛星>=256、元9 scalar/4 prepared helpersとcache classのidentity、通常warn/ignoreかつunderflow ignore、finite座標abs<=1e50に限定する。
+この上限はcacheの適用条件であり、探索数を制限しない。strict/underflow-warning/差替helper/unsafe/小処理/上限外は全候補を元のscalarで計算する。
+lazy cacheは最大8192 image-edge slotsを持ち、call終了で解放する。永続数値cache・新native/GPU workspaceは追加しない。
+
+2/6三角形の平行壁×16/64edge×12衛星×2600/260000samples、20200km距離、狭いazimuth幅と異なるelevationを使う。
+各衛星にRD/DRを含む4つの実複合replicaを返し、**native LOS・従来GPU multipath・全CPU複合候補・clock/Doppler・channel構築・実CUDA IQ返却までの都市compute_epoch全体**を5交互round×5callで測定する。
+scene構築・warm・全出力hash・tracemallocはtiming外、関数選択/復元wrapperは両版対称にtiming内。自前processだけ最後の許可CPUへpin、normal priority、host/GPU非占有。
+今回の新規比較では、各隣接pairの短縮率をround内で中央値にし、その5roundの中央値を主指標と事前固定した。独立した絶対時間中央値/比も全rawとともに残す。
+全8主要条件で10%以上・4/5round以上改善、全15対照で遅延5%以内、測定前後の同一baseline同士A/Aは差5%以内を要求する。D221/D222の結果は再解釈しない。
+
+| 条件 | D220維持版 (ms) | 採用版 (ms) | paired短縮 | 改善round | call/round |
+|:---|---:|---:|---:|---:|---:|
+| triangles2/edges16/satellites12/samples2600/urban | 58.4654 | 44.3619 | 23.46% | 5/5 | 5 |
+| triangles2/edges16/satellites12/samples260000/urban | 68.2047 | 53.4755 | 23.89% | 5/5 | 5 |
+| triangles2/edges64/satellites12/samples2600/urban | 248.0389 | 186.4336 | 24.06% | 5/5 | 5 |
+| triangles2/edges64/satellites12/samples260000/urban | 288.3292 | 218.3479 | 21.55% | 5/5 | 5 |
+| triangles6/edges16/satellites12/samples2600/urban | 237.8609 | 188.2840 | 22.07% | 5/5 | 5 |
+| triangles6/edges16/satellites12/samples260000/urban | 209.1523 | 160.1217 | 20.83% | 5/5 | 5 |
+| triangles6/edges64/satellites12/samples2600/urban | 714.0404 | 532.7550 | 25.77% | 5/5 | 5 |
+| triangles6/edges64/satellites12/samples260000/urban | 774.2568 | 570.5405 | 20.94% | 5/5 | 5 |
+
+対照（非適用経路の時間差を今回の利得とは扱わない）:
+
+| 条件 | D220維持版 (ms) | 採用版 (ms) | paired短縮 | 改善round | call/round |
+|:---|---:|---:|---:|---:|---:|
+| single_urban | 5.1548 | 5.1753 | -0.22% | 1/5 | 21 |
+| tiny_paths | 0.3130 | 0.3066 | -0.03% | 2/5 | 31 |
+| strict_paths | 73.2294 | 77.6554 | -1.92% | 2/5 | 21 |
+| strict_urban | 74.4383 | 73.5471 | -2.89% | 2/5 | 21 |
+| under_warn_paths | 64.5944 | 62.5470 | 0.05% | 3/5 | 21 |
+| disabled_urban | 1.1952 | 1.2081 | 0.02% | 3/5 | 31 |
+| no_building_urban | 0.4779 | 0.4773 | 0.16% | 4/5 | 31 |
+| empty_paths | 0.0040 | 0.0039 | 0.00% | 2/5 | 31 |
+| triangle_bound_paths | 41.4179 | 42.0014 | -0.22% | 2/5 | 21 |
+| edge_bound_paths | 133.1883 | 135.5333 | 1.97% | 4/5 | 21 |
+| no_orders_urban | 1.3819 | 1.3825 | 0.14% | 3/5 | 31 |
+| RD_urban | 34.9916 | 28.4446 | 23.97% | 5/5 | 9 |
+| DR_urban | 56.3992 | 41.4981 | 20.56% | 5/5 | 9 |
+| sparse_urban | 16.1720 | 14.3495 | 18.59% | 5/5 | 9 |
+| wide_urban | 168.9338 | 129.2288 | 19.49% | 4/5 | 5 |
+
+同一baselineコード同士のA/Aは前-2.10%、後-0.40%。全主要/対照/AAが事前gateを通過した。
+最初の共有helper案は主要1条件が3/5改善に留まり、65三角形対照も-7.18%となったため不採用。全995比較+50AAのrawと不合格gateを保存した。
+そのsourceを測り直さず、元のscalar helpers/loopを保つ構造へ修正して別source/planで上記を評価した。初回source/testと途中のfixture失敗もarchiveへ保持する。
+最初のsceneは選択top4がDRのみでtiming前assertに失敗し、両orderが返るimage-ray配置へ修正した。最初の未測定draftはfallbackの演算順を元へ修正した。
+
+採用sourceは全**1765 timed pairsで全path・IQ・metadataがbit一致**。同一コードAA110pairsもbit一致。
+新79testsはbyte-exact元oracleに対して全candidateの幾何途中値/点内判定/損失/返却順、厳格設定・極端scale・NaN/Inf・警告/例外・9 scalar hooks・work/上限境界・layout・所有権/入力変更、実CUDA IQを照合し、元12 scalar helperのAST一致も確認する。
+関連**661tests PASS、既存sample未配置2skip、既存deprecation warning894件**。memcheck/racecheck/synccheckは各123tests PASS、error/hazard/leak0（pytest設定warning各1）。実際にimportした3PEのSHAを各logへ保存した。
+診断profileはRD384/DR384/geometry768とpoint/損失/振幅呼出数が同じ。mirrorだけ768 → 26回、unit計算を720回削減した。profile時間は利得に使わない。
+6三角形/64edgeの都市処理でtracemalloc CPU peakは279,338 → 352,698B。
+入力/warmを除くPython/NumPy traced peakで、RSS/native/GPU memoryではない。全対照のpeak/liveもJSONへ保存する。
+
+効果は複合経路を有効にした合成都市IQ。既定では複合経路offであり、既定設定全体の短縮や長期実データ測位誤差/PF全体/別GPUの新規評価は主張しない。過去の速度比との積は取らない。
+記録: [測定JSON](composite_geometry_gpu_20261016.json)、[完了検証](composite_geometry_completion_check_20261016.json)、[比較helper](bench_composite_geometry_compare.py)、
+[採用patch](probes/composite_geometry_20261016.patch)、[79tests](../tests/test_composite_geometry.py)、[元scalar oracle](../tests/oracles/composite_geometry_scalar.py)。
+再現: helperへbaseline-dir/source-record/outputを指定し、`--triangles 2 6 --edges 16 64 --satellites 12 --samples 2600 260000 --rounds 5 --repeats 5`。
+
+## D222: Reject CPU knife-edge repeated-loss probe (2026-10-16)
+
+**不採用。製品sourceはD220へbyte-exactで復元した。** CPU knife-edge候補のattenuation_dbを振幅式でも使い、同じlossの二重計算を省く案を検証した。
+FP64・全edge候補・geometry/validity/excess/shadowの式/判定順/閾値・stable sort/既存max_paths・独立返却点・物理モデル・IQ samples・seedを保持した。
+public scalar/vector helpersとGPU関数のASTを維持し、振幅も元の0-D配列化・negate/divide/power/clip/itemを使う。
+元8 helpersのidentity、64edge以上かつedge×衛星>=256、通常warn/ignoreかつunderflow ignore、finiteかつabs(v)<=1e50に限定する。
+strict/underflow-warning/差替helper/小処理/unsafe値は元のloss二回・amplitude呼出を保つ。固定helper identity tupleを保持し、数値結果の永続cache・新vector・native/GPU workspaceは追加しない。
+
+128/512edge（細い壁2triangles/edge）×12/32衛星×2600/260000samples、実距離20200kmの衛星、各衛星4つの実回折replicaを使う。
+**native LOS・従来GPU multipath・全CPU knife-edge候補・clock/Doppler・channel構築・実CUDA IQ返却までの都市compute_epoch全体**を測定する。
+scene構築・warm・全出力hash・tracemallocはtiming外、関数選択/復元wrapperは両版対称にtiming内。自前processだけ最後の許可CPUへpin、normal priority、host/GPU非占有。
+
+初回は全8条件5交互round×3callで17.30〜23.95%短縮・全5/5round改善したが、対照tiny_paths -9.93%、strict_urban -9.60%が5%以内の条件を満たさなかった。
+凍結source記録が許す全条件一回だけの確認を、結果を見る前にplan JSONで宣言した。全8主要条件5round×5call、全16対照は各初回の2倍callとし、全初回rawを残す。
+確認主要8条件は各10%以上・4/5round以上、初回と合わせた10roundでも各10%以上・8/10round以上を要求する。
+非適用対照10条件は確認単独・pooled10roundの中央値比・全paired比の中央値の全てで5%超の遅延がないことを要求した。
+
+確認主要条件（不採用候補の結果であり、現行版への追加効果ではない）:
+
+| 条件 | D220 (ms) | 不採用候補 (ms) | 短縮 | 改善round | call/round |
+|:---|---:|---:|---:|---:|---:|
+| edges128/satellites12/samples2600/urban | 77.0851 | 62.0867 | 19.46% | 5/5 | 5 |
+| edges128/satellites12/samples260000/urban | 97.0296 | 72.5434 | 25.24% | 5/5 | 5 |
+| edges128/satellites32/samples2600/urban | 246.5809 | 212.3889 | 13.87% | 5/5 | 5 |
+| edges128/satellites32/samples260000/urban | 247.3631 | 210.2841 | 14.99% | 5/5 | 5 |
+| edges512/satellites12/samples2600/urban | 371.1213 | 307.3269 | 17.19% | 5/5 | 5 |
+| edges512/satellites12/samples260000/urban | 361.1110 | 297.6329 | 17.58% | 5/5 | 5 |
+| edges512/satellites32/samples2600/urban | 1019.0771 | 801.2190 | 21.38% | 5/5 | 5 |
+| edges512/satellites32/samples260000/urban | 860.1538 | 695.9074 | 19.10% | 5/5 | 5 |
+
+確認対照:
+
+| 条件 | D220 (ms) | 不採用候補 (ms) | 短縮 | 改善round | call/round |
+|:---|---:|---:|---:|---:|---:|
+| single_paths | 5.8416 | 5.8315 | 0.17% | 3/5 | 30 |
+| single_urban | 6.8746 | 6.8445 | 0.44% | 4/5 | 30 |
+| tiny_paths | 1.5839 | 1.5664 | 1.10% | 2/5 | 42 |
+| tiny_urban | 2.4055 | 2.4434 | -1.57% | 1/5 | 42 |
+| strict_paths | 76.2797 | 76.8081 | -0.69% | 2/5 | 14 |
+| strict_urban | 82.8237 | 83.4995 | -0.82% | 1/5 | 14 |
+| under_warn_paths | 77.5336 | 76.8316 | 0.91% | 2/5 | 14 |
+| disabled_urban | 1.3224 | 1.3181 | 0.33% | 4/5 | 62 |
+| GPU_urban | 2.8807 | 2.8910 | -0.36% | 2/5 | 30 |
+| empty_paths | 0.0156 | 0.0156 | 0.00% | 1/5 | 62 |
+| no_building_urban | 78.5704 | 63.3142 | 19.42% | 5/5 | 62 |
+| sparse_urban | 6.1663 | 6.1237 | 0.69% | 4/5 | 22 |
+| shadow_urban | 176.5509 | 161.9178 | 8.29% | 5/5 | 10 |
+| require_shadow_paths | 138.2647 | 145.4663 | -5.21% | 3/5 | 10 |
+| normal_paths | 76.8283 | 62.7135 | 18.37% | 5/5 | 14 |
+| large_single_urban | 28.9261 | 23.1461 | 19.98% | 5/5 | 18 |
+
+主要8条件は確認でも13.87〜25.24%短縮、初回を含む各10/10roundで改善した。
+しかしstrict_paths/strict_urbanのpooled10round中央値比はそれぞれ-5.15%/-8.27%で事前gateを満たさなかった。
+確認単独は-0.69%/-0.82%、pooled paired比中央値は-0.76%/-1.20%と差が小さく、非占有環境の変動もあるためsourceが遅延原因だとは断定しない。
+基準を変更して追加試行せず、全体として安定した利得を確認できないため不採用とした。require_shadow_pathsも確認は-5.21%で、影条件全般の安定した改善は主張しない。
+no_building_urbanはbuilding_model=Noneでも明示edge/max_paths4によりCPU回折が有効で、非適用対照ではない。
+最初の空urban mesh条件は比較元の既存native multipathがzero-triangle CUDA launchで失敗したため、CPU empty_pathsへ置き換え全対照を測り直した。
+その失敗した試行で完了した9条件には永続rawがなく、timed pair総数へ含めない。失敗stageとrunnerを保存した。
+
+全**3908 candidate timed pairsで全path・IQ・metadataがbit一致**。新72testsを含む候補654tests PASS、D220復元後582tests PASS。
+両回とも既存sample未配置2skip、既存deprecation warning894件。新testsは元source byte-exact oracleに対して全geometry/fresnel/shadow入力・候補順、loss二回→一回、
+work境界、strict/underflow/極端scale/NaN/Inf/警告/例外、8 helpers差替fallback、layout、early return、返却所有/入力変更、実CUDA IQを確認した。
+元振幅式2056 scalar値でも全bit一致。診断profileは全1536候補のgeometry/fresnel呼出を保ち、knife_edge_loss_dbだけ3072 → 1536回。profile時間は速度比へ使わない。
+候補はCUDA checker前に不採用とし、新規checkerの実行・合格は主張しない。復元後24source/3PEは元のbyte列と同じ。D220・D221のreports/archivesを保持した。
+
+記録: [不採用測定JSON](diffraction_loss_rejected_20261016.json)、[復元・完了検証](diffraction_loss_rejected_completion_check_20261016.json)、
+[不適用候補patch](probes/diffraction_loss_rejected_20261016.patch)、[比較helper](bench_diffraction_loss_compare.py)。候補source/72tests/oracle/rawはローカルignored archiveへ保持し、通常pytestへ不採用候補のtestsを残さない。
+長期実データの測位誤差/PF全体/別GPUの新規評価は行っていない。過去の速度比との積は取らない。
+
+## D221: Reject double-reflection scalar predicate/cache probe (2026-10-16)
+
+**不採用。製品sourceはD220へbyte-exactで復元した。** Python floatの有限値判定をmath.isfiniteへ置き換え、三角形の不変なNumPy scalar定数を一度だけ取得する案を検証した。
+FP64・全ordered pair・有限値/point/遮蔽predicateの入力と順序・閾値・stable sort/既存limits・物理モデル・samples・seedは維持した。
+primaryの利得だけで採用せず、非適用対照で速度を保てることも条件にした。候補patchは再現用の不適用patchとして残す。
+
+14/50三角形×12/32衛星×2600/260000samples、実二回反射を返す二面corner/背景建物sceneを使用。
+**native LOS・一回反射4paths・全二回反射pairs/遮蔽・clock/Doppler・channel構築・実CUDA IQ返却までの都市compute_epoch全体**を比較する。
+初回は全8条件5交互round×3call。1条件が3/5改善、一衛星urban対照に約10%遅い差が出たため採用せず、全8条件5round×5callと全11対照2倍callの確認を一度だけ行うと事前固定した。
+確認でも全primary10%以上/4of5改善、対照>-5%、さらに全10round primary10%以上/8of10改善、対照pair中央値>-5%を要求した。
+scene構築・warm・全出力hash・tracemallocはtiming外。自前processだけ最後の許可CPUへpin、normal priority、host/GPU非占有。
+
+確認primary（下表の利得は不採用候補であり、現行版への追加効果ではない）:
+
+| 条件 | D220 (ms) | 不採用候補 (ms) | 短縮 | 改善round | call/round |
+|:---|---:|---:|---:|---:|---:|
+| corner/triangles14/satellites12/samples2600/urban | 34.0238 | 29.7381 | 12.60% | 5/5 | 5 |
+| corner/triangles14/satellites12/samples260000/urban | 46.5403 | 37.6749 | 19.05% | 5/5 | 5 |
+| corner/triangles14/satellites32/samples2600/urban | 115.5513 | 102.2137 | 11.54% | 5/5 | 5 |
+| corner/triangles14/satellites32/samples260000/urban | 132.1844 | 112.1037 | 15.19% | 4/5 | 5 |
+| corner/triangles50/satellites12/samples2600/urban | 445.2392 | 355.4733 | 20.16% | 5/5 | 5 |
+| corner/triangles50/satellites12/samples260000/urban | 424.2869 | 315.4094 | 25.66% | 5/5 | 5 |
+| corner/triangles50/satellites32/samples2600/urban | 959.0609 | 703.9097 | 26.60% | 5/5 | 5 |
+| corner/triangles50/satellites32/samples260000/urban | 1100.0548 | 777.7277 | 29.30% | 5/5 | 5 |
+
+確認対照:
+
+| 条件 | D220 (ms) | 不採用候補 (ms) | 短縮 | 改善round | call/round |
+|:---|---:|---:|---:|---:|---:|
+| single_paths | 8.4275 | 8.6693 | -2.87% | 2/5 | 18 |
+| single_urban | 13.0341 | 14.4476 | -10.85% | 2/5 | 18 |
+| strict_paths | 123.0582 | 123.0387 | 0.02% | 3/5 | 10 |
+| strict_urban | 163.5009 | 169.1991 | -3.49% | 2/5 | 10 |
+| disabled_urban | 10.1195 | 9.2756 | 8.34% | 4/5 | 42 |
+| blocked_urban | 104.2585 | 52.4912 | 49.65% | 5/5 | 10 |
+| tiny_paths | 4.0284 | 4.0031 | 0.63% | 3/5 | 42 |
+| partial_paths | 44.3392 | 46.4500 | -4.76% | 0/5 | 42 |
+| partial_cached_paths | 25.8253 | 20.7803 | 19.53% | 5/5 | 10 |
+| cached_paths | 33.3509 | 22.7246 | 31.86% | 5/5 | 10 |
+| small_work_paths | 15.8454 | 15.9915 | -0.92% | 4/5 | 18 |
+
+single_urbanのround中央値は初回10.26110 → 11.29370ms（-10.06%）、
+確認13.03405 → 14.44760ms（-10.85%）で、事前に固定した対照gateを満たさなかった。
+一方、初回/確認を合わせたpairごとの短縮率中央値は-0.83%と差が小さい。
+非占有環境の変動があり、遅延の原因をsourceへ断定しない。全8primaryの全10round集計は10%以上/8of10以上改善したが、対照を含む安定した利得と確認できないため不採用とした。
+初回結果・確認結果・不利なroundも全て測定JSONへ保存し、条件や採用基準を変更して再試行しない。
+
+全**2105 candidate timed pairsで全path・IQ・metadataがbit一致**。新53testsを含む候補583tests PASS、D220復元後530tests PASS。
+両回とも既存sample未配置2skip、既存deprecation warning894件。新53testsはIEEE各class/3policy、全有限値判定のPython float型/入力bit/順序/回数、
+三角形境界/退化/大scaleの途中値、helper fallback、scalar/cache所有と入力変更を検証した。
+初期fixtureにnp.float64を混ぜた型assert3fail/194passのsource/outputも保存し、fixture変換だけ修正して上記583passを得た。
+候補はCUDA checker前に不採用。新しいCUDA checkerの実行・合格は主張しない。復元後source/PEは既存D220検査済みのbyte列と同一。
+
+診断では全2184pairとpoint/遮蔽/norm呼出数が同じ。不変3dotは1224 → 36、動的2dotは両版816（同一predicate呼出数と実cache充足数から算出）。
+256三角形の全barycentric cacheを埋める単独割当probeのCPU traced peakは197,168 → 239,704B。
+pair capacity64/既存edge cacheは両版で準備、cache保持中・入力構築を除くPython/NumPy traced memoryであり、RSS/GPU/都市処理全体のmemoryではない。profile/割当probeは速度比に使わない。
+finite-only/二重cache参照/scratch bufferの初期試作も保存。scratch版は遅くなり、finite-only追試の小条件9.89%は元の10%gateに届かなかった。
+
+記録: [不採用測定JSON](double_predicates_rejected_20261016.json)、[復元・完了検証](double_predicates_rejected_completion_check_20261016.json)、
+[不適用候補patch](probes/double_predicates_rejected_20261016.patch)。候補source/test/oracle/rawはローカルignored archiveへ全て保持し、通常pytestへ不採用候補のtestsを残さない。
+比較helperは既存[都市IQ helper](bench_double_reflection_invariants_compare.py)。既存D220以前のreports/archivesを変更せず、今回の長期実データ測位誤差/PF全体/別GPUの評価は行っていない。
+
+## D220: Reuse exact double-reflection geometry and intersection invariants (2026-10-16)
+
+二回反射の交点計算で、衛星に依存しない元のdot分子をlazyに再利用する。np.float64 scalarのまま保存し、元の除算の型と順序を保つ。
+候補内では同じFP64差ベクトルを使い、遮蔽判定では三角形の辺/退化判定cross/normと、同じsegmentの差/normを呼出内だけで再利用する。
+bounded3D外積はNumPyと同じ成分別multiply/subtractで評価し、汎用axis処理を省く。点内判定の元の5回のdotは同じ入力bitと順序のまま。
+**全ordered pair・全point/遮蔽predicateと閾値・FP64・stable sort/既存limits・独立した返却配列・物理モデル・samples・seedを保持**。
+変更はdouble_reflection.pyのみ。一回反射、native PE/CUDA/H/CPPとPFは同一。dotの再結合、FMA化、候補の間引きは行わない。
+
+適用はD219と同じfinite/bounded FP64・通常warn/ignoreかつunderflow ignore、2衛星以上、8..256三角形、64..32768pairs、pair数×衛星数>=1024。
+さらに全8 private helpersのidentityを確認し、差替predicateは元の引数と評価へ戻す。unsafe/strict/小処理もscalar評価を保つ。探索上限は追加しない。
+追加は最大32768 pair scalar/256 receiver scalarと256三角形分のlazy Python/NumPy geometry。永続/GPU workspaceは追加しない。
+
+直前D219と比較。14/50三角形×12/32衛星×2600/260000samples、二面cornerと背景建物、実距離20200kmの衛星で全衛星に二回反射を返す。
+**native LOS・一回反射4paths・全二回反射pairs/遮蔽・clock/Doppler・channel構築・実CUDA IQ返却までの都市compute_epoch全体**を5交互round×3callで測る。
+関数選択/復元wrapperは両版対称にtiming内。scene構築、first-use warm、全出力hash、tracemallocはtiming外。
+自前processだけ最後の許可CPUへpin、normal priority、host/GPU非占有。過去の速度比との積は取らない。
+
+| 条件 | D219 (ms) | 採用版 (ms) | 短縮 | 改善round | call/round |
+|:---|---:|---:|---:|---:|---:|
+| corner/triangles14/satellites12/samples2600/urban | 78.7185 | 37.4769 | 52.39% | 5/5 | 3 |
+| corner/triangles14/satellites12/samples260000/urban | 106.6826 | 61.6695 | 42.19% | 5/5 | 3 |
+| corner/triangles14/satellites32/samples2600/urban | 260.5769 | 105.9759 | 59.33% | 5/5 | 3 |
+| corner/triangles14/satellites32/samples260000/urban | 230.2779 | 108.8109 | 52.75% | 5/5 | 3 |
+| corner/triangles50/satellites12/samples2600/urban | 569.3878 | 369.7884 | 35.06% | 5/5 | 3 |
+| corner/triangles50/satellites12/samples260000/urban | 618.4954 | 383.8775 | 37.93% | 5/5 | 3 |
+| corner/triangles50/satellites32/samples2600/urban | 2085.3278 | 1149.9956 | 44.85% | 5/5 | 3 |
+| corner/triangles50/satellites32/samples260000/urban | 2010.5390 | 1111.8892 | 44.70% | 5/5 | 3 |
+
+非適用条件、遮蔽物、既存pair limit、public pathsの対照。各5round、call数は行ごとに明示する。非適用経路の時間差を利得としない。
+
+| 条件 | D219 (ms) | 採用版 (ms) | 短縮 | 改善round | call/round |
+|:---|---:|---:|---:|---:|---:|
+| single_paths | 6.1174 | 6.0846 | 0.54% | 2/5 | 9 |
+| single_urban | 8.9082 | 8.8871 | 0.24% | 2/5 | 9 |
+| strict_paths | 76.5702 | 76.2847 | 0.37% | 2/5 | 5 |
+| strict_urban | 110.8321 | 111.3097 | -0.43% | 1/5 | 5 |
+| disabled_urban | 7.2775 | 7.3209 | -0.60% | 3/5 | 21 |
+| blocked_urban | 67.9164 | 35.4448 | 47.81% | 5/5 | 5 |
+| tiny_paths | 1.5427 | 1.5812 | -2.50% | 1/5 | 21 |
+| partial_paths | 34.9129 | 35.2637 | -1.00% | 3/5 | 21 |
+| partial_cached_paths | 51.0952 | 17.8136 | 65.14% | 5/5 | 5 |
+| cached_paths | 57.6798 | 23.5311 | 59.20% | 5/5 | 5 |
+| small_work_paths | 12.6862 | 13.0102 | -2.55% | 3/5 | 9 |
+
+tracemalloc CPU peakは14三角形のpublic pathsで52,008 → 58,184B。
+全32768 pair images/numeratorsを準備する上限probeでは6,996,044 → 7,943,388B。
+入力構築を除くPython/NumPy traced peakであり、RSS/native C++/GPU memoryではない。上限probeはcacheを返却後まで保持して充足を確認するためlive bytesは通常呼出を表さない。
+新scalar payloadだけなら最大(32768+256)×8BにPython object/list metadataとgeometryを加える。上限probeは割当確認専用で速度比に使わない。
+
+最初の分子/差ベクトル再利用だけのprobeは約6〜13%で、小さい都市条件が10%gate未達だった。元source/raw/manifestを保存し、その後の遮蔽geometry/外積最適化を含む最終sourceだけを上表で評価した。
+最終sourceの**707 timed pairsは全path・全IQ・全metadataがbit一致**。新47testsはbyte-exact D219 oracleに対して全candidate/predicate順と
+交点・barycentric・segment途中値の全bit、np.float64分子の型/bit、cross12288組、endpoint/退化/短segment、追加hook/threshold変更を確認する。
+既存97testsも元scalar oracleとの極端scale/NaN/Inf/warning/例外、cache上限、layout、ownership、実CUDA IQ比較を継続する。
+関連**530tests PASS、既存sample未配置2skip、既存deprecation warning894件**。memcheck/racecheck/synccheckは各362tests PASS、CUDA error/hazard/leak0（pytest設定warning各1）。
+診断profileでも全2184pairと全point/遮蔽呼出は同一。double側normは950 → 134、
+np.dotは9066 → 5758。profile時間は利得に使わない。
+
+効果は二回反射を使う合成都市IQ経路。PF全体、長期実データの測位誤差分布、別GPUの新規評価は行っていない。
+記録: [測定JSON](double_geometry_gpu_20261016.json)、[完了検証](double_geometry_completion_check_20261016.json)、[採用patch](probes/double_geometry_20261016.patch)、
+[47tests](../tests/test_double_geometry.py)、[D219 oracle](../tests/oracles/double_geometry_baseline.py)、[比較helper](bench_double_reflection_invariants_compare.py)。
+再現: helperへbaseline-dir/source-record/outputを指定し、`--counts 14 50 --satellites 12 32 --samples 2600 260000 --scenes corner --rounds 5 --repeats 3`。
+背景建物sceneは14以上の2+12*k三角形が対象。既存D219以前の記録/archivesは変更しない。
+
+## D219: Reuse bounded exact double-reflection image invariants (2026-10-16 JST)
+
+二回反射のimage methodで、同じreceiver-plane距離/第一鏡像、ordered triangle pairの第二鏡像を呼出内で再利用する。
+satellite-plane距離は同じ衛星内だけで再利用し、衛星が変わるたびに破棄する。元のFP64 dot/multiply/subtract式を最初の実使用時にそのまま評価する。
+**全ordered pair・元の候補/遮蔽predicateと閾値・stable sort/既存max_paths/max_pairs・独立した返却配列・物理モデル・samples・seedを保持**。
+候補pruningやFMA化、精度緩和は入れない。変更はdouble_reflection.pyのみで、D218の一回反射・native PE/CUDA/H/CPP・PFは同一。
+
+適用は元の4 private helper identities、plane/area epsilon、native-FP64 finite入力<=1e50、通常warn/ignore policyかつunderflow ignore。
+2衛星以上、8..256三角形、64..32768 ordered pairs、pair数×衛星数>=1024を要求する。これらはcache条件だけで、探索上限を追加しない。
+小処理/strict/unsafe/差替helperなどは元のscalar評価順と7引数hook呼出を維持する。triangle/pair cacheは呼出後に破棄し、永続/GPU workspaceを追加しない。
+
+比較相手は直前D218。14/50三角形×12/32衛星×2600/260000 samples、二面cornerと背景建物、実距離20200kmの衛星を使う。
+各衛星へ実際の二回反射replicaを返し、**native LOS・一回反射4paths・全二回反射pair/遮蔽・clock/Doppler・channel構築・実CUDA IQ返却までの都市compute_epoch全体**を5交互round×3callで測定。
+helperの関数選択/復元wrapperは両版対称にtiming内。scene構築、first-use warm、全出力hash、tracemallocはtiming外。
+自前processだけ最後の許可CPUへpin、normal priority、host/GPU非占有。rawファイル名の日付20261015はUTC、本文の日付はJST。
+
+| 条件 | D218 (ms) | 採用版 (ms) | 短縮 | 改善round | call/round |
+|:---|---:|---:|---:|---:|---:|
+| corner/triangles14/satellites12/samples2600/urban | 104.0196 | 80.4048 | 22.70% | 5/5 | 3 |
+| corner/triangles14/satellites12/samples260000/urban | 121.3175 | 100.5736 | 17.10% | 4/5 | 3 |
+| corner/triangles14/satellites32/samples2600/urban | 274.4237 | 222.5831 | 18.89% | 5/5 | 3 |
+| corner/triangles14/satellites32/samples260000/urban | 292.2122 | 212.6912 | 27.21% | 5/5 | 3 |
+| corner/triangles50/satellites12/samples2600/urban | 943.3373 | 671.6676 | 28.80% | 5/5 | 3 |
+| corner/triangles50/satellites12/samples260000/urban | 980.5223 | 612.7709 | 37.51% | 5/5 | 3 |
+| corner/triangles50/satellites32/samples2600/urban | 2441.7142 | 1750.1332 | 28.32% | 5/5 | 3 |
+| corner/triangles50/satellites32/samples260000/urban | 2268.1421 | 1684.9874 | 25.71% | 5/5 | 3 |
+
+一衛星/strict/二回反射off/二面だけ/既存pair limit/小処理/public pathsの対照。各5round、call数は行ごとに明示する。
+非適用経路の時間差は高速化効果として扱わない。tiny_pathsはcornerの2三角形だけを使用する。
+
+| 条件 | D218 (ms) | 採用版 (ms) | 短縮 | 改善round | call/round |
+|:---|---:|---:|---:|---:|---:|
+| single_paths | 6.2576 | 6.3046 | -0.75% | 1/5 | 9 |
+| single_urban | 10.0224 | 9.9445 | 0.78% | 4/5 | 9 |
+| strict_paths | 78.5134 | 77.8503 | 0.84% | 3/5 | 5 |
+| strict_urban | 121.3525 | 121.8037 | -0.37% | 2/5 | 5 |
+| disabled_urban | 7.7789 | 7.8033 | -0.31% | 2/5 | 21 |
+| blocked_urban | 106.4114 | 77.6380 | 27.04% | 4/5 | 5 |
+| tiny_paths | 1.3917 | 1.4486 | -4.09% | 2/5 | 21 |
+| partial_paths | 33.9831 | 32.9108 | 3.16% | 5/5 | 21 |
+| partial_cached_paths | 64.1509 | 52.0649 | 18.84% | 5/5 | 5 |
+| cached_paths | 77.9726 | 62.5816 | 19.74% | 5/5 | 5 |
+| small_work_paths | 13.4074 | 13.1818 | 1.68% | 4/5 | 9 |
+
+メモリとの交換条件:14三角形のpublic double pathsでtracemalloc CPU peakは20,472 → 52,248B。
+32768個のpair鏡像を全て準備する上限probeでは2,197,520 → 6,885,860B。
+追加NumPy payload上限はpair image32768×24B、receiver image256×24Bと、そのPython metadata。probeは元の全32768pairを2衛星とも訪問する。
+入力構築を除くPython/NumPy traced peakであり、native C++/GPU memoryやRSSではない。上限probeはallocation確認専用で速度比に使わない。
+
+全**707 timed pairsで全反射path・全IQ・全metadataがbit一致**。新97testsはbyte-exact元scalar oracleに対し、
+全pair訪問順・途中の鏡像bit・三角形内/遮蔽predicate列、strict/warning/例外、NaN/Inf/極端scale/退化面、
+cache/work上限下限、既存path/pair limits、4 private hooks、threshold変更、layout、返却所有・呼出間変更、実CUDA IQを検証する。
+関連**483 tests PASS**、既存PLATEAUサンプル未配置2skip、既存deprecation warning894件を保存。
+memcheck/racecheck/synccheckは各315tests PASS、CUDA error/hazard/leak0（pytest設定warning各1）。
+診断profileも2184 pair訪問と全point/遮蔽呼出が同一で、np.dot呼出は15254 → 9066。
+profile時間は速度比に使わず、過去の速度比との積も取らない。
+
+効果は二回反射を使う合成都市IQ経路。二回反射off、一回反射単独、PF全体、長期実データの測位誤差分布、別GPUの利得は新規評価していない。
+記録: [測定JSON](double_invariants_gpu_20261015.json)、[完了検証](double_invariants_completion_check_20261015.json)、
+[比較helper](bench_double_reflection_invariants_compare.py)、[採用patch](probes/double_invariants_20261015.patch)、
+[97tests](../tests/test_double_invariants.py)、[元scalar oracle](../tests/oracles/double_invariants_scalar.py)。
+再現: helperへbaseline-dir/source-record/outputを指定し、`--counts 14 50 --satellites 12 32 --samples 2600 260000 --scenes corner --rounds 5 --repeats 3`。
+helperの背景建物sceneは14以上の2+12*k三角形を対象とする。
+
+## D218: Reuse bounded prepared triangle views in physical reflection checks (2026-10-15)
+
+詳細な物理反射で、同じ三角形の頂点・辺・単位法線・geometry行を参照する5個のndarray viewと法線長のfloatを、呼出内だけ再利用する。
+tuple/listはlazyに準備し、既存mesh/geometryのデータを共有する。新しいNumPyベクトルpayloadや永続/GPU workspaceは追加しない。
+**FP64・全三角形/候補・判定順/閾値・cross/dot/norm式と回数・barycentric演算順・stable sort・snap・物理モデル・samples・seedを保持**。
+点内判定も既存の同一FP64辺を参照し、元の5回のdotを同じ入力bit/順序で評価する。返却点/法線は独立したowning arrayのまま。
+
+適用は既存D215のbounded native-FP64 geometry条件かつ8..32768三角形。メタデータは最大32768 entriesに制限する。
+32769以上では従来geometry bufferのみ、strict/underflow-warning/unsafe/別dtype/subclass/1衛星などは従来scalar評価。
+Python1fileのみを変更しnative PE/CUDA/H/CPPは同一。呼出間でmesh/receiverを変更すれば全て再準備する。
+
+比較相手は直前D217。120/360三角形×12/32衛星×2600/260000 samplesで各衛星に実反射を返すwall sceneを使い、
+**native LOS・全物理path/遮蔽・clock/Doppler・channel構築・実CUDA IQ返却を含む都市compute_epoch全体**を5交互round×5callで測定。
+scene構築・first-use warm・全出力hash・tracemallocはtiming外。自前processだけ最後の許可CPUへpin、normal priority、host/GPU非占有。
+
+| 条件 | D217 (ms) | 採用版 (ms) | 短縮 | 改善round | call/round |
+|:---|---:|---:|---:|---:|---:|
+| wall/triangles120/satellites12/samples2600/urban | 55.1706 | 40.9825 | 25.72% | 5/5 | 5 |
+| wall/triangles120/satellites12/samples260000/urban | 62.3281 | 49.0285 | 21.34% | 5/5 | 5 |
+| wall/triangles120/satellites32/samples2600/urban | 159.4939 | 109.8758 | 31.11% | 5/5 | 5 |
+| wall/triangles120/satellites32/samples260000/urban | 173.1067 | 128.2192 | 25.93% | 5/5 | 5 |
+| wall/triangles360/satellites12/samples2600/urban | 184.3878 | 130.2894 | 29.34% | 5/5 | 5 |
+| wall/triangles360/satellites12/samples260000/urban | 180.6132 | 134.4784 | 25.54% | 5/5 | 5 |
+| wall/triangles360/satellites32/samples2600/urban | 453.6734 | 344.1627 | 24.14% | 5/5 | 5 |
+| wall/triangles360/satellites32/samples260000/urban | 451.6008 | 354.8388 | 21.43% | 5/5 | 5 |
+
+対照は1衛星60call/round、legacy30、grid21、strict/遮蔽/小scene/public paths9。全て5round、各行にも回数を記録する。
+非適用ケースの時間差を高速化効果として扱わない。
+
+| 条件 | D217 (ms) | 採用版 (ms) | 短縮 | 改善round | call/round |
+|:---|---:|---:|---:|---:|---:|
+| single_paths | 24.8710 | 24.6432 | 0.92% | 3/5 | 60 |
+| single_urban | 27.4040 | 27.7026 | -1.09% | 1/5 | 60 |
+| strict_paths | 293.1570 | 285.4619 | 2.62% | 4/5 | 9 |
+| strict_urban | 292.6461 | 294.9484 | -0.79% | 3/5 | 9 |
+| legacy_urban | 0.8535 | 0.8503 | 0.37% | 2/5 | 30 |
+| blocked_urban | 49.3148 | 40.8369 | 17.19% | 5/5 | 9 |
+| grid_urban | 24.6010 | 20.2357 | 17.74% | 5/5 | 21 |
+| small_urban | 9.4856 | 7.9039 | 16.67% | 5/5 | 9 |
+| cached_paths | 48.1281 | 37.5385 | 22.00% | 5/5 | 9 |
+
+一時CPUメモリとの交換条件:120三角形のpublic pathsでtracemalloc peakは25,368 → 92,736B。
+上限32768 entriesを全て準備する退化meshでは3,809,692 → 25,994,708B。
+上限外32769では3,713,605 → 3,713,757B。
+これは入力/model構築を除くPython/NumPy traced peakであり、RSSやnative C++/GPU memoryではない。上限probeはメモリ確認専用で速度比に使わない。
+
+全**1352 timed pairsで全path・全IQ・全metadataがbit一致**。新31testsはbyte-exact D217 oracleに対し、
+全dot入力bit/順序、同一tuple/viewの再利用と既存bufferとの共有、entry上限/下限、fallback、strided/Fortran/reversed mesh、
+返却所有と呼出間の入力変更を検証する。既存の最適化前scalar oracleとcross/norm検証も維持し、関連**386 tests PASS**。
+既存PLATEAUサンプル未配置の2skipとdeprecation warning894件を保存。memcheck/racecheck/synccheckは各218tests PASS、CUDA error/hazard/leak0（pytest設定warning各1）。
+診断profileのgeometry accessor呼出は4416 →120。外積・内積・長さ・三角形内/遮蔽predicateの回数と全epoch出力hashは同一。
+profile時間は速度比に使わず、過去の速度比との積も取らない。
+
+旧D216/D217対照JSONのtop-level repeats=5は更新漏れで、rawは各45pairs/5round=9call、既存RESULTSの表記と実測pair集計は正しい。
+旧報告/manifestは変更せず、今回から各行の回数を明示した。D217の元private raw/log/helperも再照合して新archiveへ補完保存する。
+効果は合成都市シーンの詳細物理反射経路。既定legacy GPU反射、PF、長期実データの測位誤差分布、別GPUの利得は新規評価していない。
+
+記録: [測定JSON](reflection_barycentric_gpu_20261015.json)、[完了検証](reflection_barycentric_completion_check_20261015.json)、
+[比較helper](bench_reflection_geometry_compare.py)、[採用patch](probes/reflection_barycentric_20261015.patch)、
+[31tests](../tests/test_reflection_barycentric.py)、[D217 oracle](../tests/oracles/reflection_barycentric_baseline.py)。
+再現: helperへbaseline-dir/source-record/outputを指定し、`--counts 120 360 --satellites 12 32 --samples 2600 260000 --scenes wall --stages urban --rounds 5 --repeats 5`。
+
+## D217: Reuse exact direction and length within each physical occlusion segment (2026-10-15)
+
+詳細な物理反射の遮蔽判定で、同じ線分の`end-start`と`float(np.linalg.norm(direction))`を再利用する。
+最初の非除外三角形に到達した時点で、元の3要素FP64式をそのまま1回評価する。
+**全三角形・反射候補・遮蔽判定順/閾値・endpoint toleranceの除算・cross/dot/norm式・stable sort・snapping・物理モデル・samples・seedを維持**。
+線分が終わると破棄し、呼出間のcacheは持たない。Python1fileのみを変更し、native PE/CUDA/H/CPPは同一。
+
+適用条件は既存D216のbounded native-FP64 segment処理と同一。strict/underflow-warning/unsafe/非finite/別dtype/subclass/1衛星などは元の三角形ごとの評価順を保つ。
+新しい永続workspace・mesh cache payload・GPU allocationは0。線分ごとの3要素directionとlength/tupleを判定中だけ保持する。
+positive wallの診断profileではsegment normが2,976回から36回となり、都市epoch全出力hashも一致した。profile時間は速度比には使わない。
+
+比較相手は直前D216。120/360三角形×12/32衛星×2600/260000 samples、各衛星へ実反射を返すwall sceneで、
+**native LOS・全物理path/遮蔽・clock/Doppler・channel構築・実CUDA IQ返却までの都市compute_epoch全体**を5交互round×5callで測定。
+scene構築・first-use warm・全出力hash・tracemallocはtiming外。自前processだけ最後の許可CPUへpin、normal priority、host/GPU非占有。
+
+| 条件 | D216 (ms) | 採用版 (ms) | 短縮 | 改善round |
+|:---|---:|---:|---:|---:|
+| wall/triangles120/satellites12/samples2600/urban | 69.6945 | 57.2169 | 17.90% | 5/5 |
+| wall/triangles120/satellites12/samples260000/urban | 75.2480 | 64.9747 | 13.65% | 5/5 |
+| wall/triangles120/satellites32/samples2600/urban | 175.2158 | 156.1917 | 10.86% | 5/5 |
+| wall/triangles120/satellites32/samples260000/urban | 212.6626 | 161.8748 | 23.88% | 4/5 |
+| wall/triangles360/satellites12/samples2600/urban | 228.8547 | 179.6090 | 21.52% | 5/5 |
+| wall/triangles360/satellites12/samples260000/urban | 263.4577 | 210.8354 | 19.97% | 5/5 |
+| wall/triangles360/satellites32/samples2600/urban | 626.3313 | 474.9232 | 24.17% | 5/5 |
+| wall/triangles360/satellites32/samples260000/urban | 624.8302 | 521.8045 | 16.49% | 5/5 |
+
+非適用経路、反射なし、遮蔽、小scene、public pathsの対照（5round×9call）:
+
+| 条件 | D216 (ms) | 採用版 (ms) | 短縮 | 改善round |
+|:---|---:|---:|---:|---:|
+| single_paths | 21.7151 | 23.6211 | -8.78% | 0/5 |
+| single_urban | 26.8577 | 28.1532 | -4.82% | 2/5 |
+| strict_paths | 437.6004 | 422.0181 | 3.56% | 1/5 |
+| strict_urban | 440.5185 | 430.0870 | 2.37% | 3/5 |
+| legacy_urban | 4.3771 | 3.7508 | 14.31% | 2/5 |
+| blocked_urban | 85.4134 | 59.3001 | 30.57% | 5/5 |
+| grid_urban | 26.6151 | 25.5412 | 4.03% | 5/5 |
+| small_urban | 10.4633 | 8.5465 | 18.32% | 5/5 |
+| cached_paths | 68.4036 | 55.4767 | 18.90% | 5/5 |
+
+初回single_pathsは約8.78%悪化したrawも保存した。両1衛星ケースを同一ソース・閾値のまま5round×60callで追加確認した。
+非適用ケースの時間差を高速化効果として扱わない。
+
+| 条件 | D216 (ms) | 採用版 (ms) | 短縮 | 改善round |
+|:---|---:|---:|---:|---:|
+| single_paths | 23.3296 | 23.3515 | -0.09% | 2/5 |
+| single_urban | 27.1290 | 27.0767 | 0.19% | 2/5 |
+
+全**1253 timed pairsで全反射path・全IQ・全metadataがビット一致**。
+新33testsはbyte-exact D216 oracleに対し、線分ごとにnorm入力/返値の全bitが一致し1回だけ評価されること、
+fallbackのnorm回数/順序/警告/例外、plane/endpoint近傍、ground/snap、呼出間の入力変更を検証する。
+以前のcross成分16,384比較と最適化前scalar oracleも維持し、関連**355 tests PASS**。
+既存PLATEAUサンプル未配置による2skipと既存deprecation warning894件を保存。
+memcheck/racecheck/synccheckは各187tests PASS、CUDA error/hazard/leak0（pytest設定warning各1）。
+
+効果は合成都市シーンの詳細物理反射経路。既定legacy GPU反射、PF、長期実データの測位誤差分布、別GPUの利得は新規評価していない。
+今回の同時比較だけを示し、過去の速度比との積は取らない。
+
+記録: [測定JSON](reflection_segment_gpu_20261015.json)、[完了検証](reflection_segment_completion_check_20261015.json)、
+[比較helper](bench_reflection_geometry_compare.py)、[採用patch](probes/reflection_segment_20261015.patch)、
+[33tests](../tests/test_reflection_segment.py)、[D216 oracle](../tests/oracles/reflection_segment_baseline.py)。
+再現: helperへbaseline-dir/source-record/outputを指定し、`--counts 120 360 --satellites 12 32 --samples 2600 260000 --scenes wall --stages urban --rounds 5 --repeats 5`。
+
+## D216: Preserve exact FP64 segment cross components without general axis dispatch (2026-10-15)
+
+詳細な物理反射の遮蔽判定で、3次元外積の汎用axis処理を省く。元の6回のFP64乗算・3回の減算を同じ成分順で行い、独立した3要素配列を返す。
+**全三角形・反射候補・遮蔽の順序/閾値・dot/norm・stable sort・snapping・物理モデル・全チャネル/サンプル・seedを保持**。
+FMA化やdotの再結合は行わない。Python1fileのみを変更し、native PE/CUDA/H/CPPは同一。
+
+D215のgeometry条件に加え、finiteな衛星座標の絶対値<=1e50、ground指定時はfiniteな点<=1e50と正規化法線<=1を要求する。
+有効な鏡像segmentのパラメータは0<t<1なので、既存receiver/mesh条件と合わせて外積のoverflow/invalidを避けられる。
+underflowは既存guardでignore。unsafe/strict/別dtype/subclass/1衛星などは元のnp.crossを使う。
+永続workspaceとmesh cache payloadの追加は0。3要素の返却配列は従来どおり確保し、CPU peakは下記rawに残す。
+
+比較相手は直前のD215採用版。120/360三角形×12/32衛星×2600/260000 samples、各衛星に実反射を含むwall sceneで、
+**native LOS・全物理path/遮蔽・clock/Doppler・channel構築・実CUDA IQ返却を含む都市compute_epoch全体**を5交互round×3callで測定した。
+scene構築、first-use warm、出力hashはtiming外。自前processだけ最後の許可CPUへpin、normal priority、host/GPU非占有。
+
+| 条件 | D215 (ms) | 採用版 (ms) | 短縮 | 改善round |
+|:---|---:|---:|---:|---:|
+| wall/triangles120/satellites12/samples2600/urban | 247.0663 | 98.2085 | 60.25% | 5/5 |
+| wall/triangles120/satellites12/samples260000/urban | 346.2409 | 131.0512 | 62.15% | 5/5 |
+| wall/triangles120/satellites32/samples2600/urban | 642.9101 | 320.8215 | 50.10% | 5/5 |
+| wall/triangles120/satellites32/samples260000/urban | 732.1442 | 322.8519 | 55.90% | 5/5 |
+| wall/triangles360/satellites12/samples2600/urban | 889.6801 | 318.0527 | 64.25% | 5/5 |
+| wall/triangles360/satellites12/samples260000/urban | 920.5051 | 408.8312 | 55.59% | 5/5 |
+| wall/triangles360/satellites32/samples2600/urban | 2123.5998 | 857.3582 | 59.63% | 5/5 |
+| wall/triangles360/satellites32/samples260000/urban | 1364.4878 | 553.8651 | 59.41% | 5/5 |
+
+非適用経路、反射なし、遮蔽、小scene、public pathsの対照（5round×9call）:
+
+| 条件 | D215 (ms) | 採用版 (ms) | 短縮 | 改善round |
+|:---|---:|---:|---:|---:|
+| single_paths | 23.0974 | 23.1860 | -0.38% | 2/5 |
+| single_urban | 27.1556 | 27.3905 | -0.87% | 2/5 |
+| strict_paths | 406.7733 | 431.1655 | -6.00% | 2/5 |
+| strict_urban | 367.9288 | 370.9342 | -0.82% | 2/5 |
+| legacy_urban | 4.3671 | 4.3306 | 0.84% | 4/5 |
+| blocked_urban | 173.8497 | 68.8695 | 60.39% | 5/5 |
+| grid_urban | 26.2507 | 28.7865 | -9.66% | 3/5 |
+| small_urban | 27.3159 | 12.2975 | 54.98% | 5/5 |
+| cached_paths | 171.8427 | 75.7532 | 55.92% | 5/5 |
+
+初期3round×2callの短いgrid対照と、上記strict_paths/grid_urbanの悪化rawも保存した。
+同一ソース・閾値のまま、strict_pathsは5round×21call、grid_urbanは5round×60callで追加確認した。対照の時間差を高速化効果には数えない。
+
+| 条件 | D215 (ms) | 採用版 (ms) | 短縮 | 改善round |
+|:---|---:|---:|---:|---:|
+| strict_paths | 297.5912 | 301.9283 | -1.46% | 1/5 |
+| grid_urban | 20.7880 | 21.0624 | -1.32% | 1/5 |
+
+全**948 timed pairsで全反射path・全IQ・全metadataがビット一致**。新51testsは直前ソースのbyte-exact oracleと比較し、
+12,288組のランダム外積と4,096組の符号付きゼロ/相殺、strided/Fortran配列、極小値、回転/反転/scale/ground、
+異常値・厳格policyのfallbackを検証する。既存の最適化前scalar oracle103testsも維持した。
+関連**322 tests PASS**、既存PLATEAUサンプル未配置に依存する2件はskip、既存deprecation warning894件を保存。
+memcheck/racecheck/synccheckは各154tests PASS、CUDA error/hazard/leak0（pytest設定warning各1）。
+
+測定対象は詳細物理反射のCPU経路。既定legacy GPU反射、PF、長期実データの測位誤差分布、別GPUの利得は新規評価していない。
+旧版速度比との積は取らず、今回同時測定したD215比だけを示す。
+
+記録: [測定JSON](reflection_cross_gpu_20261015.json)、[完了検証](reflection_cross_completion_check_20261015.json)、
+[比較helper](bench_reflection_geometry_compare.py)、[採用patch](probes/reflection_cross_20261015.patch)、
+[51tests](../tests/test_reflection_cross.py)、[D215 oracle](../tests/oracles/reflection_cross_baseline.py)。
+再現: helperへbaseline-dir/source-record/outputを指定し、`--counts 120 360 --satellites 12 32 --samples 2600 260000 --scenes wall --stages urban --rounds 5 --repeats 3`。
+
+## D215: Reuse exact call-local geometry for detailed physical reflections (2026-10-15)
+
+`BuildingModel.compute_reflection_paths`の辺・法線・受信機平面距離・鏡像を、同じ呼出内の衛星/遮蔽物判定で再利用する。
+**全三角形・全反射候補・元の遮蔽判定順/閾値・stable sort・snapping・全チャネル/サンプル・seedを保持**。
+既存の3要素NumPy cross/norm/division/dot式をそのまま実行して値を保存する。cross-call cache、候補pruning、精度緩和は追加しない。
+Python1fileのみの変更で、native PE/CUDA/H/CPPは完全同一。既定のGPU legacy反射とPFは変更しない。
+
+適用はnative FP64の厳密なndarray、2衛星以上、8..296941三角形、finite mesh/receiverの絶対値<=1e50、
+warn/ignore policyかつunderflow ignore。unsafe/strict/別dtype/subclass/1衛星/小さすぎる・大きすぎるmeshは元のscalar評価。
+一時cacheは113*N payload bytes、最大32MiB。永続host/GPU workspace追加0、返却点・法線は独立したowning arrayのまま。
+geometry・receiverを次の呼出前に変更すれば全て再計算する。RSSやGPU memoryをtracemallocの値と混同しない。
+
+primaryは120/360三角形×12/32衛星×2600/260000 samples。wall sceneは反射壁と背景建物を含み、各衛星へ実際の反射レプリカを返す。
+**native LOS・全物理path/遮蔽・clock/Doppler・channel構築・実CUDA IQ返却まで含むcompute_epoch全体**を5交互round×3callで測定。
+scene構築・first-use warm準備・全出力hashはtiming外。自前processだけ最後の許可CPUへpin、normal priority、host/GPU非占有。
+
+| 条件 | 従来 (ms) | 採用版 (ms) | 短縮 | 改善round |
+|:---|---:|---:|---:|---:|
+| wall/triangles120/satellites12/samples2600/urban | 403.1212 | 199.1910 | 50.59% | 5/5 |
+| wall/triangles120/satellites12/samples260000/urban | 487.7560 | 247.9086 | 49.17% | 5/5 |
+| wall/triangles120/satellites32/samples2600/urban | 1150.3937 | 558.2126 | 51.48% | 5/5 |
+| wall/triangles120/satellites32/samples260000/urban | 1131.8561 | 579.3767 | 48.81% | 5/5 |
+| wall/triangles360/satellites12/samples2600/urban | 1082.9408 | 632.6180 | 41.58% | 5/5 |
+| wall/triangles360/satellites12/samples260000/urban | 900.7959 | 419.4534 | 53.44% | 5/5 |
+| wall/triangles360/satellites32/samples2600/urban | 2350.3776 | 1205.3228 | 48.72% | 5/5 |
+| wall/triangles360/satellites32/samples260000/urban | 2067.9006 | 1040.0065 | 49.71% | 5/5 |
+
+非適用/遮蔽/小sceneとpublic pathsの対照（5round×5call）:
+
+| 条件 | 従来 (ms) | 採用版 (ms) | 短縮 | 改善round |
+|:---|---:|---:|---:|---:|
+| single_paths | 27.2435 | 26.9142 | 1.21% | 3/5 |
+| single_urban | 36.3632 | 32.9381 | 9.42% | 4/5 |
+| strict_paths | 459.0606 | 460.7621 | -0.37% | 2/5 |
+| strict_urban | 411.1918 | 394.0862 | 4.16% | 3/5 |
+| legacy_urban | 0.9783 | 1.0346 | -5.75% | 2/5 |
+| blocked_urban | 416.1477 | 199.5228 | 52.05% | 5/5 |
+| grid_urban | 80.2076 | 26.7264 | 66.68% | 5/5 |
+| small_urban | 43.3951 | 34.3018 | 20.95% | 5/5 |
+| cached_paths | 317.5227 | 153.5333 | 51.65% | 5/5 |
+
+初回legacy対照は約5.75%悪化したため、物理path関数を通らない同じnative経路を5round×30callで追加確認した。
+初回rawも保持し、対照の時間差を高速化効果として扱わない。
+
+| 条件 | 従来 (ms) | 採用版 (ms) | 短縮 | 改善round |
+|:---|---:|---:|---:|---:|
+| legacy_urban | 1.1672 | 1.1414 | 2.21% | 2/5 |
+
+public pathsのtracemalloc CPU peakは15,760 → 30,384B。113*Nのcache payloadとPython metadataを含む一時メモリ増加であり、永続allocationではない。
+
+最終ソースの**495 timed pairsで全pathの点/法線/遅延/ID/入射角・全IQ/metadataがbit一致**。
+元の関数をbyte-exactで残した独立scalar oracleに対する新103testsは、数値/shape/cap境界、strict/warning/例外順、
+NaN/Inf/極端scale/退化面、float32/int/strided/Fortran/subclass手動差替、ground/snap/max_paths、
+呼出間のmesh/receiver変更と返却所有、実CUDA LOS+IQを含む。関連**271 tests PASS**、既存PLATEAUサンプル未配置に依存する2件はskip。
+103testsのmemcheck/racecheck/synccheckも全PASS、CUDA error/hazard/leak0。checkerの未使用asyncio設定warning1件と回帰warning894件をraw保存する。
+
+初期版218 timed pairsも標準FP64では一致したが、追加した手動float32/subclassの4caseで出力dtype/警告/最初の演算が不一致だった。
+そのsource/PE/helper/失敗logを別保存し、型guardを追加後に最終版を再測定した。oracleや数値assertionを緩めていない。
+事前profileは0-reflection gridだけでなく、実12 reflectionとblocked sceneの完全都市epochでもcross/normの反復を確認した診断用の値。
+profile時間をunprofiled wallへ足し合わせず、旧版速度比との積も取らない。
+効果は詳細な物理反射を使うCPU経路に限定する。長期実データ測位誤差、別GPU、既定legacy GPU反射、whole PF/GNSS/IMUの利得は新規評価していない。
+
+記録: [測定JSON](reflection_geometry_gpu_20261015.json)、[完了検証](reflection_geometry_completion_check_20261015.json)、
+[比較helper](bench_reflection_geometry_compare.py)、[採用patch](probes/reflection_geometry_20261015.patch)、
+[103tests](../tests/test_reflection_geometry.py)、[元scalar oracle](../tests/oracles/reflection_geometry_scalar.py)。
+primaryはhelperへbaseline-dir/source-record/outputを指定し、`--counts 120 360 --satellites 12 32 --samples 2600 260000 --scenes wall --stages urban --rounds 5 --repeats 3`。
+
+## D214: Reuse private native posterior readout during PF capacity migration (2026-10-15)
+
+標準resident PFの容量切替で、native getterが新規確保したFP64対数重みをそのまま正規化/CDFへ使う。
+**事後重みを持つ100万粒子のpublic `activate(N/2)` → `activate(N)` と両estimate・同期を含む全体を測定**。
+初期化・事後重み作成・入力復元・全状態の検証hashはtiming外。通常の容量切替なしPF更新全体への効果とは区別する。
+
+既存の厳密なpaired native hook/state/count/original Python getter検証に加え、built-in native readout、
+import時も含め未差替えのNumPy allocator、owning/writeable/contiguous配列、全finite・1D・65536以上、通常warn/ignore policyで限定。
+custom getter、wrapper、借用配列/view、allocator差替え、非finite、厳格なエラー設定、小粒子数は従来のcopy/eager経路を維持する。
+uniform GPU scanで完結する切替は追加チェック前に返す。
+
+**FP64 max/subtract/exp/sum/division・逐次NumPy cumsumの順序、left search/clamp、全16状態成分・粒子・重み・RNGを保持**。
+Python1fileのみの変更。PF native PE/CUDA/H/CPP、GPU確保/転送/検査/gatherは同一。永続workspace/cacheは追加しない。
+N=100万で余分な8,000,000BのCPU配列確保とコピーを1回除去し、tracemalloc peakは17,001,380 → 9,001,284B。
+これはCPU Python/NumPyのピークでありRSSやGPU memoryの測定ではない。
+
+primary（5交互round×10call、単一process/同じnative context）:
+
+| 条件 | 従来 (ms) | 採用版 (ms) | 短縮 | 改善round |
+|:---|---:|---:|---:|---:|
+| N1000000/public_pool_posterior | 26.6235 | 23.8017 | 10.60% | 4/5 |
+
+対照（5round×20call）と粒子数scope（3round×5call）も完全なpublic operationを測定:
+
+| 条件 | 従来 (ms) | 採用版 (ms) | 短縮 | 改善round |
+|:---|---:|---:|---:|---:|
+| N1000000/public_pool_roundtrip | 3.6331 | 3.3709 | 7.22% | 2/5 |
+| N1000000/PR_control | 6.0113 | 5.6220 | 6.48% | 4/5 |
+
+| 条件 | 従来 (ms) | 採用版 (ms) | 短縮 | 改善round |
+|:---|---:|---:|---:|---:|
+| N65536/public_pool_posterior | 2.7193 | 2.7295 | -0.38% | 2/3 |
+| N100000/public_pool_posterior | 5.0595 | 3.7934 | 25.02% | 3/3 |
+
+通常PR対照のペアごとの短縮率中央値は0.10%で、round中央値の差を改善効果へ帰属しない。
+uniform対照も変更した処理へ到達しない。scopeは小標本の確認で、65536では実質差がなく、100kの表の値から一般的な改善率を主張しない。
+
+最終ソースで**280 timed pairsすべてのsource/target全16状態・重み・全返却bitsが一致**。
+新37testsは65535/65536/65537境界、instance/class/native getter、import前後の借用allocator、strict policy、
+RuntimeWarning→error、NaN/Inf/underflow/±1e308/signed-zero/denormal/raw64bitsを旧逐次CDFと比較し、元配列の所有も検証。
+関連**3007 tests PASS**。37testsのmemcheck/racecheck/synccheckは全PASS、CUDA error/hazard/leak0。
+checker時の未使用asyncio設定warning1件はrawに保存する。
+
+初期版318 pairs、uniform早期return調整後の別process150 pairs・同一context150 pairsもソース/PE/helper付きで保存。
+別processでは同一のuniform native経路にも大きな揺れが出たため、Pythonだけの差を1つのnative contextで比較し直した。
+最終import時allocatorガードにはhot-path追加処理がない。旧版の時間差を最終版の採用根拠へ混ぜない。
+profileのcopy約1.97msは診断用で、unprofiled時間へ足し合わせない。
+自前bench processだけ許可CPUの最後1つへpin、normal priority、host/GPU非占有。全raw・両中央値統計を記録する。
+長期実データの測位誤差分布や別GPUの再評価は実施していない。
+
+記録: [測定JSON](pf_private_weights_gpu_20261015.json)、[完了検証](pf_private_weights_completion_check_20261015.json)、
+[同一context helper](bench_pf_private_weights_same_context_compare.py)、[別process helper](bench_pf_private_weights_compare.py)、
+[採用patch](probes/pf_private_weights_20261015.patch)、[37 tests](../tests/test_pf_private_weights.py)。
+helperへbaseline-dir/source-record/outputを指定し、primaryは`--sizes 1000000 --stages public_pool_posterior --rounds 5 --repeats 10 --memory`、
+対照は`--sizes 1000000 --stages public_pool_roundtrip PR_control --rounds 5 --repeats 20 --memory`で再現する。
+
+## D213: Batch exact built-in GPU troposphere inside urban epochs (2026-10-15)
+
+標準GPU対流圏補正を使う都市epochで、衛星ごとのGPU往復を1回へまとめる。
+**実CUDA IQ・全チャネル・clock/Doppler・大気・LOS/反射・転送/同期/返却を含む`compute_epoch`全体を直接測定**。
+適用は未変更の厳密な`AtmosphereCorrection`本体、GPU backend、可視衛星あり、iono requestなしの場合だけ。
+CPU fallback・subclass・instance/class method置換・custom callback・iono指定・大気なしは従来のscalar順序。
+CPU版ufuncのバッチ幅や副作用を変えず、不可視衛星を補正へ渡さない。cross-call cacheも追加しない。
+
+標準のGPU対流圏kernelは各衛星を独立に評価するため、**FP64式・receiver LLA/elevation・全衛星/候補/チャネル/サンプル・seed/IQ演算を保持**。
+変更はPython1fileのみで、BVH/atmosphere/signalの3 PEとCUDA/H/CPPは完全同一。新kernel/永続GPU allocationは0。
+可視N衛星ならkernel N→1、malloc/free各3N→3、copy3N→3。瞬間的なdevice要求量は40B→24+16N Bで、32衛星なら536B。
+要求bytesを記したものでallocatorの実際の粒度/RSSではない。既存native関数が返却前に全一時bufferを解放する。
+
+primary（3mesh×2衛星数×3sample数、5交互round×10call=900 pairs、全出力hashはtiming外）:
+
+| 条件 | 従来 (ms) | 採用版 (ms) | 短縮 | 改善round |
+|:---|---:|---:|---:|---:|
+| builtin_gpu/triangles0/satellites12/samples2600 | 2.2882 | 0.6079 | 73.43% | 5/5 |
+| builtin_gpu/triangles0/satellites12/samples26000 | 2.4560 | 0.7334 | 70.14% | 5/5 |
+| builtin_gpu/triangles0/satellites12/samples260000 | 3.9369 | 2.0582 | 47.72% | 5/5 |
+| builtin_gpu/triangles0/satellites32/samples2600 | 6.3209 | 1.1613 | 81.63% | 5/5 |
+| builtin_gpu/triangles0/satellites32/samples26000 | 6.1784 | 1.2545 | 79.70% | 5/5 |
+| builtin_gpu/triangles0/satellites32/samples260000 | 7.9348 | 3.1018 | 60.91% | 5/5 |
+| builtin_gpu/triangles12000/satellites12/samples2600 | 3.1912 | 1.5833 | 50.39% | 5/5 |
+| builtin_gpu/triangles12000/satellites12/samples26000 | 3.0798 | 1.4495 | 52.94% | 5/5 |
+| builtin_gpu/triangles12000/satellites12/samples260000 | 7.9282 | 4.9616 | 37.42% | 5/5 |
+| builtin_gpu/triangles12000/satellites32/samples2600 | 14.5949 | 6.2144 | 57.42% | 5/5 |
+| builtin_gpu/triangles12000/satellites32/samples26000 | 19.9851 | 8.0751 | 59.59% | 5/5 |
+| builtin_gpu/triangles12000/satellites32/samples260000 | 21.3433 | 12.2139 | 42.77% | 5/5 |
+| builtin_gpu/triangles120000/satellites12/samples2600 | 4.5677 | 3.0109 | 34.08% | 5/5 |
+| builtin_gpu/triangles120000/satellites12/samples26000 | 10.0249 | 5.8191 | 41.95% | 5/5 |
+| builtin_gpu/triangles120000/satellites12/samples260000 | 12.3992 | 9.9886 | 19.44% | 5/5 |
+| builtin_gpu/triangles120000/satellites32/samples2600 | 11.3823 | 6.4732 | 43.13% | 5/5 |
+| builtin_gpu/triangles120000/satellites32/samples26000 | 11.6530 | 6.9126 | 40.68% | 5/5 |
+| builtin_gpu/triangles120000/satellites32/samples260000 | 15.8197 | 10.3208 | 34.76% | 5/5 |
+
+対照は最初3round×10call=360 pairsの後、custom/overrideで揺れがあったため5round×30call=1,800 pairsを追加。
+初回には6.8〜7.9%の悪化もあり、そのrawも残す。追加確認の非適用経路の中央値悪化は最大約3.7%で、全条件の一律改善を主張しない。
+coldは都市/signal owner新規作成とGPU BVH生成/trace/closeを含み、CPU BVH構築だけを事前に済ませている。
+
+| 条件 | 従来 (ms) | 採用版 (ms) | 短縮 | 改善round |
+|:---|---:|---:|---:|---:|
+| none/triangles0/satellites12/samples2600 | 0.4359 | 0.4322 | 0.85% | 3/5 |
+| cold_builtin/triangles0/satellites12/samples2600 | 2.3387 | 0.6546 | 72.01% | 5/5 |
+| none/triangles12000/satellites12/samples2600 | 1.1080 | 1.1162 | -0.75% | 3/5 |
+| cold_builtin/triangles12000/satellites12/samples2600 | 5.2477 | 3.3453 | 36.25% | 5/5 |
+| none/triangles120000/satellites12/samples2600 | 2.9579 | 3.0384 | -2.72% | 2/5 |
+| cold_builtin/triangles120000/satellites12/samples2600 | 26.6836 | 25.1735 | 5.66% | 5/5 |
+| cpu/triangles0/satellites12/samples2600 | 1.3341 | 1.3633 | -2.18% | 0/5 |
+| subclass/triangles0/satellites12/samples2600 | 3.3414 | 3.4623 | -3.62% | 1/5 |
+| instance_override/triangles0/satellites12/samples2600 | 3.3446 | 3.4596 | -3.44% | 2/5 |
+| iono/triangles0/satellites12/samples2600 | 4.2170 | 3.9245 | 6.94% | 4/5 |
+| builtin_gpu/triangles0/satellites1/samples2600 | 0.5644 | 0.5409 | 4.16% | 5/5 |
+| builtin_gpu/triangles0/satellites2/samples2600 | 0.8663 | 0.5751 | 33.61% | 5/5 |
+
+早期gate36 pairsも含め**3,096 timed pairs、別244 validation casesで全返却bits一致**。
+別検証はGPU/実CPU fallback、赤道/高所/中緯度/極、0/1/2/12/32衛星、全/部分/不可視、31/257samplesの実IQ、
+clock/sample/custom tropo/iono例外とcallback順序を旧Pythonモジュールと比較する。
+新47testsはnative scalar対照、可視衛星だけの1回呼び出し、CPU/subclass/instance/class override、iono順序、
+elevation cutoff、trajectory batch1/4と端数epoch、seed・IQ・返却所有を確認。
+都市物理path/大気/signal関連**731 tests PASS**。新47testsのmemcheck/racecheck/synccheckは全PASS、CUDA errors/hazards/warnings/leaks0。
+保持したscalar経路の既存NumPy変換DeprecationWarning894件、検査器での未使用asyncio設定warning1件はrawへ保存し、隠さない。
+
+事前profileは現行版の6条件で20 unprofiled/20 profiled callsずつを記録。12可視衛星ではtropo batch APIを12回呼んでいた。
+cProfile値は診断用で、同期とprofiler overheadを含み、inclusive時間を合算した速度推定には使わない。
+測定は自前processのみ許可CPU1つへpin、normal priority、交互complete call、host/GPU非占有、同じ3 native PEs/noise seed37。
+使用中の配布BVH PEは元のまま保持し、今回の比較/テストは現在のD211 build PEを明示ロードする。このPython変更に新native binaryは不要。
+大気なしの通常epochやPF/GNSS/IMU全体の高速化、長期実データ測位誤差分布の新規評価として扱わない。
+
+記録: [測定JSON](urban_atmosphere_batch_gpu_20261015.json)、[完了検証](urban_atmosphere_batch_completion_check_20261015.json)、
+[比較helper](bench_urban_atmosphere_batch_compare.py)、[採用patch](probes/urban_atmosphere_batch_20261015.patch)、
+[47 tests](../tests/test_urban_atmosphere_batch.py)。helperへbaseline-dir/source-record/outputを指定し、
+primaryは`--rounds 5 --repeats 10`、対照は`--controls-only --rounds 5 --repeats 30`で再現する。
+
+## D212: Exact mirror-direction warp sharing rejected (2026-10-15)
+
+大規模batchの支配的な反射候補評価で、同じ鏡像点を持つlane間のFP64正規化重複を減らす案を試した。
+既存のbounded epoch groupでprepared mirrorsを使う場合だけ、新candidate kernelを選ぶ。
+warp hashは照合候補を挙げるだけで、**鏡像点192 bitsが完全一致したlaneだけ**同一衛星への方向正規化を共有。
+hash衝突や一致しないlaneは従来式で計算し、全候補・元ordinal/tie・FP64式・距離cutoff・receiver更新を保持する。
+
+**全体短縮は得られず不採用**。公開traceは全4条件で約0.3〜0.5%悪化した。
+命令数の削減案だけでは採用せず、照合/分岐/shuffleを含む実処理時間で判断する。
+同一process・許可CPU1つ・normal priorityで順序を交互にし、3round×3call、4条件×4stage=144 pairsを測定した。
+全timed callのLOS/反射点/遅延bitsは一致し、追加の永続GPU allocationは0。
+
+| 条件 | D211 (ms) | 試作 (ms) | 短縮率 | 改善round |
+|:---|---:|---:|---:|---:|
+| triangles4096/epochs513/satellites32/public_warm_trace | 72.2446 | 72.4588 | -0.30% | 0/3 |
+| triangles4096/epochs1366/satellites12/public_warm_trace | 71.7244 | 72.0001 | -0.38% | 0/3 |
+| triangles12000/epochs513/satellites32/public_warm_trace | 210.7094 | 211.7418 | -0.49% | 0/3 |
+| triangles12000/epochs1366/satellites12/public_warm_trace | 211.7490 | 212.8111 | -0.50% | 0/3 |
+
+native反射・公開trace・owner生成/初回trace/close・LOSのraw全sampleをJSONへ保存する。
+再利用したhelperの`unchanged_warm_multipath`は旧stage名であり、この試作では反射を変更している。LOSは変更なし。
+旧12 GPU命令列/resourceは全同一、新1kernelは78 registers・shared5,120B・stack/local0。
+レジスタ数もGPU memory量も増えていないが、それだけを性能改善の証拠にはしない。
+
+5%の全体改善gateを満たさないため、候補の広範囲validation・回帰・sanitizerへ進まず終了。
+候補source/PE/helper/raw/patch/SASS/resourceをmanifest付きで別archiveへ保存した後、**D211 sourceと凍結済みbuild PEを完全復元**。
+復元sourceを再buildし、同じD211 PEを明示ロードした独立stateless-oracleを含む42 smoke testsがPASS。
+配布PEは使用中の元を保持する。D211の715 tests/577 validation/3,040 pairs/CUDA3検査の過去記録とPF/IQ source/PEは変更していない。
+今回の試作を測位精度・PF/GNSS/IMU・都市IQの速度改善として扱わない。
+
+記録: [不採用JSON](bvh_direction_cohorts_rejected_20261015.json)、[完了検証](bvh_direction_cohorts_completion_check_20261015.json)、
+[試作patch](probes/bvh_direction_cohorts_20261015.patch)。再現は[測定に用いた既存helper](bench_bvh_los_frontier_batches_compare.py)へ
+前後PE、baseline-dir、source-record、outputと`--counts 4096 12000 --shapes 513x32 1366x12 --rounds 3 --repeats 3 --timing-only`を指定する。
+
+## D211: Exact LOS frontiers for medium resident batches (2026-10-15)
+
+D210の1 warp/ray探索を、total33〜256 raysにも適用する。referenced三角形>=8,192、完全な木の高さ<=32、cut8〜32枝の条件を保持。
+**変更はhost dispatch上限32→256のみ。GPU全12命令列/resource・FP64・祖先AABB・DFS・反射全候補/ordinal/tieはD210と同一**。
+追加のkernel/CPU metadata/永続GPU allocationは0。<=32 raysと>256 rays、小mesh・深い木は既存経路。
+
+公開batch trace全体（5交互round×10call、2mesh×4shape×4stage=1,600 pairs）。全出力hashはtiming外で毎call照合する。
+
+| 条件 | D210 (ms) | 採用版 (ms) | 短縮 | 改善round |
+|:---|---:|---:|---:|---:|
+| triangles12000/epochs3/satellites12/public_warm_trace | 1.1376 | 0.9025 | 20.66% | 5/5 |
+| triangles12000/epochs2/satellites32/public_warm_trace | 1.2393 | 1.0562 | 14.78% | 5/5 |
+| triangles12000/epochs4/satellites32/public_warm_trace | 2.2212 | 1.9655 | 11.52% | 5/5 |
+| triangles12000/epochs8/satellites32/public_warm_trace | 4.2873 | 3.7837 | 11.75% | 5/5 |
+| triangles120000/epochs3/satellites12/public_warm_trace | 6.1024 | 5.7320 | 6.07% | 5/5 |
+| triangles120000/epochs2/satellites32/public_warm_trace | 9.6506 | 9.2329 | 4.33% | 5/5 |
+| triangles120000/epochs4/satellites32/public_warm_trace | 18.4945 | 17.8501 | 3.48% | 5/5 |
+| triangles120000/epochs8/satellites32/public_warm_trace | 36.4387 | 35.2039 | 3.39% | 5/5 |
+
+LOS単体は同じ条件で別途測定し、全raw sampleを保存する。反射は変更なし。
+次の対照は3round×10call、1,440 pairs。root miss・全遮断・random denseの公開traceとLOS、小mesh、32/33・255/256/257境界、1,056/16,392 raysを含む。
+全遮断ではLOSが約6µs遅くなる条件もあるため、一律の高速化を主張しない。対照全結果とcoldのばらつきをJSONへ保存する。
+
+| 条件 | D210 (ms) | 採用版 (ms) | 短縮 | 改善round |
+|:---|---:|---:|---:|---:|
+| root_miss/epochs3/satellites12/public_warm_trace | 0.6880 | 0.6846 | 0.49% | 2/3 |
+| root_miss/epochs8/satellites32/public_warm_trace | 2.9438 | 2.9726 | -0.98% | 2/3 |
+| all_blocked/epochs3/satellites12/public_warm_trace | 0.5886 | 0.5796 | 1.54% | 2/3 |
+| all_blocked/epochs8/satellites32/public_warm_trace | 3.2272 | 3.2141 | 0.41% | 2/3 |
+| random_dense/epochs3/satellites12/public_warm_trace | 3.0891 | 3.0413 | 1.55% | 2/3 |
+| random_dense/epochs8/satellites32/public_warm_trace | 11.8095 | 11.8131 | -0.03% | 1/3 |
+| triangles8191/epochs1/satellites32/public_warm_trace | 0.5841 | 0.5811 | 0.52% | 2/3 |
+| triangles8191/epochs1/satellites33/public_warm_trace | 0.6001 | 0.5966 | 0.59% | 1/3 |
+| triangles8192/epochs1/satellites32/public_warm_trace | 0.4587 | 0.4635 | -1.02% | 0/3 |
+| triangles8192/epochs1/satellites33/public_warm_trace | 0.5695 | 0.4808 | 15.58% | 3/3 |
+| triangles12000/epochs17/satellites15/public_warm_trace | 4.4574 | 4.0450 | 9.25% | 3/3 |
+| triangles12000/epochs16/satellites16/public_warm_trace | 4.0864 | 3.7723 | 7.69% | 3/3 |
+| triangles12000/epochs1/satellites257/public_warm_trace | 4.2601 | 4.2405 | 0.46% | 1/3 |
+| triangles12000/epochs33/satellites32/public_warm_trace | 14.4486 | 14.4511 | -0.02% | 2/3 |
+| triangles12000/epochs1366/satellites12/public_warm_trace | 211.8444 | 211.8762 | -0.01% | 1/3 |
+
+最初の上限1,024 probeは432 pairsを別source/PE/helper/raw/patch/manifestで保存。大mesh/1,024 raysのLOSで悪化したため256へ制限した。
+別の初回1,600-pair確認は全bits一致だが、後続対照の同一三角形CPU構築で停止。初回helper/rawを別archiveに保存し、
+対照を構築済みcustom treeへ直結して修正後、採用版の確認を最終helperで再実行した。初回値を採用統計へ混ぜない。
+
+**577 validation cases・3,040 timed pairsで返却bits一致、BVH/urban/signal関連715 tests PASS**。
+新42testsは旧stateless GPUを独立oracleとし、三角形/レイ数境界、単一/複数epoch、深さ31/32/33/64/70と左右鎖、
+legacy stack打ち切り、非包含祖先/共有leaf、ECEF/非有限padding、単一APIの非有限値、再利用時の再計算・返却所有・追加workspace0を確認。
+新42testsのmemcheck/racecheck/synccheckは全PASS、CUDA errors/hazards/warnings/leaks0。
+plugin自動ロード無効に伴う未使用asyncio設定のpytest config warning各1件はrawへ保存する。
+最初のmemcheckは対象への接続timeoutで未完了。自前PIDを照合して終了し、raw/helper/test/jobを別archiveへ保存。
+同じPE/testsを、検査器のCPU制限と無関係なpytest plugin自動ロードを外して再実行した完了結果だけを採用する。
+測定は自前processだけを同じ許可CPUへpin、normal priority、交互whole call、host/GPU非占有。
+配布DLLが使用中の場合は元のPEを保ち、build PEをcanonical名で明示ロードして全検査する。配置状態はreportへ記録。
+長期実データ測位誤差分布・PF/GNSS/IMU全体・実IQ epochの速度は今回新規評価していない。
+
+結果: [測定JSON](bvh_los_frontier_batches_gpu_20261015.json)、[完了検証](bvh_los_frontier_batches_completion_check_20261015.json)。
+再現: [比較helper](bench_bvh_los_frontier_batches_compare.py)、[採用patch](probes/bvh_los_frontier_batches_20261015.patch)、
+[上限1,024不採用patch](probes/bvh_los_frontier_batches_probe1024_20261015.patch)、[独立oracle tests](../tests/test_bvh_los_frontier_batches.py)。
+同helperへ前後PE、baseline-dir、source-record、outputを指定し、`--timing-only --rounds 5 --repeats 10`、
+`--validation-only`、`--controls-only --rounds 3 --repeats 10`を順に実行する。前版比を過去の比率と乗算しない。
+
+## D210: Exact LOS subtree frontiers for ordinary single-epoch calls (2026-10-15)
+
+通常の少数レイでもGPU探索を分散する。1 rayを1 warpへ割り当て、最大32の部分木をlaneへ分ける。
+**公開単一時刻traceは5.9〜21.4%短縮、実CUDA IQを含む都市epochも測定中央値で2.1〜13.4%短縮**。
+祖先AABB判定・FP64の方向/交差式・各部分木の従来DFSを保持する。反射は全候補/ordinal/tieを保ち、旧10 GPU命令列/resource全同一。
+新2kernelは単一/batchの従来の非有限値の扱いを区別し、warp内ORでLOS booleanだけを集約する。
+
+適用はreferenced三角形>=8,192、total rays<=32、到達木の完全な高さ<=32、cutの枝数8〜32。
+全祖先を各laneで判定してから部分木へ入り、bbox包含を仮定しない。高さ制限により元の64-entry stackが打ち切られないことを保証し、
+深い木・少ない枝・小mesh・33 rays以上は従来経路。既存cycle検証の完了colorへ飽和した高さを併記し、追加のnode-sized scratchを使わない。
+ownerのCPU metadataは最大900B。`__grid_constant__`引数で渡し、**追加の永続GPU allocationは0**。GPU workspace容量はD208と一致する。
+
+公開batch trace（1 epoch、5交互round×20call、2mesh×2shape×4stage=1,600 pairs）:
+
+| 条件 | D208 (ms) | 採用版 (ms) | 短縮 | 改善round |
+|:---|---:|---:|---:|---:|
+| triangles12000/epochs1/satellites12/public_warm_trace | 0.5043 | 0.4113 | 18.44% | 5/5 |
+| triangles12000/epochs1/satellites32/public_warm_trace | 0.9268 | 0.7694 | 16.98% | 5/5 |
+| triangles120000/epochs1/satellites12/public_warm_trace | 2.4789 | 2.3460 | 5.36% | 5/5 |
+| triangles120000/epochs1/satellites32/public_warm_trace | 5.2429 | 4.9409 | 5.76% | 5/5 |
+
+実際の単一時刻APIと都市IQ（単一traceは5×20、IQは5×10、合計700 pairs）:
+
+| 条件 | D208 (ms) | 採用版 (ms) | 短縮 | 改善round |
+|:---|---:|---:|---:|---:|
+| public_single_trace/triangles12000/satellites12 | 0.6090 | 0.4879 | 19.89% | 5/5 |
+| public_single_trace/triangles12000/satellites32 | 1.0211 | 0.8024 | 21.42% | 5/5 |
+| urban_real_iq/triangles12000/satellites12/samples2600 | 1.0027 | 0.8684 | 13.38% | 5/5 |
+| urban_real_iq/triangles12000/satellites12/samples26000 | 1.0268 | 0.9670 | 5.82% | 5/5 |
+| urban_real_iq/triangles12000/satellites12/samples260000 | 2.1250 | 2.0716 | 2.51% | 2/5 |
+| public_single_trace/triangles120000/satellites12 | 2.4724 | 2.3259 | 5.93% | 5/5 |
+| public_single_trace/triangles120000/satellites32 | 5.2400 | 4.9178 | 6.15% | 5/5 |
+| urban_real_iq/triangles120000/satellites12/samples2600 | 3.0547 | 2.9913 | 2.08% | 4/5 |
+| urban_real_iq/triangles120000/satellites12/samples26000 | 3.1275 | 3.0527 | 2.39% | 5/5 |
+| urban_real_iq/triangles120000/satellites12/samples260000 | 4.1485 | 4.0601 | 2.13% | 3/5 |
+
+都市epochは大気/チャネル/LOS/反射と本物のCUDA IQ生成、転送/同期/返却を含む。12衛星、noise seed37、全2,600/26,000/260,000 samplesを保持し、
+全返却fieldとIQ bytesを比較した。両側で同一の採用済みsignal PEを使い、CPU BVH構築・初回code-table/workspace準備・hashだけを測定外とする。
+サンプル数が大きいほどIQ生成の割合が増え、全体の短縮は小さくなる。小差と全sampleも保存し、kernel比から推定しない。
+
+追加scope（3round×10call、210 pairs）:
+
+| 条件 | D208 (ms) | 採用版 (ms) | 短縮 | 改善round |
+|:---|---:|---:|---:|---:|
+| triangles8191/epochs1/satellites12/public_warm_trace | 0.3826 | 0.3832 | -0.16% | 1/3 |
+| triangles8192/epochs1/satellites12/public_warm_trace | 0.4021 | 0.3448 | 14.26% | 3/3 |
+| triangles12000/epochs1/satellites1/public_warm_trace | 0.1914 | 0.1789 | 6.53% | 2/3 |
+| triangles12000/epochs2/satellites16/public_warm_trace | 0.9652 | 0.7753 | 19.67% | 3/3 |
+| triangles12000/epochs1/satellites33/public_warm_trace | 1.0094 | 1.0032 | 0.61% | 3/3 |
+| triangles12000/epochs3/satellites11/public_warm_trace | 1.0802 | 1.0834 | -0.30% | 2/3 |
+| triangles12000/epochs1366/satellites12/public_warm_trace | 211.8744 | 211.8717 | 0.00% | 2/3 |
+
+全測定は同じ許可CPUへ自前processだけをpin、normal priority、交互whole call、host/GPU非占有。
+cold owner生成/trace/closeの中央値は2.3%悪化〜14.6%短縮で一律の改善を主張しない。CPU BVH構築はcold traceにも含まない。
+最初のGPU metadata版は480 pairsを別source/PE/raw/manifestで保存し、採用版へ混ぜない。レジスタ上限案D209は別の不採用結果。
+
+**529ケース・2,510 timed pairsでLOS/反射点/遅延/都市IQを含む返却bits一致**。
+新48testsは旧stateless GPUを独立oracleにし、8,191/8,192面・32/33 rays・複数epoch、
+高さ31/32/33/64/70と左右鎖/legacy stack打ち切り、非包含祖先bbox、共有leafの異なる祖先、
+ECEF/非有限padding・元距離/方向逆数cutoff・極小/極大、snapshot/receiver再計算/返却所有と追加GPU allocation0を検証。
+BVH/urban/signal wrapper関連**673 tests PASS**、新48testsのmemcheck/racecheck/synccheck全PASS、errors/hazards/warnings/leaks0。
+配布先DLLの初回コピーが使用中で拒否されたため、全pytest実行前にbuild PEをcanonical moduleへ明示ロードし、ログのPE SHAを確認した。**配布先DLLは引き続き使用中のため配置保留**。build PEの候補検証は完了し、使用中のD208 PEを保持している。最終配置状態もJSONへ保存した。
+FP64・候補数・粒子数・RNG・物理モデルを変えない。長時間実データ測位誤差、whole PF/GNSS/IMUの速度比は新規未評価。
+
+[全sample・source/PE/helper SHA・exact patch・検証記録](bvh_los_frontier_gpu_20261015.json)、
+[48独立oracle tests](../tests/test_bvh_los_frontier.py)、[最終整合確認](bvh_los_frontier_completion_check_20261015.json)。
+
+```powershell
+python benchmarks/bench_bvh_los_frontier_compare.py --baseline <D208.pyd> --candidate <candidate.pyd> --baseline-dir <frozen-source-dir> --source-record benchmarks/bvh_los_frontier_gpu_20261015.json --timing-only --rounds 5 --repeats 20 --output dist/bvh_los_frontier_repeat.json
+python benchmarks/bench_bvh_los_frontier_urban_compare.py --baseline <D208.pyd> --candidate <candidate.pyd> --baseline-dir <frozen-source-dir> --source-record benchmarks/bvh_los_frontier_gpu_20261015.json --rounds 5 --repeats 10 --output dist/bvh_los_frontier_urban_repeat.json
+```
+
+主helperの`--validation-only`で529比較だけを再現できる。同じCUDA12.8/MSVC Release/compute7.5/C++20/no fast mathを使う。
+
+## D209: Candidate register-budget probe — not adopted (2026-10-15)
+
+D208のwarm GPU activityを3条件で再計測。大batchは候補評価がGPU activityの約97〜98%、
+通常の12,000面・1×12衛星はLOSが約45%、候補評価が約53%を占めた。
+profiler start/stopでwarm公開trace1回だけを捕捉した診断値で、非profiled wall time・実測occupancy・hardware counterではない。
+
+既存bounded groupの候補評価だけを`launch_bounds(128,8)`付きの同式kernelへ割り当てた。
+77〜78→64 registers/thread、stack0→56 bytes/thread、新2 GPU functions。既存10 GPU命令列とresourceは全同一。
+FP64・全候補・訪問ordinal・tie・reduction・128 threadsを保持したが、公開trace全体はほぼ不変で**不採用**。
+
+| 条件 | D208 (ms) | 試案 (ms) | 短縮 |
+|:---|---:|---:|---:|
+| triangles4096/epochs513/satellites32 | 72.3818 | 72.4153 | -0.05% |
+| triangles4096/epochs1366/satellites12 | 71.8155 | 71.9157 | -0.14% |
+| triangles12000/epochs513/satellites32 | 210.6508 | 210.7673 | -0.06% |
+| triangles12000/epochs1366/satellites12 | 212.0703 | 212.0246 | 0.02% |
+
+3交互round×3call、4条件×4stage=144 timed pairsで全返却bits一致。
+入力検査/H2D/全kernel/同期/D2H/返却配列と、cold owner生成/trace/closeを測定し、CPU BVH構築/hashを除外。
+測定processだけを同じ許可CPUへpin、normal priority、host/GPU非占有。5%基準へ届かず、広範なcandidate検証・回帰・sanitizerへ進めなかった。
+D208の5sourceとbuild/installed PEをbyte一致で復元し、source再build後にfreezeしたPEを戻した。
+過去の625tests・CUDA検査をこの不採用candidateの結果へ流用しない。精度緩和・候補数削減・RNG/モデル変更は行わない。
+
+[全sample・GPU activity・source/PE/helper SHA・exact patch](bvh_candidate_registers_rejected_20261015.json)、
+[再現helper](bench_bvh_candidate_registers_compare.py)、[patch](probes/bvh_candidate_registers_20261015.patch)。
+
+## D208: Medium meshes use bounded parallel reflection groups (2026-10-15)
+
+16,384 raysを超えるbatchでは、1,024〜8,191 ordered visitsも既存のbounded epoch-groupへ割り当て、
+8衛星以上のgroupで受信機鏡像点を共有する。**直前D207との公開LOS＋反射batch全体**を比較した。
+FP64式・全候補・元の訪問ordinalと正遅延tie・モデル・APIを保持し、host dispatchだけを変更。
+新kernel0、既存10 GPU SASS instruction bodies/resourceは全同一。
+
+| 三角形 | epochs×satellites | D207 (ms) | 採用版 (ms) | 短縮 | 改善round |
+|---:|:---|---:|---:|---:|---:|
+| 1,024 | 2,049×8 | 20.8289 | 19.1525 | 8.05% | 5/5 |
+| 1,024 | 1,366×12 | 21.1665 | 19.1978 | 9.30% | 5/5 |
+| 1,024 | 513×32 | 22.8040 | 19.5170 | 14.41% | 5/5 |
+| 4,096 | 2,049×8 | 81.9174 | 72.8551 | 11.06% | 5/5 |
+| 4,096 | 1,366×12 | 83.3462 | 72.5433 | 12.96% | 5/5 |
+| 4,096 | 513×32 | 89.7026 | 73.5909 | 17.96% | 5/5 |
+| 8,191 | 2,049×8 | 164.3445 | 146.2499 | 11.01% | 5/5 |
+| 8,191 | 1,366×12 | 166.7568 | 145.2014 | 12.93% | 5/5 |
+| 8,191 | 513×32 | 182.3320 | 150.7061 | 17.35% | 5/5 |
+
+5交互round×5call、3mesh×3shape×4stageの36条件/900 timed pairs。表はround中央値の中央値。
+native反射・公開traceの入力検査/H2D/LOS/反射/同期/D2H/返却配列・初回owner生成/trace/close・未変更LOSを測定。
+CPU BVH構築とhashは測定外。同じ許可CPUへ測定processだけをpinしnormal priorityを保持、host/GPUは非占有。
+9対象条件は全て5%以上短縮、初回処理にも安定した悪化なし。以前の速度比を掛け合わせない。
+
+予備のcutoff64・鏡像非共有版は64/128面で公開traceが約8〜11%悪化し、512面は5%基準未達だった。
+この案の216 pairsを別source/PE/raw/manifestで保存し、最終版の測定へ混ぜない。
+採用版はvisits=1,024〜8,191、total>16,384、n_sat=8〜16,384だけに既存bounded parallelを追加。
+鏡像共有も新groupだけへ追加し、小batchのmesh閾値と大meshのD207条件を保つ。
+8〜15衛星は既存の256-block目標を満たす容量が条件、16衛星以上は既存条件。中規模meshの7衛星以下は既存serial経路を維持する。追加scopeで1/7衛星の効果不足を確認した別版も、全1,197 pairsと478比較を別source/PE/raw/manifestで保存した。
+新対象のscratchはwinner<=640KiB（通常160KiB）とmirror<=32MiB/owner、入力/出力容量はbatch依存。
+各consumer完了後に同じ領域を再利用し、各callのreceiverから再準備、closeで解放する。
+
+追加3round×3callの境界・長batch・対象外control（公開trace全体、主測定と別）:
+
+| 条件 | D207 (ms) | 採用版 (ms) | 短縮 |
+|:---|---:|---:|---:|
+| triangles1023/epochs1366/satellites12 | 21.5291 | 21.7514 | -1.03% |
+| triangles1024/epochs1365/satellites12 | 21.5750 | 22.0572 | -2.23% |
+| triangles4096/epochs512/satellites32 | 82.1094 | 82.1217 | -0.01% |
+| triangles4096/epochs1025/satellites32 | 179.3523 | 147.8528 | 17.56% |
+| triangles1024/epochs2341/satellites7 | 21.2972 | 21.2864 | 0.05% |
+| triangles1024/epochs16385/satellites1 | 20.2314 | 20.2575 | -0.13% |
+| triangles8191/epochs1/satellites16385 | 178.4312 | 178.5593 | -0.07% |
+| triangles12000/epochs1366/satellites12 | 221.8165 | 221.7139 | 0.05% |
+| triangles4096/epochs1/satellites12 | 0.3532 | 0.3487 | 1.27% |
+
+旧新版**478ケース**でLOS/反射点/遅延がbit一致。主900＋追加81の**全981 timed pairs**でも返却bits一致。
+既存testsと新45testsは変更しないstateless GPUを独立oracleに使い、1,023/1,024・8,191/8,192 visits、
+16,384 rays前後、1/7/8/12/32/16,384/16,385衛星、group末尾、ECEF/非有限padding、
+極小/極大geometry・元normal cutoff、同点と逆訪問順、receiver変更/経路切替、返却所有/容量再利用/解放を検証する。
+BVH/urban/signal wrapper関連**625 tests PASS**。新45testsのmemcheck/racecheck/synccheckも全PASS、errors/hazards/warnings/leaks0。
+最初のsandbox内memcheckは45tests PASS・子Python終了0の後にtoolの終了集計が返らず、未完了として保存した。
+該当する自前checkerだけを終了し、同じtests/flagsのsandbox外再実行で最終集計まで確認した。元実行をPASSへ数えない。
+PF/signal source/build/installedは採用済み版を保持。精度tolerance・候補数・粒子数・RNG・物理モデルを変えない。
+default single-epoch都市simやwhole PF/GNSS/IMUの速度比、長時間実データの測位誤差分布は新規評価していない。
+
+[全sample・478比較・source/pyd/helper SHA・GPU監査・exact patch](bvh_medium_ray_chunks_gpu_20261015.json)、
+[独立oracle tests](../tests/test_bvh_medium_ray_chunks.py)、[最終整合確認](bvh_medium_ray_chunks_completion_check_20261015.json)。
+直前D207の5source/binaryをfreezeし、JSONのpatchから同じCUDA12.8/MSVC Release/compute7.5/C++20/no fast mathでbuildする。
+
+```powershell
+python benchmarks/bench_bvh_medium_ray_chunks_compare.py --baseline <D207.pyd> --candidate <candidate.pyd> --baseline-dir <frozen-source-dir> --source-record benchmarks/bvh_medium_ray_chunks_gpu_20261015.json --rounds 5 --repeats 5 --output dist/bvh_medium_ray_chunks_repeat.json
+```
+
+`--validation-only`で478比較のみ、`--timing-only`で時間比較のみを実行できる。
+
+## D207: Ordinary-satellite large groups share exact receiver mirrors (2026-10-15)
+
+D206のbounded groupに限り、8〜15衛星でも受信機の鏡像点を共有する。
+**直前D206から公開LOS＋反射batch全体を5.9〜9.3%短縮**。既存のnormal/mirror/candidate/finalize GPU関数をそのまま使い、
+host dispatchだけを変更した。新kernel0、既存10 SASS instruction bodies/resourceは全同一。
+FP64式・全候補・元の訪問ordinalと正遅延tie・モデル・APIを保持する。
+
+| 三角形 | epochs×satellites | D206 (ms) | 採用版 (ms) | 短縮 | 改善round |
+|---:|:---|---:|---:|---:|---:|
+| 8,192 | 2,049×8 | 157.8243 | 145.0253 | 8.11% | 5/5 |
+| 8,192 | 1,366×12 | 157.4584 | 143.8388 | 8.65% | 5/5 |
+| 8,192 | 1,093×15 | 158.0873 | 143.4103 | 9.28% | 5/5 |
+| 12,000 | 2,049×8 | 236.0148 | 222.1131 | 5.89% | 5/5 |
+| 12,000 | 1,366×12 | 239.2175 | 222.9740 | 6.79% | 5/5 |
+| 12,000 | 1,093×15 | 244.3786 | 224.7884 | 8.02% | 5/5 |
+
+5交互round×5call、2mesh×3shape×4stageの24条件/600 timed pairs。表はround中央値の中央値。
+native反射・公開traceの入力検査/H2D/LOS/反射/同期/D2H/返却配列・初回owner生成/trace/close・未変更LOSを含む。
+CPU BVH構築とhashは測定外。同じ許可CPUへ測定processだけをpinしnormal priorityを保持、host/GPUは非占有。
+初回処理も改善。小差のあるcontrolと全sample、paired中央値をJSONへ保存し、以前の速度比を掛け合わせない。
+
+適用は元のlarge group（total>16,384、visits>=8,192、n_sat<=16,384）のうち8〜15衛星。
+32MiB mirror予算内に**256 rays/blocks以上**が入るときだけ共有する。これは既存candidateの256-block目標を使い、
+大meshで新たに小さすぎるgroupへ分割することを避ける。16衛星以上はD206の条件、小batch/7衛星以下/容量不足は従来経路。
+以前の小batch8〜15衛星案はwhole処理に効かず不採用だったが、今回の対象は既にepoch group化した大batchに絞る。
+新対象でmirror scratchが最大32MiB増える。既存winner scratch<=640KiBとinput/output容量、
+per-call receiverからの再準備、group内consumer完了後の再利用、closeでの解放は保持する。
+
+追加3round×3callのbudget境界・対象外control（公開trace全体、主測定とは別）:
+
+| 条件 | D206 (ms) | 採用版 (ms) | 短縮 |
+|:---|---:|---:|---:|
+| triangles63550/epochs1366/satellites12 | 1263.8601 | 1184.5209 | 6.28% |
+| triangles63551/epochs1366/satellites12 | 1314.9938 | 1318.3251 | -0.25% |
+| triangles12000/epochs2341/satellites7 | 244.2606 | 244.3389 | -0.03% |
+| triangles12000/epochs1025/satellites16 | 227.2055 | 227.2910 | -0.04% |
+| triangles12000/epochs1/satellites12 | 0.5668 | 0.6077 | -7.22% |
+| triangles12000/epochs1365/satellites12 | 244.9157 | 245.2987 | -0.16% |
+
+小callの3×3は0.5668→0.6077ms。追加5round×10では0.5749→0.5691msで、安定した差は確認できなかった。
+追加確認の4stage/200pairsも別recordとして保持し、主測定へ混ぜない。
+
+旧新版**449ケース**でLOS/反射点/遅延がbit一致。主600＋予備72＋追加54＋小対照再確認200の**全926 timed pairs**でも返却bits一致。
+新38testsは変更しないstateless GPUを独立oracleに使い、7/8/9/12/15/16衛星、8,191/8,192 visits、
+43,690/43,691・63,550/63,551・77,672/77,673のmirror予算境界、group末尾、ECEF/非有限padding、
+極小/極大geometry・元normal cutoff、同点と逆訪問順、receiver変更/経路切替、返却所有/容量再利用/解放を検証する。
+BVH/urban/signal wrapper関連**580 tests PASS**。新38testsのmemcheck/racecheck/synccheckも全PASS、errors/hazards/warnings/leaks0。
+PF/signal source/build/installedは採用済み版を保持。精度tolerance・候補数・粒子数・RNG・物理モデルを変えない。
+default single-epoch都市simやwhole PF/GNSS/IMUの速度比、長時間実データの測位誤差分布は新規評価していない。
+
+[全sample・449比較・source/pyd/helper SHA・GPU監査・exact patch](bvh_group_mirrors_gpu_20261015.json)、
+[独立oracle tests](../tests/test_bvh_group_mirrors.py)、[最終整合確認](bvh_group_mirrors_completion_check_20261015.json)。
+直前D206の5source/binaryをfreezeし、JSONのpatchから同じCUDA12.8/MSVC Release/compute7.5/C++20/no fast mathでbuildする。
+
+```powershell
+python benchmarks/bench_bvh_group_mirrors_compare.py --baseline <D206.pyd> --candidate <candidate.pyd> --baseline-dir <frozen-source-dir> --source-record benchmarks/bvh_group_mirrors_gpu_20261015.json --counts 8192 12000 --shapes 2049x8 1366x12 1093x15 --rounds 5 --repeats 5 --output dist/bvh_group_mirrors_repeat.json
+```
+
+`--validation-only`で449比較のみ、`--timing-only`で時間比較のみを実行できる。
+
+## D206: Large ray batches reuse bounded parallel candidate groups (2026-10-15)
+
+16,384 rays超でcached serialへ戻っていたresident BVHを、既存candidate/finalize kernelのepoch分割へ変更した。
+**32衛星の大きな公開LOS＋反射batch全体を約18〜19%短縮**。初回owner生成→trace→closeも約18%短縮。
+16,384 rays超・元の訪問候補8,192以上・n_sat≤16,384だけが対象。max(1,4096/n_sat) epochずつ、
+mirrorが有効なら既存32MiB容量でも制限する。ray/triangle候補を全て保持し、input uploadとoutput取得は元と同じ一括処理。
+16,384 rays以下、小mesh、極端に広い1epoch、stateless APIは既存経路を保つ。
+
+| 三角形 | epochs×satellites | 旧公開trace (ms) | 採用版 (ms) | 短縮 | 改善round |
+|---:|:---|---:|---:|---:|---:|
+| 8,192 | 513×32 | 176.5183 | 143.2544 | 18.84% | 5/5 |
+| 8,192 | 1,025×32 | 353.5579 | 288.1394 | 18.50% | 5/5 |
+| 12,000 | 513×32 | 262.5512 | 214.0148 | 18.49% | 5/5 |
+| 12,000 | 1,025×32 | 521.6947 | 427.0323 | 18.15% | 5/5 |
+| 8,192 | 1,093×15 | 167.5826 | 157.9561 | 5.74% | 5/5 |
+| 12,000 | 1,093×15 | 247.8779 | 233.1400 | 5.95% | 5/5 |
+
+上表は5交互round×5call、round中央値の中央値。2mesh×3shape×4stageの24条件、600 timed pairs。
+native reflection、公開traceの入力検査/H2D/LOS/全反射kernel/最終同期/D2H/返却配列、初回owner生成/trace/close、未変更LOSを含む。
+CPU BVH構築と出力hashは時間外。既知の測定processのみ同じ論理CPUへpinし、normal priorityを保った。
+追加3×3確認では120,000三角形/513×32の公開traceは2613.1471→2159.7923ms（17.35%短縮）、
+12,000三角形/1366×12は242.1140→230.3971ms（4.84%短縮）。この追加確認を5roundの主測定へ混ぜない。
+対象外controlは8,191三角形/513×32:179.3517→179.3814ms、12,000/512×32:213.6705→213.5798ms、
+12,000/1×192:3.5988→3.5935ms。非占有hostの小差を一般化しない。
+
+**既存10 GPU SASS instruction bodies/resourceが全同一、新kernel0**。host側の分配だけを変更し、FP64式/候補数/threshold/
+right-first訪問ordinal/正遅延と同点選択を変えない。winnerは一groupずつ上書きし、出力先だけ元のray offsetへ進める。
+default stream内で各consumer/finalizeが終わってからscratchを再利用する。groupごとの新たなhost同期は追加しない。
+winner scratchは640KiB以下（通常160KiB）、mirror scratchは従来と同じ32MiB以下。
+従来serialだった対象ではmirror/winnerのlazy allocationが増える。全入力/返却arrayの容量を一定にする変更ではない。
+容量の実値とcold費用も記録し、owner内で再利用、closeで解放する。
+
+旧新版**424ケースのLOS/反射点/遅延がbit一致**。主確認600、予備144、追加45の**全789 timed pairs**でも返却bits一致。
+新規37testは保持したstateless GPUを独立oracleとし、16,384/16,385、chunk末尾、n_sat12/32/8193/16384/16385、
+小mesh fallback、極小・極大geometry、NaN padding、同点/逆訪問順、receiver refresh、buffer再利用・容量上限・返却所有を検証する。
+BVH/urban/signal wrapper関連**542 tests PASS**。新37testsのmemcheck/racecheck/synccheckは全てPASS、errors/hazards/warnings/leaks0。
+比較helperの1epoch validation generatorの添字を実行前に修正し、旧helperを保存。validation generator以外のASTは同一で、
+修正前のtiming-only測定がこのgeneratorを呼ばないことを確認した。元測定recordは上書きしていない。
+PF/signal source/build/installedは採用済み版を保持。測位モデル・精度tolerance・粒子数・RNGを変えない。
+長時間実データの測位誤差とwhole PF/GNSS/IMUへの速度比は今回未評価。
+
+[全sample・source/pyd/helper SHA・424比較・GPU命令/resource・再構成patch](bvh_ray_chunks_gpu_20261015.json)、
+[最終監査](bvh_ray_chunks_completion_check_20261015.json)、[独立oracle tests](../tests/test_bvh_ray_chunks.py)。
+再現は直前parallel mirror chunksの5source/binaryを凍結し、JSONのpatchから同条件でbuildする。
+
+```powershell
+python benchmarks/bench_bvh_ray_chunks_compare.py --baseline <baseline.pyd> --candidate <candidate.pyd> --baseline-dir <frozen-source-dir> --source-record benchmarks/bvh_ray_chunks_gpu_20261015.json --counts 8192 12000 --shapes 513x32 1025x32 1093x15 --rounds 5 --repeats 5 --output dist/bvh_ray_chunks_repeat.json
+```
+
+`--validation-only`で424比較のみ、`--timing-only`で時間比較のみを再現できる。
+
+## D205: Doppler KF二段化・初回更新分離の不採用 (2026-10-15)
+
+D204のprofileで主要だったDoppler KFを対象に、D203採用版から構造の異なる2案を検証した。
+**両案とも不採用、製品source/build/installed binaryはD203へSHA一致で復元**。FP64精度・粒子数・観測数・RNG・測位モデルを変更する採用はない。
+
+1. 幾何/weighted meanと逐次KF更新を2 kernelへ分割し、local cacheをcoalesced FP64 planesへ移した。
+   100万粒子/12衛星のnative KFは**26.5084→26.4393 ms（0.26%短縮）**、公開predict→PR→KF→ESS→条件付きB60 resample→estimateは**37.2017→37.1214 ms（0.22%短縮）**。
+   KFは5/5、公開全体は4/5 round改善したが、追加424,000,000 bytesとlaunchに見合わず、事前の5%/3% gateに届かなかった。
+   5交互round×5回×3stageの75 timed pairsと15 full-state snapshotsはbit一致。未変更PR対照は11.1809→11.1843ms、3/5改善で変動も残す。
+   local stackは512→0 bytesとなるが、分割後geometry/updateのregisterは61/90（元86）。occupancy/counterは未測定。
+   warm resident buffer測定で、初回allocation/syncを含まない。cold-start利得を主張しない。
+   [全sample・出力hash・resource・復元patch](pf_kf_split_rejected_20261015.json)。
+2. 最初の有効なscalar更新を別loopで実行し、その対称化後に重複するh*PをP*hから再利用した。
+   以前のruntime flag案（pf_kf_probes_20261012.json）と異なり、繰り返しのflagを除きregister84（元86）となったが、
+   **最初の100万粒子/KF12 log-weight照合で不一致を検出**。速度評価へ進まず不採用とした。
+   復元入力による追加5ケース/10array比較でも再現。通常初期値100万粒子では速度/共分散最大絶対差1.78e-15、log-weight2.66e-15、
+   非対称/極端共分散では差が増幅した。位置/clockの直接更新はないが、長期測位精度への影響は未評価であり、許容する根拠にしない。
+   実数代数の同値性だけではcompilerのFP64 contraction/丸めの一致を保証できない。toleranceを緩めない。
+   [全差分数・最大差・入力/出力hash・resource・復元patch](pf_kf_peeled_rejected_20261015.json)。
+
+CUDA12.8 / MSVC Release / compute7.5 / C++20 / no fast math、非占有host。同じ論理CPU・normal priorityの既知の子processを順次実行。
+旧新版88 GPU bodies/resourcesを全保持し、追加は二段案2関数/初回分離案1関数。失敗案へ広域回帰/sanitizerは追加せず、復元後のKF/粒子移送/runtime関連回帰は**212 passed**（pytest cache作成権限warning1件）。
+実データ長時間の測位誤差分布は今回新しく測定していない。
+公開比較helperの2pair/2snapshot一致と、公開差分helperの5case/10array差分完全再現も確認した。これらは速度評価ではない。
+[完了監査](pf_kf_postmerge_completion_check_20261015.json)。
+
+再現はD203の6source/Python runtime/binaryをbaseline-dirへ凍結し、JSON記載patchを適用・buildする。
+`bench_pf_kf_postmerge_compare.py --baseline <PE> --candidate <PE> --baseline-dir <dir> --report <JSON> --rounds 5 --repeats 5`。
+拒否案を保存済みsourceで再現する場合は`--candidate-source-dir <flat archive>`を指定。
+初回分離案はexact assertion失敗が期待結果。詳細差分は`check_pf_kf_peeled_mismatch.py --baseline <PE> --candidate <PE> --report <JSON>`で再現できる。
+
+## Post-merge profiling and two rejected compute changes (2026-10-15)
+
+**2案とも全体で十分な短縮がなく不採用。D203の全6ソースとbuild/installed PFバイナリへ完全一致で復元した。**
+マージ済みmain `921e946` とCUDA/C++実装は同じ。統合時のPython型検査注記だけはcompiled module全体の一致を確認する。
+通常更新のprofileではGaussian PRが3.892ms、predictが2.642ms、Megopolis候補が1.939ms。
+Doppler KF込みではKF kernelが34.003ms、記録GPU活動46.356msの約73%を占めた。
+不均一重みの切替を別のcProfileで調べると、単一24.734ms呼出し中のcumsumは2.356msだった。
+Python frameのexclusive時間には個別に見えないNumPy ufuncも含む。これをPython解釈のoverheadと断定しない。
+各GPU rangeはwarm後の1回で、別に3回の非profile wall sampleを保存した。hardware counterや速度改善の証拠ではなく、別callのCPU/GPU時間を合算しない。
+
+| Trial, N1000000 | Complete synchronized operation | Before ms | After ms | Round-median reduction | Median per-pair reduction | Improving rounds |
+|---|---|---:|---:|---:|---:|---:|
+| Gaussian 4-wide | Gaussian12 | 4.0666 | 4.0720 | -0.13% | -0.01% | 2/5 |
+| Gaussian 4-wide | public_PR_step | 13.1129 | 12.9286 | 1.41% | 0.09% | 2/5 |
+| Gaussian 4-wide | public_pool_PR_five | 62.4937 | 62.5662 | -0.12% | 0.06% | 2/5 |
+| Exact integer remainder | resample_B60_imported | 3.8914 | 3.8798 | 0.30% | 0.27% | 4/5 |
+| Exact integer remainder | resample_B60_common | 3.9349 | 3.8952 | 1.01% | 0.12% | 4/5 |
+| Exact integer remainder | public_PR_step | 11.0503 | 11.0394 | 0.10% | 0.10% | 2/5 |
+| Exact integer remainder | public_pool_PR_five | 61.7959 | 61.7705 | 0.04% | 0.15% | 2/5 |
+| Exact integer remainder | Gaussian12 | 6.0524 | 6.0374 | 0.25% | 0.25% | 2/5 |
+
+Gaussian案は元のFP64式・衛星順のまま4衛星分の独立計算を重ねたが、PR単体が0.13%悪化、切替込み5epochも0.12%悪化した。
+整数案はPhiloxの全draw・subsequence・受理順を保ち、`uint32 % N` を積上位bitとhost定数で同じ剰余へ置き換えた。
+305 divisor・11,352,248組（全quotient境界の前後を含む）で整数除算と一致し、全uint32への誤差境界も記録した。
+ただしB60 resample全体の短縮は約0.30〜1.01%、PR更新全体0.10%、切替込み5epoch0.04%に留まり採用基準未達。未変更Gaussian controlも変動する非専有hostの結果を保持する。
+5round×5repeatの交互比較をGaussian75pair/15snapshot、整数125pair/25snapshotで行い、比較した重み・返却値・全16状態は全てbit一致。
+整数trialでも既存88 GPU body/resourceは同一、追加kernelは1個だけ。性能gateで棄却したため6,904件の累積照合やsanitizerを新規実行したとは主張しない。
+最初のGaussian helperはKF stage名の解釈とworker終了処理に不備があり、部分中央値と拒否をprivate保存した。表は修正後にfresh実行した完全な75pairのみ。
+復元後のfused uniform/runtimeテストは94pass。公開再現helperも65,537粒子の2pair/2snapshotで旧新一致を確認したが、これは速度利得の評価に使わない。
+長時間実データの測位誤差曲線は追加評価していない。次の検討は通常/KF計算と、不均一重みのCPU正規化・CDF・転送。FP64累積順やNumPy policyを変えて速度を作らない。
+[GPU/CPU profile](pf_postmerge_profile_20261015.json)、[Gaussian不採用・全測定](pf_gaussian_four_rejected_20261015.json)、[整数剰余不採用・証明・全測定](pf_magic_mod_rejected_20261015.json)、[完了監査](pf_postmerge_completion_check_20261015.json)。
+再現: `python benchmarks/check_pf_magic_mod.py --output dist/mod_check.json`。
+比較は `bench_pf_postmerge_compare.py --baseline <D203.pyd> --candidate <trial.pyd> --baseline-dir <frozen-D203-python> --report <trial-report.json> --stages <stages> --sizes 1000000 --rounds 5 --repeats 5 --output <json>`。
+trialのnative sourceを別に凍結した場合は `--candidate-source-dir <flat-native-source-dir>`。各reportの再構成patchを使い、baselineとtrialは同じRelease/CUDA12.8/MSVC/compute7.5/C++20/no fast math条件で構築する。
 
 ## Exact uniform inverse, coalesced state gather and reset in one kernel (2026-10-15)
 

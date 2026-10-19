@@ -1,0 +1,17 @@
+{
+  "verified": true,
+  "report_sha256": "00d3b620c53cd7229dddf92fb408b28f6ea0178da2b35af14dfdccf76c563f7c",
+  "tests_passed": 64,
+  "component_timed_calls": 36000,
+  "component_warm_calls": 2400,
+  "component_gate_passes": 2,
+  "actual_candidate_saved_PF_states": 400,
+  "full_RTK_prefix_gates": {
+    "0": false
+  },
+  "complete_RTK_epochs_with_warm": 7200,
+  "numerical_tolerance_changed": false,
+  "production_changes": [],
+  "default_changed": false,
+  "new_GPU_source": false
+}

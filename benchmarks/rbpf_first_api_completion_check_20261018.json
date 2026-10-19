@@ -1,0 +1,15 @@
+{
+  "verified": true,
+  "report_sha256": "3ae11dd4d503e25e087caeff56ad6f7eca08190570f6a1bc9ea77d7c7cf7944c",
+  "functional_tests": 48,
+  "whole_numerical_prefix_and_device_code_exact": true,
+  "all2364_saved_score_comparisons_and54_trial_results_exact": true,
+  "all_probe_and_score_raw_clock_conservation_and_combined_timeline_verified": true,
+  "sequential_new_process_trials": 18,
+  "one_workspace_each": true,
+  "memcheck_subset_tests": 9,
+  "original_failed_gates_preserved": true,
+  "new_optimization_speed_gain_established": false,
+  "production_changes": [],
+  "default_changed": false
+}

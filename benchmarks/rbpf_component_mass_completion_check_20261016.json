@@ -1,0 +1,255 @@
+{
+  "timestamp_utc": "2026-10-16T06:27:46.463360+00:00",
+  "verified": true,
+  "report_sha256": "21ce17d5b7912ea9ac67e5deaa80f951d989fe602bc348503c66804df7ea4a5b",
+  "exact_fused_component_mass_implemented": true,
+  "product_adoption": false,
+  "production_changes": [],
+  "default_changed": false,
+  "timed_complete_step_calls": 450,
+  "warm_snapshots": 30,
+  "CPU_primary_screen_passes": 3,
+  "GPU_same_backend_screen_passes": 3,
+  "GPU_joint_screen_passes": 0,
+  "CPU_passed_conditions": [
+    "particles64/initial_unique6/rows64/groups4",
+    "particles64/initial_unique32/rows64/groups4",
+    "particles64/initial_unique6/rows128/groups8"
+  ],
+  "AA_failed_conditions": [
+    "particles128/initial_unique32/rows64/groups4"
+  ],
+  "tests": {
+    "passed": 86,
+    "configuration_warnings": 1,
+    "expected_original_underflow_warnings": 2,
+    "plan_sha256": "54b345bbf7eca19d8237d5168d54babaadb4d9d35a5edf88867c019a8394b156",
+    "log_sha256": "8b236a88f74a48ff41a4fc4fac8d514af10a6d6965285480b13a098a29aa73d8",
+    "random_matrices": 300,
+    "reference_count_calls": 10000,
+    "whole_PF_backends": 3,
+    "whole_PF_seeds": 3,
+    "whole_PF_configurations": 3,
+    "whole_PF_epochs_per_case": 4
+  },
+  "memcheck": {
+    "passed": 17,
+    "configuration_warnings": 1,
+    "errors": 0,
+    "leaked_bytes": 0,
+    "summary": [
+      "========= LEAK SUMMARY: 0 bytes leaked in 0 allocations",
+      "========= ERROR SUMMARY: 0 errors"
+    ],
+    "report_sha256": "3ef41833580c07952672569330729d3a908130c68e7a514d721c5b0a3ddbd7d6",
+    "testlog_sha256": "693b2948c96d16652633b26ac6bb5d1369c927ccf2f12ba9145583615d7ff1cc"
+  },
+  "buffer_validation": {
+    "runner_sha256": "b1dcf9227e87e79a17dbc6fad74e5abcb75d897e69cbe60c39f3f90a43437b44",
+    "extension_sha256": "1500dbff3ff8be8e8afcdf0941911449a62aa61f7cebe29e28f4af22a2e92293",
+    "unaligned_writable_and_readonly_original_fallback_bits_equal": true,
+    "aligned_writable_and_readonly_native_mass_bits_equal": true,
+    "input_bytes_unchanged": true,
+    "rejected_noncontiguous_and_non_float64_and_non_vector_buffers": true,
+    "counts": {
+      "native_calls": 2,
+      "fallback_calls": 2,
+      "native_particles": 8,
+      "native_pairs": 4
+    },
+    "scope": "Supplemental CPU-only buffer alignment/lifetime/domain check. No measured source changes or speed measurement."
+  },
+  "initial_fixture_failures_preserved": true,
+  "real_paired_steps": 800,
+  "real_saved_state_and_trajectory_bits_equal": true,
+  "default_actual_native_path_exercised": true,
+  "field_totals": {
+    "r3_seed0_mass_cpu_c0": {
+      "skipped_steps": 3,
+      "valid_steps": 197,
+      "particles": 12608,
+      "held_particles": 12504,
+      "extend_calls": 2110,
+      "shrink_calls": 2110,
+      "requested_moves": 206522,
+      "unique_moves": 4363,
+      "existing_cache_hits": 197,
+      "scalar_fallbacks": 0,
+      "native_canonical_native_calls": 50268,
+      "native_canonical_fallback_calls": 0,
+      "parent_score_native_calls": 0,
+      "parent_score_fallback_calls": 0,
+      "component_mass_native_calls": 196,
+      "component_mass_fallback_calls": 0,
+      "component_mass_native_particles": 12544,
+      "component_mass_native_pairs": 7906
+    },
+    "r3_seed0_mass_gpu_c0": {
+      "skipped_steps": 3,
+      "valid_steps": 197,
+      "particles": 12608,
+      "held_particles": 12504,
+      "extend_calls": 2110,
+      "shrink_calls": 2110,
+      "requested_moves": 206522,
+      "unique_moves": 4363,
+      "existing_cache_hits": 197,
+      "scalar_fallbacks": 0,
+      "native_canonical_native_calls": 50268,
+      "native_canonical_fallback_calls": 0,
+      "parent_score_native_calls": 0,
+      "parent_score_fallback_calls": 0,
+      "component_mass_native_calls": 196,
+      "component_mass_fallback_calls": 0,
+      "component_mass_native_particles": 12544,
+      "component_mass_native_pairs": 7906
+    },
+    "r3_seed0_mass_cpu_c1": {
+      "skipped_steps": 3,
+      "valid_steps": 197,
+      "particles": 12608,
+      "held_particles": 12508,
+      "extend_calls": 2007,
+      "shrink_calls": 2007,
+      "requested_moves": 206341,
+      "unique_moves": 4260,
+      "existing_cache_hits": 197,
+      "scalar_fallbacks": 0,
+      "native_canonical_native_calls": 54915,
+      "native_canonical_fallback_calls": 0,
+      "parent_score_native_calls": 8382,
+      "parent_score_fallback_calls": 0,
+      "component_mass_native_calls": 196,
+      "component_mass_fallback_calls": 0,
+      "component_mass_native_particles": 12544,
+      "component_mass_native_pairs": 7816
+    },
+    "r3_seed0_mass_gpu_c1": {
+      "skipped_steps": 3,
+      "valid_steps": 197,
+      "particles": 12608,
+      "held_particles": 12508,
+      "extend_calls": 2007,
+      "shrink_calls": 2007,
+      "requested_moves": 206341,
+      "unique_moves": 4260,
+      "existing_cache_hits": 197,
+      "scalar_fallbacks": 0,
+      "native_canonical_native_calls": 54915,
+      "native_canonical_fallback_calls": 0,
+      "parent_score_native_calls": 8382,
+      "parent_score_fallback_calls": 0,
+      "component_mass_native_calls": 196,
+      "component_mass_fallback_calls": 0,
+      "component_mass_native_particles": 12544,
+      "component_mass_native_pairs": 7816
+    }
+  },
+  "all_same_backend_saved_bits_equal": true,
+  "no_timing_retry": true,
+  "numerical_DLL_and_prior_extensions_unchanged": true,
+  "new_standalone_extension_sha256": "1500dbff3ff8be8e8afcdf0941911449a62aa61f7cebe29e28f4af22a2e92293",
+  "new_persistent_cuda_workspace_bytes": 0,
+  "full_route_multiseed_gate_passed": false,
+  "whole_graph_speed_gate_passed": false,
+  "production_sources_unchanged": 36,
+  "installed_extensions_unchanged": 5,
+  "PF_build_PE_unchanged": true,
+  "previous_reports_preserved": {
+    "benchmarks/double_geometry_gpu_20261016.json": "948b8797191d7c351e2710bec4578c749ea8893f6656f3f0e8cbe96fdbeabc7d",
+    "benchmarks/double_geometry_completion_check_20261016.json": "73c2f397ef645200090ae51346a9b9000d400767cc092d17a8ffe564553354e7",
+    "benchmarks/double_predicates_rejected_20261016.json": "309c46bed95ebc240657d54f591ea1b345575959ba2804c70ba8a5ca96a02f89",
+    "benchmarks/double_predicates_rejected_completion_check_20261016.json": "254bbf04216c7d24d602b42f530887b9fa93abb8e9f4760900e551e2ac43928b",
+    "benchmarks/diffraction_loss_rejected_20261016.json": "68680726625e1ddc840e6dabc4afb1cb02f90ac2547f21045687960b743faa8f",
+    "benchmarks/diffraction_loss_rejected_completion_check_20261016.json": "3dea35c50471c13fb0b18879fd9244d0e8447a83af8615d34f52ec16a577c4ec",
+    "benchmarks/composite_geometry_gpu_20261016.json": "d62537d0cf6fadcc546d7f4de78ac466829ffdde1b38a8b068cc36daab318747",
+    "benchmarks/composite_geometry_completion_check_20261016.json": "c1d2a40ed0144701fa8844dea1abf0116b308bd48749f56aa1fd2e495cf30203",
+    "benchmarks/pf_certified_division_rejected_20261016.json": "a9bef86816e1e420f9d9ecf8074bbf9c7a27d4510030798fd3d03accb823bfba",
+    "benchmarks/pf_certified_division_completion_check_20261016.json": "79bf4bff65429c904aeac6defff8f070d539d7c4179db9bc6a466340e86dfeeb",
+    "benchmarks/rbpf_fgo_gpu_feasibility_20261016.json": "feb4eeb242ce40f06975e4f1bb03c6b6610915aafb1a1d9737f4a1ccf12517de",
+    "benchmarks/rbpf_fgo_gpu_feasibility_completion_check_20261016.json": "17653b9558bcb84d144342ff40ee34a8cef3ea46d2880afd28613e40a3c60598",
+    "benchmarks/rbpf_likelihood_gpu_prototype_20261016.json": "6a6591cff2c515a31e02691032b6b20709064d56203264b5934010e7c8c48e07",
+    "benchmarks/rbpf_likelihood_gpu_prototype_completion_check_20261016.json": "305d24817650e54cd9185a235fe97a0f1bc6a7c2c4185850b207cff0a1fbae49",
+    "benchmarks/rbpf_move_batch_integration_20261016.json": "72f8c88908a0ea73757ffe54e7b7c0539ea7145442181f16292fe42a6eee4648",
+    "benchmarks/rbpf_move_batch_integration_completion_check_20261016.json": "80580c866e6e03f285f8476e74cfe9089bc8431ad3c86b82a74bd0bb6b4b3e68",
+    "benchmarks/rbpf_move_reuse_20261016.json": "8578f86a8c072194c5281bc48d94981ecc40272051ac9e228ac987c9f7c4c54f",
+    "benchmarks/rbpf_move_reuse_completion_check_20261016.json": "478e434ec64a61b5783367bc00fffe98efb3105b2db542034975fd6cb6b2c618",
+    "benchmarks/rbpf_epoch_memo_20261016.json": "e1b9079bee4fdcbff3c64cf2e9fc8b48544f61191dd70d2c19111ff2e6bb1915",
+    "benchmarks/rbpf_epoch_memo_completion_check_20261016.json": "103b960dd652e505d34f52dd02bec8e002cb8dd3d2d40591cc92669ee30cc26a",
+    "benchmarks/rbpf_proposal_reuse_20261016.json": "0be7ca23fdb752405e30307dfb43e30059b70e5646aef3851f7d32098b1c78a7",
+    "benchmarks/rbpf_proposal_reuse_completion_check_20261016.json": "a212f0813ce5f54e0129fb714e72eb03974a8346d01bf3c90513cd38c1bdf89e",
+    "benchmarks/rbpf_warp_likelihood_20261016.json": "3b502ebaa61172cad83a364878285b2b74110b6e0692e64d33638a038bfbe699",
+    "benchmarks/rbpf_warp_likelihood_completion_check_20261016.json": "c16af302ed55d6c517948410b3d8d6879b4b0a36e62555436b90b86ef46fb137",
+    "benchmarks/rbpf_dd_pack_20261016.json": "3541e177c7b9aab9588e9f5f370002d0b88273ea26617ad5dc49368dbe959f2f",
+    "benchmarks/rbpf_dd_pack_completion_check_20261016.json": "215126a7b5c5c2d3c0ed1830565ed599b0b87a698c5c2396405fed1a0b7565ee",
+    "benchmarks/rbpf_native_canonical_20261016.json": "80782b6be0ae8ac4360ff680666eab3338a412cfe699c139412d6b79a571e818",
+    "benchmarks/rbpf_native_canonical_completion_check_20261016.json": "a729d1b3c809a2f8b145cba4761c39e9fa663d399daf01494ac335c7ce89a51b",
+    "benchmarks/rbpf_parent_score_20261016.json": "827f9f71733661870fcd4092059153d785ce10007af9950d3efbd4a6163718d9",
+    "benchmarks/rbpf_parent_score_completion_check_20261016.json": "976d3f6f39a2ec9f4b20ae143d55a4361499c0136cb2499047d71212b9676a36"
+  },
+  "previous_archives_verified": {
+    "composite_geometry_candidate": {
+      "files": 305,
+      "manifest_sha256": "c5a0d912f148921b170b05f8eb1f4c0a0fa774ed62e4e278f2b672bf8b441b6e"
+    },
+    "pf_certified_division_rejected_20261016": {
+      "files": 94,
+      "manifest_sha256": "bdae75c0d2e7587e98dc2f6dfc86ca6d533d4604f25aee93c2398a68a0d24b05"
+    },
+    "rbpf_fgo_gpu_feasibility_20261016": {
+      "files": 149,
+      "manifest_sha256": "6854719596359dd1129e3c19bc74fef0f30830132d0f728e2b4667ae32c0f1ab"
+    },
+    "rbpf_likelihood_gpu_prototype_20261016": {
+      "files": 161,
+      "manifest_sha256": "e338e38ff4f52e9c11aaa0d4667ba60842e3902e0223ea1b25ded5805c4eb03c"
+    },
+    "rbpf_move_batch_integration_20261016": {
+      "files": 74,
+      "manifest_sha256": "ac31a335946f8b78909c41c837fcf35a5dfcc7a599ab79e34d4c9f9d925a28e8"
+    },
+    "rbpf_move_reuse_measured_source_20261016": {
+      "files": 1,
+      "manifest_sha256": "6f2dc57a14927150cb1ebb7c3b23c7b466197d17ef1aeea8449becabaf622145"
+    },
+    "rbpf_move_reuse_20261016": {
+      "files": 121,
+      "manifest_sha256": "c7b69513ee6e031774eb230d83a5d7a61fb3bfadd8163e5e97095667b5d93218"
+    },
+    "rbpf_epoch_memo_20261016": {
+      "files": 140,
+      "manifest_sha256": "35ec46c9f34924625376273054b9cb10acc49def9b0a7ccbe640b3ac0a0c435e"
+    },
+    "rbpf_proposal_reuse_20261016": {
+      "files": 84,
+      "manifest_sha256": "38ef475c10b65a1c208f6153cdedeb63a0d9ff35d7fcfc6c185ec962f305049b"
+    },
+    "rbpf_warp_likelihood_20261016": {
+      "files": 96,
+      "manifest_sha256": "4ed5c84af854b3e7414e912961a768551278d7d9086ba68ff9bf3ad615def45a"
+    },
+    "rbpf_warp_likelihood_text_correction_20261016": {
+      "files": 4,
+      "manifest_sha256": "d75888f7db8571ce798c6504b6c79a739dcbd8937710851027296c166d930075"
+    },
+    "rbpf_dd_pack_20261016": {
+      "files": 139,
+      "manifest_sha256": "8c6e10d94457fdaa6c73d825a86a679a0abc2e1dcbf87d77630eafd7fb0de0e5"
+    },
+    "rbpf_native_canonical_20261016": {
+      "files": 101,
+      "manifest_sha256": "d4cd45b5ffc110c931804314c60786aeb77391f9eec08f77cc0f273ea64ba91d"
+    },
+    "rbpf_parent_score_20261016": {
+      "files": 161,
+      "manifest_sha256": "25696234a36f1253c294ba92d0fceff2c799c7e9aee1ff45aae95feb7071e728"
+    }
+  },
+  "public_text_files_checked": 3009,
+  "public_device_product_names_absent": true,
+  "Ruff_compile_line_endings_diff_check_passed": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  }
+}

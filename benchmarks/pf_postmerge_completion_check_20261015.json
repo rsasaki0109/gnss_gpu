@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-15T04:18:24.929334+00:00",
+  "verified": true,
+  "adopted": false,
+  "both_performance_trials_rejected": true,
+  "production_D203_source_build_installed_exact": true,
+  "merged_main_numerical_code_identical": true,
+  "main_Python_type_comments_compiled_identical": true,
+  "primary_pairs": 200,
+  "primary_full_state_snapshots": 40,
+  "all_compared_outputs_bit_identical": true,
+  "CPU_integer_exact_cases": 11352248,
+  "CPU_integer_divisors": 305,
+  "public_oracle_reproduced_identical_records": true,
+  "reproduction_smoke_pairs": 2,
+  "reproduction_smoke_full_state_snapshots": 2,
+  "post_restore_tests_passed": 94,
+  "cumulative_6904_validation_newly_run": false,
+  "sanitizers_newly_run": false,
+  "reports": {
+    "benchmarks/pf_gaussian_four_rejected_20261015.json": "14a19a27aeb87e0460ba1a9d4156dc8f70992ccc0aa82eafd43c3bd955644035",
+    "benchmarks/pf_magic_mod_rejected_20261015.json": "b8dcf093cd2c41db1fe632fd5c016dedc9a8feef8a2dc4956d9991cade417690"
+  },
+  "profile_report": {
+    "path": "benchmarks/pf_postmerge_profile_20261015.json",
+    "sha256": "7e1047c121a0cb03fd869e3304837eda5ffa3cb9007102d47cb1d35c550f62a3"
+  },
+  "public_text_files_checked": 2791,
+  "public_device_product_names_absent": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  },
+  "long_real_data_position_error_curve_newly_evaluated": false
+}

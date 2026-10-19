@@ -1,0 +1,270 @@
+{
+  "schema_version": 1,
+  "adopted": false,
+  "reason": "Exact-output gate failed on the first measured N1000000/KF12 log-weight pair. Subsequent five restored diagnostic cases reproduced state/weight bit differences. Rejected before speed evaluation.",
+  "baseline_reference": "benchmarks/pf_fused_uniform_gpu_20261015.json",
+  "source_sha256": {
+    "baseline": {
+      "src/particle_filter/pf_device.cu": "a20de06f6a6081670d39677b265d6fa58eb64baf69d816cb8173ea68aad9a7fe",
+      "include/gnss_gpu/pf_device.h": "9616ae2e4fb898b562143f04405e1006586548b98d461881eb37e11d57b51d85",
+      "python/gnss_gpu/_pf_device_bindings.cpp": "24ea505b9fbd1171f073d56db239f63fe23f0ed65f65c83c2df61383c0521c59",
+      "python/gnss_gpu/pf_device_runtime.py": "7a3ada45383ad7cc2377b43f6bf92b6ac75be101a5f319337819ab0dc8cd1361",
+      "python/gnss_gpu/pf_device_config.py": "6b7e40d0e3f519e6454845ac1e348431d7769e143b95cf7c7b062134733a7c99",
+      "python/gnss_gpu/realtime_runtime.py": "143efce522df61877f02dee7f4ff6eea0158add40405f6f1aade51c3bea426a9"
+    },
+    "candidate": {
+      "src/particle_filter/pf_device.cu": "75b87a5e233062fc0897c12740b26e2c68397740d77862933ff23b0b5f7e74ca",
+      "include/gnss_gpu/pf_device.h": "9616ae2e4fb898b562143f04405e1006586548b98d461881eb37e11d57b51d85",
+      "python/gnss_gpu/_pf_device_bindings.cpp": "24ea505b9fbd1171f073d56db239f63fe23f0ed65f65c83c2df61383c0521c59",
+      "python/gnss_gpu/pf_device_runtime.py": "7a3ada45383ad7cc2377b43f6bf92b6ac75be101a5f319337819ab0dc8cd1361",
+      "python/gnss_gpu/pf_device_config.py": "6b7e40d0e3f519e6454845ac1e348431d7769e143b95cf7c7b062134733a7c99",
+      "python/gnss_gpu/realtime_runtime.py": "143efce522df61877f02dee7f4ff6eea0158add40405f6f1aade51c3bea426a9"
+    }
+  },
+  "extension_sha256": {
+    "baseline": "48572e69d6bf1bd4b8257988b88a270c86c19be81c49b5a1e24e4dcfc785df52",
+    "candidate": "5f5f5a32e983eaa64e95cd9703e77e63eba6016ca15a8605b0969e517dc5f161"
+  },
+  "build_configuration": "CUDA 12.8 / MSVC Release / compute 7.5 / C++20 / no fast math",
+  "dispatch": "N>=65536 and n_sat<=16; other dispatch retained",
+  "prior_rejected_trial": "benchmarks/pf_kf_probes_20261012.json (runtime per-iteration symmetry flag)",
+  "hypothesis": "Peel first accepted scalar update into a separate loop, eliminating the per-iteration symmetry flag; subsequent symmetric row products can replace column products without reordering factors/additions.",
+  "exact_output_diagnostic": {
+    "schema_version": 1,
+    "all_inputs_identical": true,
+    "exact_gate_passed": false,
+    "records": {
+      "N65537_initialized_state": {
+        "values": 1048592,
+        "bit_differences": 491946,
+        "max_finite_absolute_difference": 1.3322676295501878e-15,
+        "baseline_sha256": "2a8216d8f8685de311d81cadc7f9dd3a65a6017d87ef74817e3d33bfb426434b",
+        "candidate_sha256": "36ff2b34473c299cd7c2a3310034a074d2dd6890736b274ef397cfd92678f7fe",
+        "bit_differences_per_state_component": [
+          0,
+          0,
+          0,
+          0,
+          29055,
+          12040,
+          9424,
+          44289,
+          61099,
+          50785,
+          61099,
+          29468,
+          51731,
+          50785,
+          51731,
+          40440
+        ]
+      },
+      "N65537_initialized_weights": {
+        "values": 65537,
+        "bit_differences": 40692,
+        "max_finite_absolute_difference": 2.4424906541753444e-15,
+        "baseline_sha256": "2ba8a0e63fdd6a19fd9973b88741213ec29e755dc86c4725f39b4d04d0982d20",
+        "candidate_sha256": "16fc112b1fd93b59082a047f7154c51ce58646682ca6a539aaa7140611445107"
+      },
+      "N65537_nonsymmetric_state": {
+        "values": 1048592,
+        "bit_differences": 291909,
+        "max_finite_absolute_difference": 0.003052949905395508,
+        "baseline_sha256": "ba3e26d35901ecc11214770fac2b3bddb7d6590e631e39eb68ccfef354dcf5bb",
+        "candidate_sha256": "3539c58c58be30f49f8a9bc711db595fceda3c6123301f72e7962626811ca4cf",
+        "bit_differences_per_state_component": [
+          0,
+          0,
+          0,
+          0,
+          34395,
+          30539,
+          31165,
+          4099,
+          31821,
+          31571,
+          31821,
+          3747,
+          28660,
+          31571,
+          28660,
+          3860
+        ]
+      },
+      "N65537_nonsymmetric_weights": {
+        "values": 65537,
+        "bit_differences": 30059,
+        "max_finite_absolute_difference": 0.04467511177062988,
+        "baseline_sha256": "40c55d99a6ee0b7f06dfb06e3fe5dd06bfc05b37861e62290d5d075f7b9602a3",
+        "candidate_sha256": "5367baaf9ae06831825e4e60734dc2e1e1158fbf072f7d8ddb75bfa6de514626"
+      },
+      "N65537_signed_zero_state": {
+        "values": 1048592,
+        "bit_differences": 499860,
+        "max_finite_absolute_difference": 1.3322676295501878e-15,
+        "baseline_sha256": "5b183cbbb50f5c8fc08cbaf2edbdddc84596c1cd23217ba16a343be26c6aaacd",
+        "candidate_sha256": "9c960ad570d4b85ffdcfcaaf4d3bbd455ad10ba8e7551362d1c79f023425e917",
+        "bit_differences_per_state_component": [
+          0,
+          0,
+          0,
+          0,
+          38647,
+          21590,
+          16259,
+          41900,
+          60051,
+          48599,
+          60051,
+          25825,
+          50556,
+          48599,
+          50556,
+          37227
+        ]
+      },
+      "N65537_signed_zero_weights": {
+        "values": 65537,
+        "bit_differences": 29885,
+        "max_finite_absolute_difference": 5.329070518200751e-15,
+        "baseline_sha256": "91005eb6208175767d2669841a37c1ffb7e14859f95769821f5f7b6024e9598c",
+        "candidate_sha256": "a5e0fe3c268e71f53fbf0191b51aad8af213769ed042118fa638a8f6b39cb13f"
+      },
+      "N65537_large_state": {
+        "values": 1048592,
+        "bit_differences": 536332,
+        "max_finite_absolute_difference": 7.706886000499937e+138,
+        "baseline_sha256": "1c592a534e55c0f5cfcdd57438e8c8c96fd45f2885c2836ab1275d62559e3822",
+        "candidate_sha256": "247a79ad2bea6e4184abb6c1db478cc9227b94961c79aa0fed409cc17021af98",
+        "bit_differences_per_state_component": [
+          0,
+          0,
+          0,
+          0,
+          59491,
+          59416,
+          59403,
+          528,
+          59425,
+          59427,
+          59425,
+          808,
+          59429,
+          59427,
+          59429,
+          124
+        ]
+      },
+      "N65537_large_weights": {
+        "values": 65537,
+        "bit_differences": 58257,
+        "max_finite_absolute_difference": 760.1937276875724,
+        "baseline_sha256": "25f3c51e307db118b02949a23c9418225dd310fda6d46262e2d01c8c263f364d",
+        "candidate_sha256": "8c06959c44fdb225e20d8b051cf74ce4f6b33dfb0e2151776fc130e06450a867"
+      },
+      "N1000000_initialized_state": {
+        "values": 16000000,
+        "bit_differences": 7501106,
+        "max_finite_absolute_difference": 1.7763568394002505e-15,
+        "baseline_sha256": "ba21c285463fcffde58ce5d37ab0c1461bc8d52a09602a2ee48bf98feae3897c",
+        "candidate_sha256": "e10c3210c0bbdfce019c67127c9974fc246f7f438947eff12f4bf99ac3dde59b",
+        "bit_differences_per_state_component": [
+          0,
+          0,
+          0,
+          0,
+          445066,
+          182189,
+          143234,
+          675816,
+          931016,
+          774904,
+          931016,
+          448276,
+          789443,
+          774904,
+          789443,
+          615799
+        ]
+      },
+      "N1000000_initialized_weights": {
+        "values": 1000000,
+        "bit_differences": 622378,
+        "max_finite_absolute_difference": 2.6645352591003757e-15,
+        "baseline_sha256": "c37e42cbdf2e4f27309e6fda70d172969a763a9eb392974705c84e079e4a1da3",
+        "candidate_sha256": "2fe794c3950bfd0bb25bb624eaf9ace5e8426b8f93d9f442928248a0cc0d97b2"
+      }
+    },
+    "npz_sha256": {
+      "baseline": "4034e3dc962915f660bb10f0f6b80e0f9f804ab7a3e9e730f1eda787b5f1e67b",
+      "candidate": "b1e8abe440e89654847191118b551b648e688ca4aff1a8914595845370942a95"
+    },
+    "interpretation": "Finite differences quantify this rejection only; no accuracy tolerance was introduced and no adoption or timing conclusion follows."
+  },
+  "arithmetic_caution": "Identical real-number algebra and mirrored finite covariance do not establish identical compiled FP64 contraction/rounding. This probe did not prove instruction equivalence; observed output differences are sufficient to reject it.",
+  "speed_measurements_accepted": false,
+  "validation": {
+    "restored_diagnostic_cases": 5,
+    "array_comparisons": 10,
+    "all_inputs_identical": true,
+    "all_compared_outputs_bit_identical": false,
+    "broader_validation_newly_run": false,
+    "reason": "Exact-output gate failed."
+  },
+  "device_code": {
+    "old_kernels": 88,
+    "trial_kernels": 89,
+    "old_normalized_GPU_bodies_and_resources_unchanged": true,
+    "added_resources": {
+      "_ZN8gnss_gpu35pfd_doppler_kf_peeled_update_kernelILi16EEEvPKdS2_S2_PdS3_S3_S3_S2_S3_iidd": {
+        "registers": 84,
+        "stack_bytes": 512,
+        "static_shared_bytes": 0,
+        "local_bytes": 0
+      }
+    }
+  },
+  "early_gate": {
+    "decision_criteria": "At least 5% native KF12 and 3% complete public PR/KF step, at least 4/5 improving rounds; exact outputs and broader validation required before adoption."
+  },
+  "patch": {
+    "path": "benchmarks/probes/pf_kf_peeled_rejected_20261015.patch",
+    "sha256": "0c1c77cf039dfd45792264794ae45f39e6b0e4ce890547d23a3709391fb1f46d",
+    "files": {
+      "src/particle_filter/pf_device.cu": {
+        "baseline_sha256": "a20de06f6a6081670d39677b265d6fa58eb64baf69d816cb8173ea68aad9a7fe",
+        "candidate_sha256": "75b87a5e233062fc0897c12740b26e2c68397740d77862933ff23b0b5f7e74ca",
+        "reconstructs_crlf_bytes": true
+      }
+    }
+  },
+  "baseline_source_build_installed_restored": true,
+  "limitation": "Diagnostic finite differences are not a long real-data positioning-accuracy study. No tolerance or model changes were accepted.",
+  "source_normalized_lf_sha256": {
+    "baseline": {
+      "src/particle_filter/pf_device.cu": "3e53fc592c6778b9ae27aface1f0a5911b9bdae2a6d9cdbd91cf90eef1e3b4e1",
+      "include/gnss_gpu/pf_device.h": "33a060170e84cdfc220e48a922cfbc231a5c630118235411c1d8eb984e692209",
+      "python/gnss_gpu/_pf_device_bindings.cpp": "d132892384a709f066122d8e8ba261c13b4ecd3e0e3fa9a4f8fad8f709d8349d",
+      "python/gnss_gpu/pf_device_runtime.py": "854e7cc03191e29c910c80492a9a8bdc4267af994bdd2e769a27b7d70400804b",
+      "python/gnss_gpu/pf_device_config.py": "4c60542bd93753a40a495a2c960271ed6ca2ab46cd922e87e1ff151bd614f9ee",
+      "python/gnss_gpu/realtime_runtime.py": "279ad7db81cd16a83d61551e00ecb6b575ec383687ed514510ecedccca711f72"
+    },
+    "candidate": {
+      "src/particle_filter/pf_device.cu": "a0eca8a2da8abf1d3b0519f95c807f533e40b0465fd140fcc5a188d5d016e0f9",
+      "include/gnss_gpu/pf_device.h": "33a060170e84cdfc220e48a922cfbc231a5c630118235411c1d8eb984e692209",
+      "python/gnss_gpu/_pf_device_bindings.cpp": "d132892384a709f066122d8e8ba261c13b4ecd3e0e3fa9a4f8fad8f709d8349d",
+      "python/gnss_gpu/pf_device_runtime.py": "854e7cc03191e29c910c80492a9a8bdc4267af994bdd2e769a27b7d70400804b",
+      "python/gnss_gpu/pf_device_config.py": "4c60542bd93753a40a495a2c960271ed6ca2ab46cd922e87e1ff151bd614f9ee",
+      "python/gnss_gpu/realtime_runtime.py": "279ad7db81cd16a83d61551e00ecb6b575ec383687ed514510ecedccca711f72"
+    }
+  },
+  "source_normalization": "CRLF to LF; Python trailing pyright type-check directives omitted. Numerical code and all other text retained.",
+  "reproduction_helper": {
+    "path": "benchmarks/bench_pf_kf_postmerge_compare.py",
+    "sha256": "e54905f80cfbfdc035a74abf711a54b949fba5ea6fb9c82c06e2bc5ab3f572c0"
+  },
+  "diagnostic_reproduction_helper": {
+    "path": "benchmarks/check_pf_kf_peeled_mismatch.py",
+    "sha256": "a13857ea53281faf7fca68eb908540e60b4de06ab1df1fc41d86796d10057318"
+  }
+}

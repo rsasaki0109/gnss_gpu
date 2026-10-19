@@ -1,0 +1,38 @@
+{
+  "timestamp_utc": "2026-10-15T23:47:57.683931+00:00",
+  "verified": true,
+  "product_adoption": false,
+  "production_changes": [],
+  "report": {
+    "path": "benchmarks/rbpf_fgo_gpu_feasibility_20261016.json",
+    "sha256": "feb4eeb242ce40f06975e4f1bb03c6b6610915aafb1a1d9737f4a1ccf12517de"
+  },
+  "audit_sha256": "df9fca4f6c89234cb9a1233fdd63538024e4bd6ce2dcdcc1b5badc35500b6ca9",
+  "timed_calls": 480,
+  "cross_mode_comparisons": 240,
+  "AA_comparisons": 120,
+  "basic_conditions_excluded_from_useful_gain": 4,
+  "useful_VD_conditions_passing_performance_screen": 2,
+  "all_VD_final_position_bits_identical_in_fixtures": true,
+  "all_state_bits_identical": false,
+  "maximum_state_difference": 8.526512829121202e-14,
+  "actual_GPU_execution_confirmed": true,
+  "tests_passed": 91,
+  "test_warnings": 2,
+  "new_sanitizer_run": false,
+  "production_sources_unchanged": 36,
+  "production_extensions_unchanged": 5,
+  "previous_reports_preserved": {
+    "benchmarks/pf_certified_division_rejected_20261016.json": "a9bef86816e1e420f9d9ecf8074bbf9c7a27d4510030798fd3d03accb823bfba",
+    "benchmarks/pf_certified_division_completion_check_20261016.json": "79bf4bff65429c904aeac6defff8f070d539d7c4179db9bc6a466340e86dfeeb",
+    "benchmarks/composite_geometry_gpu_20261016.json": "d62537d0cf6fadcc546d7f4de78ac466829ffdde1b38a8b068cc36daab318747",
+    "benchmarks/composite_geometry_completion_check_20261016.json": "c1d2a40ed0144701fa8844dea1abf0116b308bd48749f56aa1fd2e495cf30203"
+  },
+  "public_text_files_checked": 2903,
+  "public_device_product_names_absent": true,
+  "ruff_compile_line_endings_and_git_diff_check_passed": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  }
+}

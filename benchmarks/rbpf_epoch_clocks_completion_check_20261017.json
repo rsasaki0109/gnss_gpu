@@ -1,0 +1,16 @@
+{
+  "verified": true,
+  "report_sha256": "d99ac1d53422aa128a73b44a0f77ea9d703599163fcf1a4cb753462257c5a475",
+  "tests_passed": 18,
+  "complete_RTK_prefixes": 8,
+  "complete_RTK_epochs": 3200,
+  "PF_calls": 1600,
+  "all_trajectory_array_bits_equal": true,
+  "all_configs_and_inputs_equal": true,
+  "new_saved_PF_state_audit": false,
+  "no_candidate_or_speed_acceptance": true,
+  "legacy_gate_still_failed": true,
+  "production_changes": [],
+  "default_changed": false,
+  "GPU_measurement": false
+}

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-15T17:28:44.966449+00:00",
+  "verified": true,
+  "adopted": false,
+  "restored_D220": true,
+  "report": {
+    "path": "benchmarks/diffraction_loss_rejected_20261016.json",
+    "sha256": "68680726625e1ddc840e6dabc4afb1cb02f90ac2547f21045687960b743faa8f"
+  },
+  "source_record_sha256": "a570efc09cbfba0ebdde2f2ce0b1882dad9a6c772a2bbf12b4718df4f221de46",
+  "all24_source_bytes_restored": true,
+  "native_PE_unchanged": true,
+  "candidate_timed_pairs": 3908,
+  "all_timed_outputs_bit_identical": true,
+  "candidate_tests_passed": 654,
+  "restored_tests_passed": 582,
+  "existing_skips_per_run": 2,
+  "candidate_manifest_sha256": "a2ec0246d5dbe4425ddfbfc2ecbcd320cc50503cb457ea33d11460ab90f9738a",
+  "confirmation_audit_sha256": "678952331664661f0d26f9119377c5a9f7d017d34481fa695ecc6485e766f4c8",
+  "all_initial_raw_retained": true,
+  "initial_failed_fixture_pairs_excluded": true,
+  "prior_reports_preserved": {
+    "benchmarks/double_geometry_gpu_20261016.json": "948b8797191d7c351e2710bec4578c749ea8893f6656f3f0e8cbe96fdbeabc7d",
+    "benchmarks/double_geometry_completion_check_20261016.json": "73c2f397ef645200090ae51346a9b9000d400767cc092d17a8ffe564553354e7",
+    "benchmarks/double_predicates_rejected_20261016.json": "309c46bed95ebc240657d54f591ea1b345575959ba2804c70ba8a5ca96a02f89",
+    "benchmarks/double_predicates_rejected_completion_check_20261016.json": "254bbf04216c7d24d602b42f530887b9fa93abb8e9f4760900e551e2ac43928b"
+  },
+  "rejected_candidate_patch_unapplied": true,
+  "forward_patch_check_passed": true,
+  "no_new_cuda_sanitizer_runs": true,
+  "no_new_real_data_positioning_accuracy_claim": true,
+  "public_text_files_checked": 2883,
+  "public_device_product_names_absent": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  }
+}

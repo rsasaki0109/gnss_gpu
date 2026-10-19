@@ -1,0 +1,11 @@
+{
+  "verified": true,
+  "report_sha256": "6854bb27408d12967cf844f2d2cb294990ac85fd2692c4b51f84a08f780dbbb5",
+  "functional_tests": 39,
+  "CUDA_checkers_pass": 3,
+  "all1272outputs_exact": true,
+  "bulk_conditions_warm_cold_pass": 2,
+  "native_all4_combined_gate": false,
+  "product_adoption": false,
+  "default_changed": false
+}

@@ -61,174 +61,191 @@ struct BuildTriangle {
 };
 
 // Recursive top-down build. indices[start..end) are the triangle indices to partition.
-static int build_recursive(const BuildTriangle* geometry,
-                           std::vector<int>& indices, int start, int end,
+static void build_iterative(const BuildTriangle* geometry,
+                           std::vector<int>& indices, int first, int last,
                            std::vector<BVHNode>& nodes,
                            AABB* prefix_box, AABB* suffix_box) {
-  int count = end - start;
-  // Compute bounds of all triangles in range
-  AABB bounds = geometry[indices[start]].bounds;
-  for (int i = start + 1; i < end; i++) {
-    bounds = union_aabb(bounds, geometry[indices[i]].bounds);
-  }
+  struct Work { int start, end, parent; bool right; };
+  std::vector<Work> pending;
+  pending.reserve(64);
+  pending.push_back({first, last, -1, false});
+  while (!pending.empty()) {
+    const Work task = pending.back();
+    pending.pop_back();
+    int start = task.start;
+    int end = task.end;
+    auto attach_parent = [&](int index) {
+      if (task.parent >= 0) {
+        if (task.right) nodes[task.parent].right = index;
+        else nodes[task.parent].left = index;
+      }
+    };
 
-  // Leaf node
-  if (count <= MAX_LEAF_TRIS) {
-    BVHNode node;
-    node.bbox = bounds;
-    node.left = -1;
-    node.right = -1;
-    node.tri_start = start;
-    node.tri_count = count;
-    int idx = (int)nodes.size();
-    nodes.push_back(node);
-    return idx;
-  }
-
-  // SAH split: try each axis, find best bin split
-  double best_cost = DBL_MAX;
-  int best_axis = 0;
-  int best_split = start + count / 2;  // fallback: midpoint
-
-  double parent_sa = aabb_surface_area(bounds);
-  if (parent_sa < 1e-30) parent_sa = 1e-30;
-
-  for (int axis = 0; axis < 3; axis++) {
-    double axis_min = bounds.min[axis];
-    double axis_max = bounds.max[axis];
-    if (axis_max - axis_min < 1e-15) continue;
-
-    double bin_width = (axis_max - axis_min) / SAH_BINS;
-
-    // Count triangles per bin and compute bin bounds
-    int bin_count[SAH_BINS] = {};
-    AABB bin_bounds[SAH_BINS];
-    for (int b = 0; b < SAH_BINS; b++) {
-      bin_bounds[b].min[0] = bin_bounds[b].min[1] = bin_bounds[b].min[2] = DBL_MAX;
-      bin_bounds[b].max[0] = bin_bounds[b].max[1] = bin_bounds[b].max[2] = -DBL_MAX;
+    int count = end - start;
+    // Compute bounds of all triangles in range
+    AABB bounds = geometry[indices[start]].bounds;
+    for (int i = start + 1; i < end; i++) {
+      bounds = union_aabb(bounds, geometry[indices[i]].bounds);
     }
 
-    for (int i = start; i < end; i++) {
-      double c = geometry[indices[i]].centroid[axis];
-      int b = (int)((c - axis_min) / bin_width);
-      if (b < 0) b = 0;
-      if (b >= SAH_BINS) b = SAH_BINS - 1;
-      bin_count[b]++;
-      AABB tb = geometry[indices[i]].bounds;
-      bin_bounds[b] = union_aabb(bin_bounds[b], tb);
+    // Leaf node
+    if (count <= MAX_LEAF_TRIS) {
+      BVHNode node;
+      node.bbox = bounds;
+      node.left = -1;
+      node.right = -1;
+      node.tri_start = start;
+      node.tri_count = count;
+      int idx = (int)nodes.size();
+      nodes.push_back(node);
+      attach_parent(idx);
+      continue;
     }
 
-    // Sweep from left: prefix counts and bounds
-    AABB left_bounds[SAH_BINS - 1];
-    int left_count[SAH_BINS - 1];
-    {
-      AABB running = bin_bounds[0];
-      int cnt = bin_count[0];
+    // SAH split: try each axis, find best bin split
+    double best_cost = DBL_MAX;
+    int best_axis = 0;
+    int best_split = start + count / 2;  // fallback: midpoint
+
+    double parent_sa = aabb_surface_area(bounds);
+    if (parent_sa < 1e-30) parent_sa = 1e-30;
+
+    for (int axis = 0; axis < 3; axis++) {
+      double axis_min = bounds.min[axis];
+      double axis_max = bounds.max[axis];
+      if (axis_max - axis_min < 1e-15) continue;
+
+      double bin_width = (axis_max - axis_min) / SAH_BINS;
+
+      // Count triangles per bin and compute bin bounds
+      int bin_count[SAH_BINS] = {};
+      AABB bin_bounds[SAH_BINS];
+      for (int b = 0; b < SAH_BINS; b++) {
+        bin_bounds[b].min[0] = bin_bounds[b].min[1] = bin_bounds[b].min[2] = DBL_MAX;
+        bin_bounds[b].max[0] = bin_bounds[b].max[1] = bin_bounds[b].max[2] = -DBL_MAX;
+      }
+
+      for (int i = start; i < end; i++) {
+        double c = geometry[indices[i]].centroid[axis];
+        int b = (int)((c - axis_min) / bin_width);
+        if (b < 0) b = 0;
+        if (b >= SAH_BINS) b = SAH_BINS - 1;
+        bin_count[b]++;
+        AABB tb = geometry[indices[i]].bounds;
+        bin_bounds[b] = union_aabb(bin_bounds[b], tb);
+      }
+
+      // Sweep from left: prefix counts and bounds
+      AABB left_bounds[SAH_BINS - 1];
+      int left_count[SAH_BINS - 1];
+      {
+        AABB running = bin_bounds[0];
+        int cnt = bin_count[0];
+        for (int s = 0; s < SAH_BINS - 1; s++) {
+          if (s > 0) {
+            running = union_aabb(running, bin_bounds[s]);
+            cnt += bin_count[s];
+          }
+          left_bounds[s] = running;
+          left_count[s] = cnt;
+        }
+      }
+
+      // Sweep from right
+      AABB right_bounds[SAH_BINS - 1];
+      int right_count[SAH_BINS - 1];
+      {
+        AABB running = bin_bounds[SAH_BINS - 1];
+        int cnt = bin_count[SAH_BINS - 1];
+        for (int s = SAH_BINS - 2; s >= 0; s--) {
+          right_bounds[s] = running;
+          right_count[s] = cnt;
+          if (s > 0) {
+            running = union_aabb(running, bin_bounds[s]);
+            cnt += bin_count[s];
+          }
+        }
+      }
+
+      // Evaluate SAH cost for each split plane
       for (int s = 0; s < SAH_BINS - 1; s++) {
-        if (s > 0) {
-          running = union_aabb(running, bin_bounds[s]);
-          cnt += bin_count[s];
+        if (left_count[s] == 0 || right_count[s] == 0) continue;
+        double cost = 1.0 +
+            (aabb_surface_area(left_bounds[s]) * left_count[s] +
+             aabb_surface_area(right_bounds[s]) * right_count[s]) / parent_sa;
+        if (cost < best_cost) {
+          best_cost = cost;
+          best_axis = axis;
+          // We need to compute the actual split position
+          // Sort-and-partition approach: partition by centroid vs split plane
+          best_split = -1;  // will be set below via partition
+          // Store the split plane value
         }
-        left_bounds[s] = running;
-        left_count[s] = cnt;
+      }
+
+      // If this axis had the best cost, do the partition
+      if (best_cost < DBL_MAX) {
+        // Re-find the best split index for this axis
+        // (We'll do a single clean pass below after choosing the axis)
       }
     }
 
-    // Sweep from right
-    AABB right_bounds[SAH_BINS - 1];
-    int right_count[SAH_BINS - 1];
-    {
-      AABB running = bin_bounds[SAH_BINS - 1];
-      int cnt = bin_count[SAH_BINS - 1];
-      for (int s = SAH_BINS - 2; s >= 0; s--) {
-        right_bounds[s] = running;
-        right_count[s] = cnt;
-        if (s > 0) {
-          running = union_aabb(running, bin_bounds[s]);
-          cnt += bin_count[s];
-        }
-      }
+    // Partition indices along best_axis using nth_element-style approach
+    // Sort the range by centroid along best_axis
+    int axis = best_axis;
+    std::sort(indices.begin() + start, indices.begin() + end,
+              [&](int a, int b) {
+                return geometry[a].centroid[axis] <
+                       geometry[b].centroid[axis];
+              });
+
+    // Find best SAH split on sorted array
+    // These buffers are consumed before descending into either child, so
+    // recursive calls can overwrite them without keeping per-node allocations.
+    // Build prefix AABBs
+    prefix_box[0] = geometry[indices[start]].bounds;
+    for (int i = 1; i < count; i++) {
+      prefix_box[i] = union_aabb(prefix_box[i - 1],
+                                  geometry[indices[start + i]].bounds);
     }
 
-    // Evaluate SAH cost for each split plane
-    for (int s = 0; s < SAH_BINS - 1; s++) {
-      if (left_count[s] == 0 || right_count[s] == 0) continue;
-      double cost = 1.0 +
-          (aabb_surface_area(left_bounds[s]) * left_count[s] +
-           aabb_surface_area(right_bounds[s]) * right_count[s]) / parent_sa;
+    suffix_box[count - 1] = geometry[indices[start + count - 1]].bounds;
+    for (int i = count - 2; i >= 0; i--) {
+      suffix_box[i] = union_aabb(suffix_box[i + 1],
+                                  geometry[indices[start + i]].bounds);
+    }
+
+    best_cost = DBL_MAX;
+    best_split = start + count / 2;
+    for (int i = 1; i < count; i++) {
+      double cost = (aabb_surface_area(prefix_box[i - 1]) * i +
+                     aabb_surface_area(suffix_box[i]) * (count - i)) / parent_sa;
       if (cost < best_cost) {
         best_cost = cost;
-        best_axis = axis;
-        // We need to compute the actual split position
-        // Sort-and-partition approach: partition by centroid vs split plane
-        best_split = -1;  // will be set below via partition
-        // Store the split plane value
+        best_split = start + i;
       }
     }
 
-    // If this axis had the best cost, do the partition
-    if (best_cost < DBL_MAX) {
-      // Re-find the best split index for this axis
-      // (We'll do a single clean pass below after choosing the axis)
-    }
+    // Prevent degenerate splits
+    if (best_split <= start) best_split = start + 1;
+    if (best_split >= end) best_split = end - 1;
+
+    // Allocate internal node (reserve index)
+    int node_idx = (int)nodes.size();
+    nodes.push_back(BVHNode());  // placeholder
+
+    nodes[node_idx].bbox = bounds;
+    nodes[node_idx].left = -1;
+    nodes[node_idx].right = -1;
+    nodes[node_idx].tri_start = 0;
+    nodes[node_idx].tri_count = 0;
+
+    attach_parent(node_idx);
+    // Right is deferred so the left subtree gets the same node indices first.
+    pending.push_back({best_split, end, node_idx, true});
+    pending.push_back({start, best_split, node_idx, false});
+
   }
-
-  // Partition indices along best_axis using nth_element-style approach
-  // Sort the range by centroid along best_axis
-  int axis = best_axis;
-  std::sort(indices.begin() + start, indices.begin() + end,
-            [&](int a, int b) {
-              return geometry[a].centroid[axis] <
-                     geometry[b].centroid[axis];
-            });
-
-  // Find best SAH split on sorted array
-  // These buffers are consumed before descending into either child, so
-  // recursive calls can overwrite them without keeping per-node allocations.
-  // Build prefix AABBs
-  prefix_box[0] = geometry[indices[start]].bounds;
-  for (int i = 1; i < count; i++) {
-    prefix_box[i] = union_aabb(prefix_box[i - 1],
-                                geometry[indices[start + i]].bounds);
-  }
-
-  suffix_box[count - 1] = geometry[indices[start + count - 1]].bounds;
-  for (int i = count - 2; i >= 0; i--) {
-    suffix_box[i] = union_aabb(suffix_box[i + 1],
-                                geometry[indices[start + i]].bounds);
-  }
-
-  best_cost = DBL_MAX;
-  best_split = start + count / 2;
-  for (int i = 1; i < count; i++) {
-    double cost = (aabb_surface_area(prefix_box[i - 1]) * i +
-                   aabb_surface_area(suffix_box[i]) * (count - i)) / parent_sa;
-    if (cost < best_cost) {
-      best_cost = cost;
-      best_split = start + i;
-    }
-  }
-
-  // Prevent degenerate splits
-  if (best_split <= start) best_split = start + 1;
-  if (best_split >= end) best_split = end - 1;
-
-  // Allocate internal node (reserve index)
-  int node_idx = (int)nodes.size();
-  nodes.push_back(BVHNode());  // placeholder
-
-  int left_child = build_recursive(geometry, indices, start, best_split, nodes,
-                                   prefix_box, suffix_box);
-  int right_child = build_recursive(geometry, indices, best_split, end, nodes,
-                                    prefix_box, suffix_box);
-
-  nodes[node_idx].bbox = bounds;
-  nodes[node_idx].left = left_child;
-  nodes[node_idx].right = right_child;
-  nodes[node_idx].tri_start = 0;
-  nodes[node_idx].tri_count = 0;
-
-  return node_idx;
 }
 
 void bvh_build(const Triangle* triangles, int n_tri,
@@ -253,7 +270,7 @@ void bvh_build(const Triangle* triangles, int n_tri,
 
   std::vector<AABB> prefix_box(n_tri > MAX_LEAF_TRIS ? n_tri : 0);
   std::vector<AABB> suffix_box(prefix_box.size());
-  build_recursive(geometry.data(), indices, 0, n_tri, node_vec,
+  build_iterative(geometry.data(), indices, 0, n_tri, node_vec,
                   prefix_box.data(), suffix_box.data());
 
   *n_nodes = (int)node_vec.size();
@@ -312,6 +329,20 @@ __device__ static bool ray_aabb_intersect(const double origin[3],
 }
 
 static const int BVH_MAX_DEPTH = 64;
+
+// A shallow cut retains every ancestor test before independent LOS subtrees.
+// Only trees whose complete height is at most32 use this path, so the legacy
+// 64-entry traversal stack never truncates an ancestor or subtree.
+struct LOSBranch {
+  int ancestors[5];
+  int count;
+  int root;
+};
+
+struct LOSFrontier {
+  LOSBranch branches[32];
+  int count;
+};
 
 __global__ void los_check_bvh_kernel(const double* rx_ecef,
                                       const double* sat_ecef,
@@ -444,6 +475,82 @@ __global__ void los_check_bvh_batch_kernel(const double* rx_ecef,
   }
 
   is_los[tid] = blocked ? 0 : 1;
+}
+
+// One warp per ray distributes a bounded, exact BVH frontier across lanes.
+// Single-call NaN behavior and batch padding remain distinct as in the old
+// kernels. Shared ray preparation uses the same device FP64 expressions.
+template <bool BATCH>
+__global__ void los_frontier_kernel(const double* rx_ecef, const double* sat_ecef,
+                                     const BVHNode* bvh, const Triangle* tris,
+                                     __grid_constant__ const LOSFrontier frontier,
+                                     int* is_los, int n_sat) {
+  int ray = blockIdx.x;
+  int epoch = ray / n_sat;
+  __shared__ double origin[3], dir[3], dir_inv[3], dist;
+  __shared__ int status;
+  if (threadIdx.x == 0) {
+    double ox = rx_ecef[epoch * 3], oy = rx_ecef[epoch * 3 + 1], oz = rx_ecef[epoch * 3 + 2];
+    double sx = sat_ecef[ray * 3], sy = sat_ecef[ray * 3 + 1], sz = sat_ecef[ray * 3 + 2];
+    status = 2;
+    if constexpr (BATCH) {
+      if (!isfinite(sx) || !isfinite(sy) || !isfinite(sz) ||
+          !isfinite(ox) || !isfinite(oy) || !isfinite(oz)) status = 0;
+    }
+    if (status) {
+      origin[0] = ox; origin[1] = oy; origin[2] = oz;
+      dir[0] = sx - ox; dir[1] = sy - oy; dir[2] = sz - oz;
+      dist = sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
+      if (dist < 1e-15) {
+        status = 1;
+      } else {
+        dir[0] /= dist; dir[1] /= dist; dir[2] /= dist;
+        for (int d = 0; d < 3; d++) {
+          dir_inv[d] = (fabs(dir[d]) > 1e-20) ? (1.0 / dir[d]) : ((dir[d] >= 0) ? 1e20 : -1e20);
+        }
+      }
+    }
+  }
+  __syncthreads();
+  if (status != 2) {
+    if (threadIdx.x == 0) is_los[ray] = status;
+    return;
+  }
+  bool blocked = false;
+  if (threadIdx.x < frontier.count) {
+    const LOSBranch& branch = frontier.branches[threadIdx.x];
+    bool reachable = true;
+    for (int i = 0; i < branch.count; i++) {
+      if (!ray_aabb_intersect(origin, dir_inv, 0.0, dist, bvh[branch.ancestors[i]].bbox)) {
+        reachable = false;
+        break;
+      }
+    }
+    if (reachable) {
+      int stack[BVH_MAX_DEPTH];
+      int sp = 0;
+      stack[sp++] = branch.root;
+      while (sp > 0 && !blocked) {
+        const BVHNode& node = bvh[stack[--sp]];
+        if (!ray_aabb_intersect(origin, dir_inv, 0.0, dist, node.bbox)) continue;
+        if (node.left == -1) {
+          for (int i = 0; i < node.tri_count; i++) {
+            double t;
+            const Triangle& tri = tris[node.tri_start + i];
+            if (mt_intersect(origin, dir, tri.v0, tri.v1, tri.v2, t) && t < dist) {
+              blocked = true;
+              break;
+            }
+          }
+        } else if (sp < BVH_MAX_DEPTH - 1) {
+          stack[sp++] = node.left;
+          stack[sp++] = node.right;
+        }
+      }
+    }
+  }
+  unsigned hits = __ballot_sync(0xffffffffu, blocked);
+  if (threadIdx.x == 0) is_los[ray] = hits ? 0 : 1;
 }
 
 __global__ void multipath_bvh_batch_kernel(const double* rx_ecef,
@@ -911,7 +1018,8 @@ class DeviceScope {
 
 // Validate ranges and reject reachable cycles before any GPU allocation. Shared
 // or overlapping leaves remain valid and use the legacy multipath path as needed.
-int validate_device_bvh(const BVHNode* nodes, int n_nodes, int n_tri) {
+int validate_device_bvh(const BVHNode* nodes, int n_nodes, int n_tri,
+                        std::vector<LOSBranch>& frontier) {
   int referenced = 0;
   for (int i = 0; i < n_nodes; ++i) {
     const auto& node = nodes[i];
@@ -924,23 +1032,50 @@ int validate_device_bvh(const BVHNode* nodes, int n_nodes, int n_tri) {
       throw std::invalid_argument("DeviceBVH: child index is out of bounds");
     }
   }
+  bool prepare_frontier = referenced >= 8192 && n_nodes >= 15;
   std::vector<unsigned char> colors(n_nodes, 0);
   std::vector<std::pair<int, bool>> pending{{0, false}};
   while (!pending.empty()) {
     auto [index, leaving] = pending.back();
     pending.pop_back();
     if (leaving) {
-      colors[index] = 2;
+      // Completed colors encode min(height,33)+2 when a frontier is useful.
+      // Reuse the existing byte scratch instead of another node-sized vector.
+      colors[index] = prepare_frontier ? (nodes[index].left == -1 ? 3 :
+          std::min(35, 1 + std::max((int)colors[nodes[index].left],
+                                   (int)colors[nodes[index].right]))) : 2;
       continue;
     }
     if (colors[index] == 1) throw std::invalid_argument("DeviceBVH: BVH contains a cycle");
-    if (colors[index] == 2) continue;
+    if (colors[index] >= 2) continue;
     colors[index] = 1;
     pending.emplace_back(index, true);
     if (nodes[index].left != -1) {
       pending.emplace_back(nodes[index].left, false);
       pending.emplace_back(nodes[index].right, false);
     }
+  }
+  if (prepare_frontier && colors[0] <= 34) {
+    frontier.push_back(LOSBranch{});
+    for (int level = 0; level < 5; level++) {
+      std::vector<LOSBranch> next;
+      next.reserve(32);
+      for (const auto& branch : frontier) {
+        const auto& node = nodes[branch.root];
+        if (node.left == -1) {
+          next.push_back(branch);
+        } else {
+          LOSBranch child = branch;
+          child.ancestors[child.count++] = branch.root;
+          child.root = node.left;
+          next.push_back(child);
+          child.root = node.right;
+          next.push_back(child);
+        }
+      }
+      frontier.swap(next);
+    }
+    if (frontier.size() < 8) frontier.clear();
   }
   return referenced;
 }
@@ -953,6 +1088,7 @@ struct DeviceBVH::Impl {
   int n_order = 0;
   bool ordered = false;
   std::vector<int> host_order;
+  LOSFrontier frontier = {};
   DeviceBuffer<BVHNode> nodes;
   DeviceBuffer<Triangle> triangles;
   DeviceBuffer<int> order, los;
@@ -964,6 +1100,7 @@ struct DeviceBVH::Impl {
   bool mirrors_active = false;
   int mirror_epochs = 0;
   bool cached_serial = false;
+  int parallel_epochs = 0;
 
   ~Impl() {
     int previous = 0;
@@ -988,7 +1125,15 @@ struct DeviceBVH::Impl {
 
   void launch_los(int n_epoch, int n_sat, bool batch) {
     int total = n_epoch * n_sat;
-    if (batch) {
+    if (total <= 256 && frontier.count >= 8) {
+      if (batch) {
+        los_frontier_kernel<true><<<total, 32>>>(rx.data, sat.data, nodes.data, triangles.data,
+            frontier, los.data, n_sat);
+      } else {
+        los_frontier_kernel<false><<<total, 32>>>(rx.data, sat.data, nodes.data, triangles.data,
+            frontier, los.data, n_sat);
+      }
+    } else if (batch) {
       los_check_bvh_batch_kernel<<<(total + 255) / 256, 256>>>(
           rx.data, sat.data, nodes.data, triangles.data, los.data, n_epoch, n_sat, n_nodes);
     } else {
@@ -1002,6 +1147,7 @@ struct DeviceBVH::Impl {
     mirrors_active = false;
     mirror_epochs = 0;
     cached_serial = false;
+    parallel_epochs = 0;
     points.reserve((size_t)total * 3);
     delays.reserve((size_t)total);
     if (!ordered) return 0;
@@ -1013,7 +1159,13 @@ struct DeviceBVH::Impl {
     }
     // Substantial meshes amortize one winner reduction per ray. Keep the
     // candidate scratch bounded to 16,384 winners (640 KiB).
-    bool large_parallel = n_order >= 64 && total <= 16384;
+    // Reuse the existing candidate kernels for large batches, with at most
+    // one bounded epoch group in winner scratch. Keep unusually wide epochs
+    // and smaller meshes on the existing serial path.
+    bool chunk_parallel = total > 16384 && n_order >= 1024 &&
+        (n_order >= 8192 || n_sat >= 8) && n_sat <= 16384;
+    if (chunk_parallel) parallel_epochs = std::max(1, 4096 / n_sat);
+    bool large_parallel = n_order >= 64 && (total <= 16384 || chunk_parallel);
     if (total > 4096 && !large_parallel) {
       if (!normals_ready) {
         normals.reserve((size_t)n_order);
@@ -1028,7 +1180,8 @@ struct DeviceBVH::Impl {
     int tiles = std::min(32, std::min(
         (n_order + MULTIPATH_BLOCK_SIZE - 1) / MULTIPATH_BLOCK_SIZE,
         std::max(1, 256 / total)));
-    partial.reserve((size_t)total * tiles);
+    int partial_rays = parallel_epochs ? parallel_epochs * n_sat : total;
+    partial.reserve((size_t)partial_rays * tiles);
     // Prepare only for the parallel reflection path. LOS-only, small meshes and
     // serial fallback batches do not allocate or launch normal preparation.
     if (!normals_ready) {
@@ -1042,9 +1195,18 @@ struct DeviceBVH::Impl {
     // group can amortize the extra launch. Reuse at most32 MiB across epoch
     // chunks; the stream finishes each consumer before overwriting its mirrors.
     size_t max_epochs = ((32u * 1024u * 1024u) / sizeof(ReflectionMirror)) / n_order;
-    mirrors_active = n_order >= 8192 && n_sat >= 16 && max_epochs > 0;
+    // Large bounded groups can amortize mirror preparation with 8..15
+    // satellites too. Require the existing 256-block candidate target so a
+    // large mesh cannot reduce a new group to an underfilled launch.
+    bool grouped_mirrors = parallel_epochs > 0 && n_sat >= 8 &&
+        max_epochs >= (size_t)((256 + n_sat - 1) / n_sat);
+    // Smaller meshes share mirrors only in the new bounded large groups;
+    // retain the existing mesh threshold for all other calls.
+    bool mirror_mesh = n_order >= 8192 || parallel_epochs > 0;
+    mirrors_active = mirror_mesh && (n_sat >= 16 || grouped_mirrors) && max_epochs > 0;
     if (mirrors_active) {
       mirror_epochs = (int)std::min((size_t)n_epoch, max_epochs);
+      if (parallel_epochs) mirror_epochs = std::min(mirror_epochs, parallel_epochs);
       mirrors.reserve((size_t)mirror_epochs * n_order);
     }
     return tiles;
@@ -1052,7 +1214,34 @@ struct DeviceBVH::Impl {
 
   void launch_multipath(int n_epoch, int n_sat, int tiles) {
     int total = n_epoch * n_sat;
-    if (tiles) {
+    if (tiles && parallel_epochs) {
+      int epoch_step = mirrors_active ? std::min(parallel_epochs, mirror_epochs) : parallel_epochs;
+      for (int first_epoch = 0; first_epoch < n_epoch; first_epoch += epoch_step) {
+        int epochs = std::min(epoch_step, n_epoch - first_epoch);
+        size_t ray_offset = (size_t)first_epoch * n_sat;
+        if (mirrors_active) {
+          reflection_mirrors_kernel<<<dim3((n_order + 255) / 256, epochs), 256>>>(
+              rx.data + (size_t)first_epoch * 3, triangles.data, order.data,
+              normals.data, mirrors.data, n_order);
+          CUDA_CHECK_LAST();
+          multipath_candidates_kernel<true, true><<<epochs * n_sat * tiles, MULTIPATH_BLOCK_SIZE>>>(
+              rx.data + (size_t)first_epoch * 3, sat.data + ray_offset * 3,
+              triangles.data, order.data, partial.data, n_sat, n_order, tiles,
+              normals.data, mirrors.data);
+        } else {
+          multipath_candidates_kernel<true, false><<<epochs * n_sat * tiles, MULTIPATH_BLOCK_SIZE>>>(
+              rx.data + (size_t)first_epoch * 3, sat.data + ray_offset * 3,
+              triangles.data, order.data, partial.data, n_sat, n_order, tiles,
+              normals.data, nullptr);
+        }
+        CUDA_CHECK_LAST();
+        int rays = epochs * n_sat;
+        multipath_finalize_kernel<<<(rays + MULTIPATH_BLOCK_SIZE - 1) / MULTIPATH_BLOCK_SIZE,
+                                    MULTIPATH_BLOCK_SIZE>>>(
+            partial.data, points.data + ray_offset * 3, delays.data + ray_offset, rays, tiles);
+        CUDA_CHECK_LAST();
+      }
+    } else if (tiles) {
       if (mirrors_active) {
         for (int first_epoch = 0; first_epoch < n_epoch; first_epoch += mirror_epochs) {
           int epochs = std::min(mirror_epochs, n_epoch - first_epoch);
@@ -1116,12 +1305,15 @@ struct DeviceBVH::Impl {
 DeviceBVH::DeviceBVH(const BVHNode* h_nodes, int n_nodes, const Triangle* h_tri, int n_tri) {
   if (!h_nodes || !h_tri || n_nodes <= 0 || n_tri <= 0)
     throw std::invalid_argument("DeviceBVH: mesh must contain nodes and triangles");
-  int referenced = validate_device_bvh(h_nodes, n_nodes, n_tri);
+  std::vector<LOSBranch> branches;
+  int referenced = validate_device_bvh(h_nodes, n_nodes, n_tri, branches);
   // Keep this owner local until all uploads succeed, so failed construction also
   // releases any buffers already allocated.
   auto state = std::make_unique<Impl>();
   CUDA_CHECK(cudaGetDevice(&state->device));
   state->n_nodes = n_nodes;
+  state->frontier.count = (int)branches.size();
+  std::copy(branches.begin(), branches.end(), state->frontier.branches);
   state->nodes.upload(h_nodes, (size_t)n_nodes);
   state->triangles.upload(h_tri, (size_t)referenced);
   if (referenced >= 64) {

@@ -1,0 +1,58 @@
+--- a/python/gnss_gpu/raytrace.py
++++ b/python/gnss_gpu/raytrace.py
+@@ -12,6 +12,15 @@
+     triangle_id: int
+     normal: np.ndarray
+     incidence_angle: float
++
++
++def _cross3_float64(a, b):
++    """Evaluate the original cross-product components for bounded FP64 vectors."""
++    return np.array((
++        a[1] * b[2] - a[2] * b[1],
++        a[2] * b[0] - a[0] * b[2],
++        a[0] * b[1] - a[1] * b[0],
++    ), dtype=np.float64)
+ 
+ 
+ def _closest_point_on_triangle(point, triangle):
+@@ -220,6 +229,21 @@
+             geometry = np.empty((len(tri), 14), dtype=np.float64)
+             ready = np.zeros(len(tri), dtype=np.uint8)
+ 
++        # Valid reflection parameters lie strictly inside the image segment.
++        # Together with the bounded receiver/mesh above, these input bounds keep
++        # segment cross products finite. Underflow is already ignored. Preserve
++        # NumPy's component multiply/subtract order without its general axis
++        # dispatch; exceptional inputs retain the original implementation.
++        segment_cross = np.cross
++        if (geometry is not None and np.all(np.isfinite(sat))
++                and np.max(np.abs(sat)) <= 1e50
++                and (ground_point is None
++                     or (np.all(np.isfinite(ground_point))
++                         and np.all(np.isfinite(ground_normal))
++                         and np.max(np.abs(ground_point)) <= 1e50
++                         and np.max(np.abs(ground_normal)) <= 1.0))):
++            segment_cross = _cross3_float64
++
+         def _triangle_geometry(index, triangle):
+             row = geometry[index]
+             if not (ready[index] & 1):
+@@ -274,7 +298,7 @@
+                     return False
+                 edge1, edge2 = row[:3], row[3:6]
+ 
+-            pvec = np.cross(direction, edge2)
++            pvec = segment_cross(direction, edge2)
+             det = float(np.dot(edge1, pvec))
+             if abs(det) <= area_eps:
+                 return False
+@@ -285,7 +309,7 @@
+             if u < -bary_tol or u > 1.0 + bary_tol:
+                 return False
+ 
+-            qvec = np.cross(tvec, edge1)
++            qvec = segment_cross(tvec, edge1)
+             v = float(np.dot(direction, qvec)) * inv_det
+             if v < -bary_tol or (u + v) > 1.0 + bary_tol:
+                 return False

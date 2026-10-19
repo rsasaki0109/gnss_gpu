@@ -1,0 +1,23 @@
+{
+  "verified": true,
+  "report_sha256": "455905d44ea8baed3b16cc028dae93e30601bb4362635b96492c497092db7cab",
+  "functional_tests": 27,
+  "actual_saved_inputs": 394,
+  "independent_failure_audit_sha256": "e41e7c8e2eb3916c41ba6d0250ba900bdbaa43c07155756325bc5df4541e33db",
+  "complete_prefixes": 2,
+  "failed_prefixes": 1,
+  "unstarted_prefixes": 13,
+  "all800_complete_RTK_clocks_and394_score_intervals_verified": true,
+  "all200_accuracy_states_and2_final_boundaries_and114_NPY_members_exact": true,
+  "primary_access_violation_preserved": true,
+  "sanitizer_hang_and_forced_exit_preserved": true,
+  "sanitizer_accepted": false,
+  "speed_screen_evaluated": false,
+  "speed_gain_established": false,
+  "candidate_accepted": false,
+  "owned_cleanup_verified": true,
+  "original_failed_gates_preserved": true,
+  "numerical_sources_edited_after_execution": false,
+  "production_changes": [],
+  "default_changed": false
+}

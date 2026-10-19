@@ -1,0 +1,16 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -1050,7 +1050,12 @@
+     // group can amortize the extra launch. Reuse at most32 MiB across epoch
+     // chunks; the stream finishes each consumer before overwriting its mirrors.
+     size_t max_epochs = ((32u * 1024u * 1024u) / sizeof(ReflectionMirror)) / n_order;
+-    mirrors_active = n_order >= 8192 && n_sat >= 16 && max_epochs > 0;
++    // Large bounded groups can amortize mirror preparation with 8..15
++    // satellites too. Require the existing 256-block candidate target so a
++    // large mesh cannot reduce a new group to an underfilled launch.
++    bool grouped_mirrors = parallel_epochs > 0 && n_sat >= 8 &&
++        max_epochs >= (size_t)((256 + n_sat - 1) / n_sat);
++    mirrors_active = n_order >= 8192 && (n_sat >= 16 || grouped_mirrors) && max_epochs > 0;
+     if (mirrors_active) {
+       mirror_epochs = (int)std::min((size_t)n_epoch, max_epochs);
+       if (parallel_epochs) mirror_epochs = std::min(mirror_epochs, parallel_epochs);
