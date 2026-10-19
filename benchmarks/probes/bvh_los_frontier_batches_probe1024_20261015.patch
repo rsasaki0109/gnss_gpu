@@ -1,0 +1,11 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -1108,7 +1108,7 @@
+ 
+   void launch_los(int n_epoch, int n_sat, bool batch) {
+     int total = n_epoch * n_sat;
+-    if (total <= 32 && frontier.count >= 8) {
++    if (total <= 1024 && frontier.count >= 8) {
+       if (batch) {
+         los_frontier_kernel<true><<<total, 32>>>(rx.data, sat.data, nodes.data, triangles.data,
+             frontier, los.data, n_sat);

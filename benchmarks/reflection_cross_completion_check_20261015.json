@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-15T13:54:48.118781+00:00",
+  "verified": true,
+  "adopted": true,
+  "report": {
+    "path": "benchmarks/reflection_cross_gpu_20261015.json",
+    "sha256": "38ece371fa8a06ca8211710b60b226d8b358de19086aee91e696f66574ceb719"
+  },
+  "only_product_edit_since_D215": [
+    "python/gnss_gpu/raytrace.py"
+  ],
+  "native_PE_CUDA_H_CPP_unchanged": true,
+  "previous_reports_preserved": {
+    "benchmarks/reflection_geometry_gpu_20261015.json": "8b5143c3b7fe552f454170d7fa854e0c581ce93c0da81925b131cf32aa1ea79c",
+    "benchmarks/reflection_geometry_completion_check_20261015.json": "24f9756f74fc6de811fff7846ed1296db8261c5c7ff6a4e9dce5fa9836c44420",
+    "benchmarks/pf_private_weights_gpu_20261015.json": "d3e7547b291f798f0371736297b35794e7259f64f146e6461b177d83e7991d78",
+    "benchmarks/pf_private_weights_completion_check_20261015.json": "3887db3457cd0b222e73e94a0829ec0be43080d8d3a794da6962e0a72af78946",
+    "benchmarks/urban_atmosphere_batch_gpu_20261015.json": "0b371a4da7c808106aae1ecd4d2a16d77ad68c9b416d471406db772d91481720",
+    "benchmarks/urban_atmosphere_batch_completion_check_20261015.json": "989ab3e54684fb8b2658072f8355633a3f82585cdbccd2fd941cd0d1b7d2c814",
+    "benchmarks/bvh_los_frontier_batches_gpu_20261015.json": "9031bc9cbe1c1b092fca8f158ac6d95e2e9763bcfe03e25be32a1208b166fcf9",
+    "benchmarks/bvh_los_frontier_batches_completion_check_20261015.json": "075d51987a8bca0fc06bed258bda484881bbeff00d09d005e8d7910e4ff0009e",
+    "benchmarks/bvh_direction_cohorts_rejected_20261015.json": "5bd118f5e7d2fcf7be4a31ebb417ff9a8d4618d078047114039f7d1c2b944706",
+    "benchmarks/bvh_direction_cohorts_completion_check_20261015.json": "27fd3f24c34af51e2f21eb601f8bb78aab60f377d5b48fdf4120b1cc3f201c2f"
+  },
+  "measured_helpers_unchanged": true,
+  "exact_CRLF_patch_reconstruction": true,
+  "reverse_patch_check_passed": true,
+  "final_source_timed_pairs": 948,
+  "all_timed_outputs_bit_identical": true,
+  "regression_passed": 322,
+  "existing_data_tests_skipped": 2,
+  "new_tests": 51,
+  "new_oracle_byte_exact": true,
+  "component_bit_comparisons": 16384,
+  "sanitizers": {
+    "memcheck": {
+      "tests_passed": 154,
+      "exit_code": 0,
+      "summary": [
+        "========= LEAK SUMMARY: 0 bytes leaked in 0 allocations",
+        "========= ERROR SUMMARY: 0 errors"
+      ]
+    },
+    "racecheck": {
+      "tests_passed": 154,
+      "exit_code": 0,
+      "summary": [
+        "========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)"
+      ]
+    },
+    "synccheck": {
+      "tests_passed": 154,
+      "exit_code": 0,
+      "summary": [
+        "========= ERROR SUMMARY: 0 errors"
+      ]
+    }
+  },
+  "additional_persistent_workspace_bytes": 0,
+  "additional_mesh_cache_payload_bytes": 0,
+  "public_text_files_checked": 2855,
+  "public_device_product_names_absent": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  },
+  "new_whole_PF_or_long_real_data_positioning_accuracy_claim": false
+}

@@ -1,0 +1,14 @@
+{
+  "verified": true,
+  "report_sha256": "02f9fe70916e8367e967b6ae12a3393e11a9818425ec8acdf23f9deea322ed05",
+  "functional_tests": 33,
+  "all24_prefixes_9600_RTK_4800_PF_clocks_verified": true,
+  "original_RTK_gate_preserved": true,
+  "original_RTK_speed_gate": false,
+  "new_estimator_runs": 0,
+  "new_GPU_launches": 0,
+  "new_timings": 0,
+  "new_accuracy_test_or_speed_acceptance": false,
+  "production_changes": [],
+  "default_changed": false
+}

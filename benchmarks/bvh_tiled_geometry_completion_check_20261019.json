@@ -1,0 +1,14 @@
+{
+  "verified": true,
+  "report_sha256": "01f73e7b0bb16cd1f0a2d55a93b7eebf3d5fb4b7502a9e6bdd6fbdddd999de59",
+  "functional_tests": 69,
+  "CUDA_checkers_pass": 3,
+  "raw_calls": 772,
+  "all_output_dtype_shape_bits_equal": true,
+  "native_screen_pass": false,
+  "accepted_speed_improvement": false,
+  "original_CPU_stack_fault_reproduced": true,
+  "production_changes": [],
+  "product_adoption": false,
+  "default_changed": false
+}

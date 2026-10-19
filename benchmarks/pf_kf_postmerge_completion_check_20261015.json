@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-15T04:59:00.518967+00:00",
+  "verified": true,
+  "adopted": false,
+  "both_trials_rejected": true,
+  "production_D203_source_build_installed_exact": true,
+  "merged_main_numerical_code_identical": true,
+  "main_Python_type_comments_compiled_identical": true,
+  "split_trial_pairs": 75,
+  "split_trial_full_state_snapshots": 15,
+  "split_trial_all_compared_outputs_bit_identical": true,
+  "peeled_trial_exact_gate_passed": false,
+  "peeled_trial_diagnostic_cases": 5,
+  "peeled_trial_array_comparisons": 10,
+  "public_comparison_smoke": {
+    "pairs": 2,
+    "full_state_snapshots": 2,
+    "all_compared_outputs_bit_identical": true,
+    "used_for_speed_evidence": false,
+    "path": "dist/pf_kf_postmerge_reproduction_smoke_20261015.json",
+    "sha256": "325741553b5e71919befe1780436cd97fdae225ea182ce05a6dd4ede8be63b33"
+  },
+  "public_mismatch_reproduction": {
+    "cases": 5,
+    "array_comparisons": 10,
+    "diagnostic_records_exact": true,
+    "path": "dist/pf_kf_peeled_public_reproduction_20261015/summary.json",
+    "sha256": "d3d4c79fa13c6fd0e437c434e89d2c425f4ed3fefe62a7a1bb672d766aa0be56"
+  },
+  "post_restore_tests": {
+    "passed": 212,
+    "warnings": 1,
+    "seconds": 123.26,
+    "warning": "Pytest cache write permission",
+    "log_sha256": "53b56c718d1d618908c71d3ed75ac5db20e2c7d91daee24b1c16f1582a5a8b66",
+    "harness_console_print_failed_after_pytest_completion": true,
+    "harness_failure": "Final printing decoded a CP932 pytest log as UTF8 and encountered a console encoding error; the preserved pytest summary is 212 passed. No test rerun was needed."
+  },
+  "broader_candidate_validation_newly_run": false,
+  "sanitizers_newly_run": false,
+  "long_real_data_position_error_curve_newly_evaluated": false,
+  "reports": {
+    "benchmarks/pf_kf_split_rejected_20261015.json": "68c972e9c1294cf54419831426787b9bbf4b78252816becbecdf3dfc9ef8656e",
+    "benchmarks/pf_kf_peeled_rejected_20261015.json": "5ca43a4786a0646c6de8ae26ac3b30ce160d7b6db56105dcfef053f2d667c442"
+  },
+  "existing_D204_measurement_reports_and_helpers_unchanged": true,
+  "public_text_files_checked": 2798,
+  "public_device_product_names_absent": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  },
+  "known_own_workers_exited": 6
+}

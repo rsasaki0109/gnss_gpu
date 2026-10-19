@@ -1,0 +1,20 @@
+{
+  "verified": true,
+  "report_sha256": "f52fd8f99e6538f1a61c99428344a8927cac0354e5fc25762be0ca4047afc0fc",
+  "functional_tests": 54,
+  "actual_saved_PF_states": 200,
+  "timed_PF_calls": 2880,
+  "warm_PF_calls": 192,
+  "all_same_backend_bits_equal": true,
+  "explicit_constructions_before": 2972,
+  "explicit_constructions_after": 600,
+  "gate_counts": {
+    "CPU_pass": 0,
+    "GPU_same_backend_pass": 0,
+    "GPU_joint_pass": 0,
+    "cpu_AA_valid": 0,
+    "gpu_AA_valid": 0
+  },
+  "speed_gain_established": false,
+  "default_changed": false
+}

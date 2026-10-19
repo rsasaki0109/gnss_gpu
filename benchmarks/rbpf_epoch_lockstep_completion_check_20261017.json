@@ -1,0 +1,15 @@
+{
+  "verified": true,
+  "report_sha256": "2a44e15a8095a22010d08ae68d2a1bee5f7f3506ec465199ea0121fd5e406fee",
+  "tests_passed": 28,
+  "complete_RTK_epochs": 4800,
+  "PF_calls": 2400,
+  "raw_protocol_events": 9600,
+  "all_trajectory_array_bits_equal": true,
+  "all400_and_phase2_stability_gate_passed": true,
+  "no_optimization_candidate_or_speed_acceptance": true,
+  "continuous_route_throughput_established": false,
+  "new_saved_PF_state_audit": false,
+  "production_changes": [],
+  "default_changed": false
+}

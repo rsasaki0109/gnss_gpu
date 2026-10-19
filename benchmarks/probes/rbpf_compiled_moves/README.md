@@ -1,0 +1,7 @@
+# Literal compiled RBPF move controller
+
+Explicit benchmark experiment for Windows x64 CPython 3.12. `generate.py` copies four frozen D236 `_moves` method ASTs into namespace classes. Their statement order, NumPy expressions, Python arithmetic, scoring, particle updates, and individual `rng.choice` calls remain unchanged. Existing memo and move-view helpers are reused; no new value cache or GPU kernel is introduced.
+
+Use isolated Cython 3.1.4 only at build time. Generate the `.pyx` once, then configure this standalone CMake project with `Python3_EXECUTABLE` and `CYTHON_ROOT`. Compile with `/fp:strict`; no inferred C numeric types, C division, fast math, profiling, or line tracing is requested. The [Cython compiler directives](https://cython.readthedocs.io/en/3.1.x/src/userguide/source_files_and_compilation.html#compiler-directives) describe these settings. Exact results still require tests on each recorded Python/NumPy build.
+
+`CompiledMovesStep` takes an explicit extension path and an enable flag. It preserves the original controller, numerical scorers, source checks, strict NumPy fallback, and metadata. Unsupported entry bindings use the original moves. Experiments assume synchronous frozen helper bindings throughout each call; arbitrary concurrent namespace mutation or frame introspection is outside this probe's domain. Product defaults are unchanged. Component or fixture gains require a separate actual RTK evaluation before adoption.

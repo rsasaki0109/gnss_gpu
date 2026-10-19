@@ -1,0 +1,18 @@
+{
+  "verified": true,
+  "report_sha256": "9588c8421ac317379ff184911dc956c9a8595e24fa2e57a36ff6413b81f0031b",
+  "functional_tests": 52,
+  "timed_calls": 2880,
+  "warm_calls": 192,
+  "all_same_backend_bits_equal": true,
+  "gate_counts": {
+    "CPU_pass": 0,
+    "GPU_same_backend_pass": 0,
+    "GPU_joint_pass": 0,
+    "cpu_AA_valid": 4,
+    "gpu_AA_valid": 6
+  },
+  "actual_field_saved_states": 0,
+  "product_adoption": false,
+  "default_changed": false
+}

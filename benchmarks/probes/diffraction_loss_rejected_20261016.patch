@@ -1,0 +1,59 @@
+--- a/python/gnss_gpu/diffraction.py
++++ b/python/gnss_gpu/diffraction.py
+@@ -80,6 +80,13 @@
+ 
+ def knife_edge_amplitude(v) -> Union[float, np.ndarray]:
+     loss = np.asarray(knife_edge_loss_db(v), dtype=float)
++    amplitude = np.clip(10.0 ** (-loss / 20.0), 0.0, 1.0)
++    return _maybe_scalar(amplitude)
++
++
++def _amplitude_from_loss(loss):
++    """Same scalar ufunc sequence as knife_edge_amplitude, with known loss."""
++    loss = np.asarray(loss, dtype=float)
+     amplitude = np.clip(10.0 ** (-loss / 20.0), 0.0, 1.0)
+     return _maybe_scalar(amplitude)
+ 
+@@ -235,6 +242,10 @@
+     return sats
+ 
+ 
++_LOSS_HELPERS = (fresnel_v, knife_edge_loss_db, knife_edge_amplitude, _maybe_scalar,
++                 _ray_segment_closest, edge_lit_shadow_sign, _face_blocks_direct, _amplitude_from_loss)
++
++
+ def compute_diffraction_paths(
+     rx_ecef,
+     sat_ecef,
+@@ -304,6 +315,17 @@
+     midpoint_range = np.linalg.norm(midpoint - rx[None, :], axis=1)
+     pre_mask = midpoint_range <= float(max_edge_range_m)
+ 
++    # Reuse only the already computed scalar loss. Strict/error policies and
++    # replaced helper hooks keep their original repeated calls and order.
++    reuse_loss = False
++    if (edge_count >= 64 and edge_count * n_sat >= 256
++            and all(current is original for current, original in zip(
++                (fresnel_v, knife_edge_loss_db, knife_edge_amplitude, _maybe_scalar,
++                 _ray_segment_closest, edge_lit_shadow_sign, _face_blocks_direct, _amplitude_from_loss), _LOSS_HELPERS))):
++        policy = np.geterr()
++        reuse_loss = (policy["under"] == "ignore"
++                      and all(mode in ("warn", "ignore") for mode in policy.values()))
++
+     result: list[list[DiffractionPath]] = []
+     for sat in sats:
+         direct_vec = sat - rx
+@@ -348,7 +370,12 @@
+                     continue  # lit edge: not the silhouette that shadows this sat
+                 v *= sign
+             attenuation_db = float(knife_edge_loss_db(v))
+-            amplitude = float(knife_edge_amplitude(v))
++            # Bounded finite v cannot warn/overflow in the loss expression;
++            # retain the original 0-D array/power/clip path and all its bits.
++            if reuse_loss and np.isfinite(v) and abs(v) <= 1e50:
++                amplitude = float(_amplitude_from_loss(attenuation_db))
++            else:
++                amplitude = float(knife_edge_amplitude(v))
+ 
+             paths.append(
+                 DiffractionPath(

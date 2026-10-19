@@ -1,0 +1,91 @@
+--- a/python/gnss_gpu/raytrace.py
++++ b/python/gnss_gpu/raytrace.py
+@@ -258,10 +258,25 @@
+                 ready[index] |= 1
+             return row
+ 
+-        def _point_in_triangle(point, triangle):
+-            a, b, c = triangle
+-            v0 = b - a
+-            v1 = c - a
++        # Retain only views of the existing bounded geometry, not new vector
++        # data. Limit Python view/tuple metadata independently of mesh payload.
++        triangle_vectors = [None] * len(tri) if geometry is not None and len(tri) <= 32768 else None
++
++        def _prepared_triangle(index, triangle):
++            cached = triangle_vectors[index]
++            if cached is None:
++                row = _triangle_geometry(index, triangle)
++                cached = (triangle[0], row[:3], row[3:6], row[6:9], float(row[9]), row)
++                triangle_vectors[index] = cached
++            return cached
++
++        def _point_in_triangle(point, triangle, triangle_id):
++            if triangle_vectors is None:
++                a, b, c = triangle
++                v0 = b - a
++                v1 = c - a
++            else:
++                a, v0, v1, _, _, _ = _prepared_triangle(triangle_id, triangle)
+             v2 = point - a
+ 
+             dot00 = float(np.dot(v0, v0))
+@@ -289,13 +304,18 @@
+             if seg_len <= intersect_eps:
+                 return False
+ 
+-            v0, v1, v2 = triangle
+-            if geometry is None:
++            if triangle_vectors is not None:
++                v0, edge1, edge2, _, normal_len, _ = _prepared_triangle(triangle_id, triangle)
++                if normal_len <= area_eps:
++                    return False
++            elif geometry is None:
++                v0, v1, v2 = triangle
+                 edge1 = v1 - v0
+                 edge2 = v2 - v0
+                 if np.linalg.norm(np.cross(edge1, edge2)) <= area_eps:
+                     return False
+             else:
++                v0 = triangle[0]
+                 row = _triangle_geometry(triangle_id, triangle)
+                 if row[9] <= area_eps:
+                     return False
+@@ -396,8 +416,8 @@
+             paths = []
+ 
+             for tri_idx, triangle in enumerate(tri):
+-                p0, p1, p2 = triangle
+                 if geometry is None:
++                    p0, p1, p2 = triangle
+                     normal = np.cross(p1 - p0, p2 - p0)
+                     normal_len = float(np.linalg.norm(normal))
+                     if normal_len <= area_eps:
+@@ -405,10 +425,15 @@
+                     normal = normal / normal_len
+                     rx_side = float(np.dot(rx - p0, normal))
+                 else:
+-                    row = _triangle_geometry(tri_idx, triangle)
+-                    if row[9] <= area_eps:
++                    if triangle_vectors is None:
++                        p0 = triangle[0]
++                        row = _triangle_geometry(tri_idx, triangle)
++                        normal_len = row[9]
++                        normal = row[6:9]
++                    else:
++                        p0, _, _, normal, normal_len, row = _prepared_triangle(tri_idx, triangle)
++                    if normal_len <= area_eps:
+                         continue
+-                    normal = row[6:9]
+                     if not (ready[tri_idx] & 2):
+                         row[10] = float(np.dot(rx - p0, normal))
+                         ready[tri_idx] |= 2
+@@ -437,7 +462,7 @@
+                     continue
+ 
+                 reflection_point = rx_img + t * image_dir
+-                if not _point_in_triangle(reflection_point, triangle):
++                if not _point_in_triangle(reflection_point, triangle, tri_idx):
+                     if reflection_point_tol_m <= 0.0:
+                         continue
+                     closest = _closest_point_on_triangle(reflection_point, triangle)

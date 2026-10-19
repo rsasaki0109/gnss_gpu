@@ -1,0 +1,14 @@
+{
+  "verified": true,
+  "report_sha256": "393cdb3616046cf30330922d3122b4e25888c9f763cacc6a4de4e8f1b7a99138",
+  "functional_tests": 21,
+  "actual_saved_PF_states": 200,
+  "all_actual_bits_equal": true,
+  "copy_calls": 17298,
+  "copied_innerdicts": 200899,
+  "temporary_unchanged_groups": 30307,
+  "selective_temporary_sharing_work_gate_pass": false,
+  "speed_screen_executed": false,
+  "speed_gain_established": false,
+  "default_changed": false
+}

@@ -1,0 +1,104 @@
+{
+  "timestamp_utc": "2026-10-16T01:22:09.886734+00:00",
+  "verified": true,
+  "report_sha256": "72f8c88908a0ea73757ffe54e7b7c0539ea7145442181f16292fe42a6eee4648",
+  "audit_sha256": "bb6139685819653d94d6f7f76009650b06138ef41f919635956ffea9ff8ecbb8",
+  "implementation": "Explicit experimental caller",
+  "product_adoption": false,
+  "production_changes": [],
+  "default_changed": false,
+  "timed_calls": 450,
+  "candidate_pairs": 270,
+  "AA_pairs": 90,
+  "tests": {
+    "passed": 65,
+    "warnings": 1,
+    "record_sha256": "39d93927ee18d7afe6da3961f4299d3682893e57655b1333501750ae3ee38615"
+  },
+  "memcheck": {
+    "passed": 8,
+    "warnings": 1,
+    "summary": [
+      "========= LEAK SUMMARY: 0 bytes leaked in 0 allocations",
+      "========= ERROR SUMMARY: 0 errors"
+    ],
+    "record_sha256": "6a4e8d176509adbfa287ca50063cfd9cf95ef5661f544f180fdb40f88b5784d9"
+  },
+  "field_prefix": {
+    "epochs": 200,
+    "all_discrete_equal": true,
+    "all_position_covariance_bits_equal": true,
+    "all_numeric_bits_equal": false,
+    "max_abs_numeric_error": 5.968558980384842e-13,
+    "max_abs_position_covariance_error": 0.0,
+    "first_discrete_mismatch": null,
+    "first_position_covariance_mismatch": null,
+    "all_trajectory_arrays_bits_equal": false,
+    "mode_ecef_bits_equal": true,
+    "valid_batch_steps": 197,
+    "unique_move_range": [
+      14,
+      21,
+      45
+    ],
+    "totals": {
+      "particles": 12608,
+      "held_particles": 12504,
+      "extend_calls": 12504,
+      "shrink_calls": 12504,
+      "requested_moves": 206522,
+      "unique_moves": 4363,
+      "scalar_fallbacks": 0
+    }
+  },
+  "GPU_over_CPP_screen_passed": false,
+  "full_route_multiseed_gate_passed": false,
+  "production_sources_unchanged": 36,
+  "installed_extensions_unchanged": 5,
+  "PF_build_PE_unchanged": true,
+  "previous_reports_preserved": {
+    "benchmarks/double_geometry_gpu_20261016.json": "948b8797191d7c351e2710bec4578c749ea8893f6656f3f0e8cbe96fdbeabc7d",
+    "benchmarks/double_geometry_completion_check_20261016.json": "73c2f397ef645200090ae51346a9b9000d400767cc092d17a8ffe564553354e7",
+    "benchmarks/double_predicates_rejected_20261016.json": "309c46bed95ebc240657d54f591ea1b345575959ba2804c70ba8a5ca96a02f89",
+    "benchmarks/double_predicates_rejected_completion_check_20261016.json": "254bbf04216c7d24d602b42f530887b9fa93abb8e9f4760900e551e2ac43928b",
+    "benchmarks/diffraction_loss_rejected_20261016.json": "68680726625e1ddc840e6dabc4afb1cb02f90ac2547f21045687960b743faa8f",
+    "benchmarks/diffraction_loss_rejected_completion_check_20261016.json": "3dea35c50471c13fb0b18879fd9244d0e8447a83af8615d34f52ec16a577c4ec",
+    "benchmarks/composite_geometry_gpu_20261016.json": "d62537d0cf6fadcc546d7f4de78ac466829ffdde1b38a8b068cc36daab318747",
+    "benchmarks/composite_geometry_completion_check_20261016.json": "c1d2a40ed0144701fa8844dea1abf0116b308bd48749f56aa1fd2e495cf30203",
+    "benchmarks/pf_certified_division_rejected_20261016.json": "a9bef86816e1e420f9d9ecf8074bbf9c7a27d4510030798fd3d03accb823bfba",
+    "benchmarks/pf_certified_division_completion_check_20261016.json": "79bf4bff65429c904aeac6defff8f070d539d7c4179db9bc6a466340e86dfeeb",
+    "benchmarks/rbpf_fgo_gpu_feasibility_20261016.json": "feb4eeb242ce40f06975e4f1bb03c6b6610915aafb1a1d9737f4a1ccf12517de",
+    "benchmarks/rbpf_fgo_gpu_feasibility_completion_check_20261016.json": "17653b9558bcb84d144342ff40ee34a8cef3ea46d2880afd28613e40a3c60598",
+    "benchmarks/rbpf_likelihood_gpu_prototype_20261016.json": "6a6591cff2c515a31e02691032b6b20709064d56203264b5934010e7c8c48e07",
+    "benchmarks/rbpf_likelihood_gpu_prototype_completion_check_20261016.json": "305d24817650e54cd9185a235fe97a0f1bc6a7c2c4185850b207cff0a1fbae49"
+  },
+  "previous_archives_verified": {
+    "composite_geometry_candidate": {
+      "files": 305,
+      "manifest_sha256": "c5a0d912f148921b170b05f8eb1f4c0a0fa774ed62e4e278f2b672bf8b441b6e"
+    },
+    "pf_certified_division_rejected_20261016": {
+      "files": 94,
+      "manifest_sha256": "bdae75c0d2e7587e98dc2f6dfc86ca6d533d4604f25aee93c2398a68a0d24b05"
+    },
+    "rbpf_fgo_gpu_feasibility_20261016": {
+      "files": 149,
+      "manifest_sha256": "6854719596359dd1129e3c19bc74fef0f30830132d0f728e2b4667ae32c0f1ab"
+    },
+    "rbpf_likelihood_gpu_prototype_20261016": {
+      "files": 161,
+      "manifest_sha256": "e338e38ff4f52e9c11aaa0d4667ba60842e3902e0223ea1b25ded5805c4eb03c"
+    },
+    "rbpf_move_batch_initial_failure_20261016": {
+      "files": 7,
+      "manifest_sha256": "c5b5a85e24d6f74d94aa0e8581b147f2c76695388f7a142dd1c48c3e3a83b3a7"
+    }
+  },
+  "public_text_files_checked": 2928,
+  "public_device_product_names_absent": true,
+  "Ruff_compile_line_endings_diff_check_passed": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  }
+}

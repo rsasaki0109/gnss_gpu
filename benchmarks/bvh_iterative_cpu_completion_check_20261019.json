@@ -1,0 +1,15 @@
+{
+  "verified": true,
+  "report_sha256": "dc9170812ff6e72f038f2c5322958895f8a1ea1a4e2da8760d85afa282ef5b20",
+  "tests_unique_passed": 750,
+  "post_install_tests_passed": 124,
+  "legacy_bit_exact_cases": 90,
+  "initial_failed_suite_retained": true,
+  "all_CPU_nodes_permutation_exact": true,
+  "all10shared_actual_GPU_SASS_exact": true,
+  "all12rebuilt_GPU_SASS_exact": true,
+  "product_adoption": true,
+  "local_BVH_PE_updated": true,
+  "accepted_speed_improvement": false,
+  "default_changed": false
+}

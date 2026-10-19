@@ -4,6 +4,8 @@ import pytest
 
 from gnss_fixtures import generate_satellites, sample_position_ecef
 
+pytest_plugins = ["rbpf_gc_clocks_platform", "bvh_frozen_projection_policy", "rbpf_campaign_collection"]
+
 
 @pytest.fixture
 def satellites():

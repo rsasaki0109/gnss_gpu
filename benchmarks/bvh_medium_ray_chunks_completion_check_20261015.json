@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-15T07:30:15.087290+00:00",
+  "verified": true,
+  "adopted": true,
+  "report": {
+    "path": "benchmarks/bvh_medium_ray_chunks_gpu_20261015.json",
+    "sha256": "333517896262970de7a912352d7ad9df30d94da8d4512b14994d517a0c5a5da6"
+  },
+  "source_and_build_installed_PE_match": true,
+  "preserved_PF_signal": {
+    "pf_fused_uniform_gpu_20261015.json": {
+      "source_hashes_exact": true,
+      "build_and_installed_PE_exact": true,
+      "extension_sha256": "48572e69d6bf1bd4b8257988b88a270c86c19be81c49b5a1e24e4dcfc785df52"
+    },
+    "signal_wide_static_gpu_20261014.json": {
+      "source_hashes_exact": true,
+      "build_and_installed_PE_exact": true,
+      "extension_sha256": "3ae8d0dc0c6136167fe4e1adde91972ce75fe0f00f3714021bd5bed851bfd5c6"
+    }
+  },
+  "only_numerical_product_diff_from_main": "src/raytrace/bvh.cu (host scheduling only)",
+  "main_Python_type_comments_compiled_identical": true,
+  "existing_D204_D205_D206_D207_measurement_reports_unchanged": true,
+  "immutable_measured_source_record_archived": true,
+  "validation_cases": 478,
+  "all_compared_outputs_bit_identical": true,
+  "timed_pairs": 981,
+  "regression_tests_passed": 625,
+  "new_independent_stateless_oracle_tests": 45,
+  "sanitizers": {
+    "memcheck": {
+      "tests_passed": 45,
+      "exit_code": 0,
+      "summary": [
+        "========= LEAK SUMMARY: 0 bytes leaked in 0 allocations",
+        "========= ERROR SUMMARY: 0 errors"
+      ]
+    },
+    "racecheck": {
+      "tests_passed": 45,
+      "exit_code": 0,
+      "summary": [
+        "========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)"
+      ]
+    },
+    "synccheck": {
+      "tests_passed": 45,
+      "exit_code": 0,
+      "summary": [
+        "========= ERROR SUMMARY: 0 errors"
+      ]
+    }
+  },
+  "old_GPU_instruction_bodies_and_resources_unchanged": 10,
+  "new_GPU_functions": 0,
+  "winner_scratch_upper_bytes": 655360,
+  "mirror_scratch_upper_bytes": 33554432,
+  "exact_CRLF_patch_reconstruction": true,
+  "reverse_patch_git_check_passed": true,
+  "public_text_files_checked": 2815,
+  "public_device_product_names_absent": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  },
+  "long_real_data_position_error_curve_newly_evaluated": false,
+  "whole_PF_GNSS_IMU_speedup_newly_measured": false
+}

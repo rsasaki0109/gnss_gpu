@@ -1,0 +1,24 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -1018,7 +1018,8 @@
+     // Reuse the existing candidate kernels for large batches, with at most
+     // one bounded epoch group in winner scratch. Keep unusually wide epochs
+     // and smaller meshes on the existing serial path.
+-    bool chunk_parallel = total > 16384 && n_order >= 8192 && n_sat <= 16384;
++    bool chunk_parallel = total > 16384 && n_order >= 1024 &&
++        (n_order >= 8192 || n_sat >= 8) && n_sat <= 16384;
+     if (chunk_parallel) parallel_epochs = std::max(1, 4096 / n_sat);
+     bool large_parallel = n_order >= 64 && (total <= 16384 || chunk_parallel);
+     if (total > 4096 && !large_parallel) {
+@@ -1055,7 +1056,10 @@
+     // large mesh cannot reduce a new group to an underfilled launch.
+     bool grouped_mirrors = parallel_epochs > 0 && n_sat >= 8 &&
+         max_epochs >= (size_t)((256 + n_sat - 1) / n_sat);
+-    mirrors_active = n_order >= 8192 && (n_sat >= 16 || grouped_mirrors) && max_epochs > 0;
++    // Smaller meshes share mirrors only in the new bounded large groups;
++    // retain the existing mesh threshold for all other calls.
++    bool mirror_mesh = n_order >= 8192 || parallel_epochs > 0;
++    mirrors_active = mirror_mesh && (n_sat >= 16 || grouped_mirrors) && max_epochs > 0;
+     if (mirrors_active) {
+       mirror_epochs = (int)std::min((size_t)n_epoch, max_epochs);
+       if (parallel_epochs) mirror_epochs = std::min(mirror_epochs, parallel_epochs);

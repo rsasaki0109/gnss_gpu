@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-15T10:23:39.102420+00:00",
+  "verified": true,
+  "adopted": true,
+  "report": {
+    "path": "benchmarks/urban_atmosphere_batch_gpu_20261015.json",
+    "sha256": "0b371a4da7c808106aae1ecd4d2a16d77ad68c9b416d471406db772d91481720"
+  },
+  "only_product_edit_since_D211": "python/gnss_gpu/urban_signal_sim.py",
+  "all_three_native_PE_bytes_unchanged": true,
+  "installed_bvh_preserved": true,
+  "current_build_bvh_explicitly_loaded_for_tests": true,
+  "source_record_immutable": true,
+  "measured_helpers_unchanged": true,
+  "exact_CRLF_patch_reconstruction": true,
+  "reverse_patch_check_passed": true,
+  "preserved_PF_and_signal_core": {
+    "pf_fused_uniform_gpu_20261015.json": {
+      "core_sources_and_build_installed_PE_exact": true,
+      "only_urban_orchestration_updated": false
+    },
+    "signal_wide_static_gpu_20261014.json": {
+      "core_sources_and_build_installed_PE_exact": true,
+      "only_urban_orchestration_updated": true
+    }
+  },
+  "previous_reports_unchanged": {
+    "benchmarks/bvh_los_frontier_batches_gpu_20261015.json": "9031bc9cbe1c1b092fca8f158ac6d95e2e9763bcfe03e25be32a1208b166fcf9",
+    "benchmarks/bvh_direction_cohorts_rejected_20261015.json": "5bd118f5e7d2fcf7be4a31ebb417ff9a8d4618d078047114039f7d1c2b944706",
+    "benchmarks/bvh_ray_chunks_gpu_20261015.json": "2bd4627828d23e2868d36f8ea8c657a94ea261e80cae761fa6da81241ff7254b",
+    "benchmarks/bvh_group_mirrors_gpu_20261015.json": "978e15d71d189cfa163ed605b4caebc9dafa2279898509a625910d935425bcd4",
+    "benchmarks/bvh_medium_ray_chunks_gpu_20261015.json": "333517896262970de7a912352d7ad9df30d94da8d4512b14994d517a0c5a5da6",
+    "benchmarks/bvh_los_frontier_gpu_20261015.json": "cc3f2b0f5d43e9027e9c80e1dd99065093fb7b5fb0d741d52b40b8f3b8889160",
+    "benchmarks/pf_gaussian_four_rejected_20261015.json": "14a19a27aeb87e0460ba1a9d4156dc8f70992ccc0aa82eafd43c3bd955644035",
+    "benchmarks/pf_magic_mod_rejected_20261015.json": "b8dcf093cd2c41db1fe632fd5c016dedc9a8feef8a2dc4956d9991cade417690",
+    "benchmarks/pf_kf_split_rejected_20261015.json": "68c972e9c1294cf54419831426787b9bbf4b78252816becbecdf3dfc9ef8656e",
+    "benchmarks/pf_kf_peeled_rejected_20261015.json": "5ca43a4786a0646c6de8ae26ac3b30ce160d7b6db56105dcfef053f2d667c442"
+  },
+  "validation_cases": 244,
+  "timed_pairs": 3096,
+  "all_compared_outputs_bit_identical": true,
+  "regression_tests_passed": 731,
+  "new_tests": 47,
+  "sanitizers": {
+    "memcheck": {
+      "tests_passed": 47,
+      "exit_code": 0,
+      "summary": [
+        "========= LEAK SUMMARY: 0 bytes leaked in 0 allocations",
+        "========= ERROR SUMMARY: 0 errors"
+      ]
+    },
+    "racecheck": {
+      "tests_passed": 47,
+      "exit_code": 0,
+      "summary": [
+        "========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)"
+      ]
+    },
+    "synccheck": {
+      "tests_passed": 47,
+      "exit_code": 0,
+      "summary": [
+        "========= ERROR SUMMARY: 0 errors"
+      ]
+    }
+  },
+  "CPU_callback_override_and_error_order_preserved": true,
+  "additional_persistent_GPU_allocation_bytes": 0,
+  "new_kernels": 0,
+  "main_other_Python_type_comments_compiled_identical": true,
+  "public_text_files_checked": 2838,
+  "public_device_product_names_absent": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  },
+  "new_no_atmosphere_or_whole_PF_speedup_claim": false,
+  "long_real_data_position_error_distribution_newly_evaluated": false
+}

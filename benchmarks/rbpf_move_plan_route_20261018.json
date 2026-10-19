@@ -1,0 +1,1860 @@
+{
+  "timestamp_utc": "2026-10-18T04:18:34.473859+00:00",
+  "experiment": "D280: first continuous actual RTK screen of checked ordered-H registration plans",
+  "implementation_sha256": {
+    "benchmarks/rbpf_move_plan_route.py": "f33b8c1850984c51b5f6c6fdbd40b2387cd2a58788e14dc0178acde3aa3f1ade",
+    "benchmarks/bench_rbpf_move_plan_route.py": "8bb801f8b7dbc633569041871b3b6688c07107cb1004e510b88ed7534c1677ac",
+    "tests/test_rbpf_move_plan_route.py": "6a74cb71077fa5c2e0e2e450408af6ce68d885052e54129ee087a990c8debed1"
+  },
+  "evidence_sha256": {
+    "dist/audit_rbpf_move_plan_route_20261018.py": "298302a8048cdf8dbe8b7f5f9486b09a87314df692d0bb76b4f5d0af7af31616",
+    "dist/diagnose_rbpf_move_plan_route_20261018.py": "f20bd43620ad6ade97a420c1e2821ca837bb316ac24810bcb608b1e4065ac89e",
+    "dist/final_verify_rbpf_move_plan_route_20261018.py": "df4709d907753f15a5292d09cce2dd0c3ec1f3b600971589d4b8adbd4ff5fe3b",
+    "dist/preserve_rbpf_move_plan_route_20261018.py": "0a48af991626613a11bb19f6c97d08ebe6030d70ae6f5d83c27e33217f51feb9",
+    "dist/publish_rbpf_move_plan_route_20261018.py": "a661d2181e7e1b18bd5678b7ac5109669aff4ba9189c70ba5a3d7256cadc4e61",
+    "dist/rbpf_move_plan_route_audit_20261018.json": "541ade7384af447f3c3c834d25ce601b16814df755c707e4fca0126673a0a10b",
+    "dist/rbpf_move_plan_route_auditor_20261018.plan.json": "0ac9e8f8eacc9d21879ab386d474a76dfea4d376a10f17539e7577d6e7ddd7ab",
+    "dist/rbpf_move_plan_route_cpu_diagnostic_20261018.json": "3ad6456fab4307b0cd3c367374458038bab80d86d1f1004e5dabae9f30dea76e",
+    "dist/rbpf_move_plan_route_cpu_diagnostic_20261018.plan.json": "ce3b7c7aab99fd6ff4e14cb6402a4a85b91006866e96896a154166c097bbc428",
+    "dist/rbpf_move_plan_route_field_20261018/plan.json": "89f1c324f33be231f3f03e136c1acae586152f8dd7adc8d4887dd6d51ce57fdc",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_AA/final_state.json.gz": "7c5b58be6557e0cf994495121982817992315081ca9d67b2e5bc733205785451",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_AA/performance.json": "85df7ec2a93331df3070f24a0f24866e9c6cc304a1981ab3a87feba2c2a72bdc",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_AA/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_AA/record.json": "9eb3cdcf477469251cbc95d7c205c98f83d805c5804798d70d2833342edfe91e",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_AA/states.jsonl.gz": "4c55e7662fb82897b82dc994dc8b897b652cefb4d2a76cc107a376a0ef4cc3b3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_AA/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_AA.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_AA.job.json": "8040eb7c29ccb715a8c03618c93c373bb4c0e6bc473390ccfe6e5ccd69b6dc3b",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_AA.log": "e6a8f99aa56b5a3a64d7455c679942a9d1acb823fa83d36a6da0f310583f72d3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_AA.run.json": "5e042c141392bbdc56fff3d5d444eab8b942ac76f36fa9b3b0f5343e9d0c2981",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_candidate/final_state.json.gz": "6fc7cc4ad8c405380e757715d854b848c00ead690d9986f0d7a368a044d87fb8",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_candidate/performance.json": "d43fd1d1de72357e61357625e1fe5ded9dfd1a61d3c78195c137aa88b9390b8d",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_candidate/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_candidate/record.json": "7277ddad690f96ee9f59cd96117d08ac1b08fe5c2d06690f37ec2fd88ccf4fcc",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_candidate/states.jsonl.gz": "66824a196dda4882744cf5cfa44ee54fe1f83f1ca245d2d34bfc3b73efd1e8e2",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_candidate/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_candidate.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_candidate.job.json": "b8f29036b538d2ea4cb6badae6d55f407b36083f047416ffbca9211abc471888",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_candidate.log": "47d39d0c88e34dab85bc4e5a5a0be93d5d0a3acac935b70bd71d75637e918163",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_candidate.run.json": "81ca45ebaa988d3f69ca5f168e3501981a819281298e4e4af7883c2e949f7944",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_off/final_state.json.gz": "2ce1bc7c59b1b547752d8c635e779edb89b21896833fef6508e998199dbdf7bb",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_off/performance.json": "5b06abccee4f0b91df5aef2d46d7585c951f5b935c60dd0e544b8c9e95e5a2a2",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_off/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_off/record.json": "5bcda0eb53f73200a8024c4d05715201f74f71c5a4f2877452b604141c761676",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_off/states.jsonl.gz": "6ef035a4317aef1ccea65525da1aad2a53622d3eaf57b209f7c9c58877041a57",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_off/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_off.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_off.job.json": "dbf39a4813bbe549321c8b4232fbbba70bf62d590ede87ef8e60bdcf2d71fc7b",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_off.log": "1eb7bdf45d7358c946854e92387fe8b78b12e18952dcfa1ac634e8be8f3a3024",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_off.run.json": "1d657877c4eaae52a77c22523ebc5c499ad71a52ac76bed8c42b6a7ea2fee60d",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_reference/final_state.json.gz": "a34d5a18ed1b21e952fe6d279e4ea290005ae86ddb68bb5b13ec7f3e9470dd83",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_reference/performance.json": "3acde8186d814594aa8cbf59f390571b61889af6b0fd341b216cf162e6cc558a",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_reference/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_reference/record.json": "40d84e74acfea62c4eb2d40af68e5c7a79cc8a88aaf183861fe962a1c7e6e8b7",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_reference/states.jsonl.gz": "07e3c46a5dc1f0f80c92c1cf396aebe534a61dbbb5e82504c486eb8a48209333",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_reference/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_reference.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_reference.job.json": "4c6618142d0fd587cefb12130e4ea4e01013824bf35ca8b3ee98e999e9cfd207",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_reference.log": "9d3bc7361bc4c38ca9db404dcf683d800a9164c056f6dfd5d37266cc61276879",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_reference.run.json": "c517b92f2bc732991867c122a0242b004797dae3cfa348c7f23cd38114ffec33",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_AA/final_state.json.gz": "69db4600b6fe74f24d78978f4e526a7efc5ab4d9aff6ab847ef14c26d46cffad",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_AA/performance.json": "9c8dc536fa308a4699ef2daa32df9a5c8387c242f6872a1a7b732ab051a65759",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_AA/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_AA/record.json": "82a228ae941bf82c4bccbaf63e51208d13e5240f0e36bdccd227dd72bf77a1c7",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_AA/states.jsonl.gz": "1b2badcb5a0c9936f1a561bfdb0fd327c36a04e275fb69f6b9171282a0263dfc",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_AA/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_AA.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_AA.job.json": "cd5d51d0d2b21ccb9c647dcc61c3ad4d775a6b319979a7687e3aef0915b76e37",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_AA.log": "708e776e85e08317e931b0cabec378966d10e3615fea67af3a5b1efa84d39663",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_AA.run.json": "f200f66c4de26d5ece8a45ad9d5cd92112b289b07ca4ca2477fad87df202c430",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_candidate/final_state.json.gz": "3cde3b8c10feb5216c3383ececa7a3e8e1e127343b3c4c9dc05432ba207d3a3d",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_candidate/performance.json": "0cf57d5f48a27b3c82d1265e8ca3cae8e38a891b50338348e8cda5206e96facb",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_candidate/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_candidate/record.json": "162ab7a77136c3c634544782c60a6c47f2f5928f9a788b42970760d9b2a11714",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_candidate/states.jsonl.gz": "6a5f35545e88a9d229629917e2fada6c8a3f110b9ccb189f4ad56813bbab4782",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_candidate/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_candidate.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_candidate.job.json": "b23a609c6f679e899738372f711e9fd67bf97976ba31751550de50818e1a7ad5",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_candidate.log": "b7d8c0e7e92aed4f6ab34b02b5d82e2d9249749f8d97f2c816528971ccf9ca17",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_candidate.run.json": "a838fe77786f665dcc9e92b3225b4ea8354c1f3b1909a49730cc76757055cfed",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_off/final_state.json.gz": "1adb5a7e3cac07c1be478dd9d92155a74f95dc532b50287abfe63445c5b38384",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_off/performance.json": "4ad947cd5a6728fa32d04e817abee38fcdf26e715c7487a8785f868921049676",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_off/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_off/record.json": "1f90cd903dfd1c92152d4c541f23f73c9e6fc4f7a84c2f95ce253514c5f7c13b",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_off/states.jsonl.gz": "4059dc67b8724bd102d092770fb54f0083b9beecf18eed40bf17cbb099ec32d1",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_off/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_off.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_off.job.json": "dbc9dff85eeecf464606ba6e0651f74a9dbd78fa39608d9a9c85c3b5ec1cd798",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_off.log": "a8aa96798534c643466c1c965f63fd787b37130687ca59845c35994854dcc900",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_off.run.json": "95f60b8c78e7dae00c19ddfb7708bf0f132e7027e3de4f1ac6002041f4dfbab9",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_reference/final_state.json.gz": "64f723728447a182d5e92215926a55a45394cff0ee37ec099b78512f194e4eb0",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_reference/performance.json": "0bf275c823d0b9d08f30372f520cd8c08d786dad9b2a0ec188b2fe52afdaab20",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_reference/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_reference/record.json": "d0fa13e4421f3c7ae911e88a699c45763fda2ef095a400fe63c288161850c09e",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_reference/states.jsonl.gz": "6772392228d96d2e32688189ac2986528dce94e131b16710db8083fed4dca2bc",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_reference/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_reference.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_reference.job.json": "c9d97a9bd3c3585c2fdbeac4c892ed7a3b2d2837e007b26fc71224d5f7963e01",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_reference.log": "d1e13235edf5ceeeba7738abc3ed04abde1d15e61c1d38e73480981c3f66381c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_reference.run.json": "297953fe216b7c17a76dcfe9a30a1f6436c0b4eeb82a66af79fe658738b966bb",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_AA/final_state.json.gz": "d1c45e3a51a1ed2b3a03dbb0391571a36a66fd5b93403112e7851c6c0c17aa12",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_AA/performance.json": "485ec8a7983385bef6d19438940e8d6c81eda3ba3c4d21bd0a55488efc347fec",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_AA/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_AA/record.json": "0b5909d7019f799c4b875f419ef1e649f0291c1fd9749b7c84e153a80ec0bdc4",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_AA/states.jsonl.gz": "d91ac4a4780e90830f919fbbbadf8c1bbae218ec8ee547dab2c99b817a36b217",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_AA/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_AA.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_AA.job.json": "28ee40b575ea29749c56ddef404ea17042af9761541cb0a402d3f91257cd89de",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_AA.log": "b4e6b673ab95d6e5bec576a09f50ce7579dc044f38dc38436b2d20e18f7fe91a",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_AA.run.json": "be7ed7dba779756ded841329627af3d12fcaf1f710f600048ec39bba3facfb1b",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_candidate/final_state.json.gz": "19cc1162872fb55c45ae89e2e5f13cdf6be7afb181c207f07a2ec033887217a6",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_candidate/performance.json": "d1e575408720c42772356facfa7587ec88a99aeca2ad663b34c2d41d10545a71",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_candidate/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_candidate/record.json": "4b849851426083e54b5b03b3785d4477375570d942807a822ea9e89108ab73ae",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_candidate/states.jsonl.gz": "36cfcf8e4ea7a509c121f4a76c045a8f87697b5669fb5e4d2c84f8c924550a9b",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_candidate/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_candidate.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_candidate.job.json": "30d827392f387ef25f4e98ee6806e9a0e3ceefca43aae9fa168bf2216cb53e09",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_candidate.log": "7f20e67bce0834237ed43fb30cdefd34e2344c385e712b68738d7d4d947e0e7b",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_candidate.run.json": "833c38de12044570b3e3445e8fa9c64a9d70393751b427bc77aee4d5cd83d1d9",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_off/final_state.json.gz": "6287f2c91d1ef5521a1fe899fd19698eab9c5a46720f19f37434dc98de1433a8",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_off/performance.json": "3b839bf1ad2944b15d4e1bd4e59722fb29217f24eb5f048b4c82e5762e96d24d",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_off/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_off/record.json": "e3806818df72a48839d5aef03d8237a72e1747bd03f3d8ada93e145813be6c01",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_off/states.jsonl.gz": "37ea12bc44ab9cba92da9a1b6662deaf1bc5050e3f0243981d19c511d5c4a053",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_off/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_off.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_off.job.json": "0f560287a714d03dc1f254a18649acec64916f18d3f62dbcc099a75317e6fa89",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_off.log": "98143ccdf77ea3b1c7959aef9b957ddeedaa9c140eb2a01945af2e3085a20c3f",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_off.run.json": "67217c5d2a4d29c403a36cf29078f9b57798a4f9317a261551295f9e2a904068",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_reference/final_state.json.gz": "2ad414483b809a10493728f577a7700f1dfb872f63002539d232280320b03fd3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_reference/performance.json": "4c14359b2aa439b834ac293e48d3fef036a76f42108bb425f4807c01622fb668",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_reference/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_reference/record.json": "df9547c65233cbc0b5421ed060fcaa2455a71941b338831a32fb8fd8bb5f0f11",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_reference/states.jsonl.gz": "da2da61696f5ad36c509a5440f0e02303a3262fa1a260e46fedda3634f8a768d",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_reference/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_reference.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_reference.job.json": "f5440272233dfe36d380cdce1661b7d220d9600be1743ded3cf27b237ecad500",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_reference.log": "7bd535a38f6b8f0d56996196dfcca1a74366f8a8fece4630040657053f8778c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_reference.run.json": "c82b9e566689bb4cef48aa1eca0901419adeb2e35ecc1d29c823e0bee9e16063",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_AA/final_state.json.gz": "8e8dc7dc2d534b34b24855a2a2a438f6cc0f51a807b14a11e628bf566704da67",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_AA/performance.json": "d7e186d019f88ecc8a366aba02412e900d814dc93464d745538a48c3d86d061a",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_AA/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_AA/record.json": "7408dc3d7885a9f5d06543b6a9d8f79d0a6fbcdb70f17b3e9ed69d57c784ad82",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_AA/states.jsonl.gz": "ea2e27353a3d6c6739f9bb1a8e5dda446cdd5790cfb5eee9907e7bc7808773b4",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_AA/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_AA.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_AA.job.json": "8863468526b6080af965470a87514aa9bf7a7f59709ab4b14e73c2cabdb3357f",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_AA.log": "40d679b2bdbefad34069c629727366f5d60f7cfe8a6db8b6f67bb58a1649b326",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_AA.run.json": "5bc0238c34cb4d636dc46f4bd4495714d38f60a2f57b7dcfd72d707aad76c3a2",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_candidate/final_state.json.gz": "9a0e1a0d677535deef08150f3b6845b0515652b37d1a2eb4c2fd72a97564266b",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_candidate/performance.json": "9c06a7f9b3049c18b6658397d98af695e0d6c3af5a166d35b63e6a1a5c933415",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_candidate/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_candidate/record.json": "ca7fc6994a8a69faf76f4b6d952c0ecab3bc8abe1d10b614b7cc66eac8ffa298",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_candidate/states.jsonl.gz": "25c2cb350de652b857df8335ba8a7211ea25c43b60a51a3a125c95fa176a6450",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_candidate/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_candidate.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_candidate.job.json": "ae9a99070e6664db40af1aafd11d0d402b72a2b0ff3e3e9aa5f5074467b57d9d",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_candidate.log": "3cbd223c419d7a934f1fa04876914b8aa843290c3bf2896d3e514b3ce7722dec",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_candidate.run.json": "f430e982c9143741bff73d770ca79a22fdc2d042ac1fb6633d75ac842b559fe3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_off/final_state.json.gz": "d60d25912da775fc0e9ad9a761e7cfbb3027b7059ebafd20bcb9b2e44f4d4538",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_off/performance.json": "3546802e1b514efa62446ecf2acf71c0bd1db6cd4744c1fced0e57a3501ab7a3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_off/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_off/record.json": "cd084018d45f14634e66a777c15c2e42e2152fd0e70e4e251583b85cd7c1cd75",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_off/states.jsonl.gz": "3af1ac0877b106a0e16c50ac21fc5298079b3c5afce3f3072d053c32f0e7eb5f",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_off/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_off.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_off.job.json": "8462860df34ce920c7cc09a029840947794aa69be0b033c3aa2406d0cb17a13e",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_off.log": "d62f205d6e350fca78cbeeecc15f586733abb006d4894c6f5fd37dd0f34b30d4",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_off.run.json": "425b1d0bb7c5ae1ed33333bdceb650a2545bb1376b1376494ce60ea63c39b09c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_reference/final_state.json.gz": "3995a7447acc2d4442d0cc46bce93f93f1587a45d3572b7dc51ea6e11b8cd88e",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_reference/performance.json": "9a8a38f770719ccb5b18d5ea9df66f7c058b592e23f255233d965ca8b7fa2567",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_reference/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_reference/record.json": "9f4aea5ba63d16c79b33efcf8c05a9adb014c3bc5d8b4445d78ee6d0abca167a",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_reference/states.jsonl.gz": "4f4238c00c6d2538662d90a90022402684552f32b2fbd17b3e4a5202434633fd",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_reference/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_reference.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_reference.job.json": "56218ddc5b7646960d6c0dc438f5cad3c65d6090bf281fe92b06657049ef3fd9",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_reference.log": "ec40750ee537cee047b8fd5e2d7f342c28dd3fe010c17af952a3d0bb8a42bab5",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_reference.run.json": "75c1114161f54e81145f7780643bc6d23e49635e7bcf5de6e41cb789a2bee4ce",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_AA/final_state.json.gz": "b8b67ba44d34658abdbaca8dfb808d3385fe5446c2cf88a5863177b9c7fe7798",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_AA/performance.json": "747cf4e6789d666cfefa0ee93d0e2902ea7ba50e4305442bcc7cb4408205bbab",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_AA/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_AA/record.json": "5d48ff90f5388e5cd5c1871216128d1a6c55d590eb686fc3d512a6fa5518c1b3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_AA/states.jsonl.gz": "20c04685fe3a3544197c7b8e352e714cc0787d474ce0626c4b682cd3b04a471a",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_AA/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_AA.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_AA.job.json": "68a332849d3ff8aaf46ca3bc2adf605155a35fa82a593e25148b6619237daeb6",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_AA.log": "b41d8552d34962552929ca74077362b1c58d9c6e4d567f4b4214cbd44da29d95",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_AA.run.json": "025852c95910abe2e11fed9d7247446a8fe66e3e3504022569426ec1f72a51fc",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_candidate/final_state.json.gz": "2eb978ef129cc376721df56c2e5f027a0221cd84a0a498aa1d74b0b61be6476b",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_candidate/performance.json": "a32c7ecffe59f7e46a72abe173734660f92a2342233857258f0ddc6cffe174a8",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_candidate/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_candidate/record.json": "edbbf1314ed623617c1f1e9f2e2ad729e27c9bb2840efbaaade8ecf2fd14ff72",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_candidate/states.jsonl.gz": "dcaf847fa62e70cd634621061944066da8b5f32e7df8fe61a961e4ee2c269b54",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_candidate/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_candidate.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_candidate.job.json": "bcdc199eb0f18919665b9af09e98968edc6f25079483dcbe128e7e25b73b8af5",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_candidate.log": "4a52eca92e481649e638af00c0d88fe8ad9914bc5fab1720c5fce289393c17f8",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_candidate.run.json": "4c0f1173954f39c8952b803160db57022120a79d2cca2ebeb1300ade68964e73",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_off/final_state.json.gz": "b94602ed4e9a83efb327feb8a123aaeff4e9c0fed8895e8f99910ffa736ae817",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_off/performance.json": "85a12ef8a7630a6c12ca031f187e7d2b6bc890bcdf04a01a15206591a744d5a3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_off/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_off/record.json": "e5e253ca61528b78c14e595810194c9bfad208a57ae5601a10774f9ca0167b02",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_off/states.jsonl.gz": "ef97a30447186143a5f6a1f78cf307c8ea910e6962dd1b4656998a3f073975f2",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_off/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_off.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_off.job.json": "0f92af9070fa20c2232577a3330644a59d1e46bd3f9db6b64218bc5eb4d49c52",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_off.log": "8a46b243b31361ab1b05919221126d4d85be02de98a826359f982dda7b69c678",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_off.run.json": "6103137506826c4bc76294dbec2c16e772c82d2d57575ba82290c93f7324cdd3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_reference/final_state.json.gz": "e9a373b62129bfd3c2076a742bf9caac3d3af7b09664510ca576a363155bf16f",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_reference/performance.json": "344451df68c97a706cfb62aacef09a570bb192dd127af22f1b66e5c90272dca0",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_reference/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_reference/record.json": "7c2e26dce89099d99084a47dca4601705fabdd3009679dc6cae55a3e88ec5ce1",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_reference/states.jsonl.gz": "2551cbc29d27f14f71e068a61d6791bf1442178f7db85118befcb36406e41795",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_reference/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_reference.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_reference.job.json": "264ffefea3714eea49ae75a3cc1ca48450aff1b8d8f11d88fc57c38e44fc941d",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_reference.log": "ce3c420ee79c34aae13265c8ab90eb537a119fe0c4991da9dffae68d16b0087b",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_reference.run.json": "980d94b0f7592a7f5d2d41b8c630c44addedca72cf7c90e7b841c5167d3298ed",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_AA/final_state.json.gz": "71e7f9f4801edd60017b26a9ca52dcd63a1203551847bcc696a2d5bbb0cec25a",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_AA/performance.json": "05d3f3d8a064d35e010557e020748ba53d2c41c1d2cbd798f09bc438b423640a",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_AA/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_AA/record.json": "6a8bcdaa717f9bd2680781b6eaff88286fa741e1771ea4b67689addc03db4da8",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_AA/states.jsonl.gz": "6b4b37c57938b8f7d15b47f99acd7f5e672b099d3b17538a6a6e6aac18564729",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_AA/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_AA.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_AA.job.json": "00a9939d04e3762441b263b401d728eca0b34bcc1bf222804b59cfd11b7c521e",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_AA.log": "13759216cc118f549c4ed2ab024078ee9c9b9fa9c171bec29f75a926ee7096ef",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_AA.run.json": "df5c7a22c29d48a20413101c841cddd8996c3c4272bedb914ae86476f3a9664e",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_candidate/final_state.json.gz": "00b5a807fea0a63542bd09e6bc7f49b55d3df9ec14f4f0b33ead6c210ee61477",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_candidate/performance.json": "b84295b0726b1687fb759232c01cb884d1914b799f8c922ed346ecae95a57739",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_candidate/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_candidate/record.json": "cd40274b2ea4bacfcda7e5f16ac67867bd00c6303d34280075b62a82ec39476c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_candidate/states.jsonl.gz": "0e998df7ecbe5c389dc1b8c38d353c6acd1ccdcb687f192d2f227f82a8a5bdce",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_candidate/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_candidate.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_candidate.job.json": "69469b5ef26cec4b5aa3fbf4367a6e274652decf87c50c726defdfcf73e02fd8",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_candidate.log": "5c714b06a55ffe28f84c3d1ce5780759a58e6b3df1febfffb11a249b86bd8af7",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_candidate.run.json": "4af965f002d8ef1d27f1a569e8fe4ccfbfa6431f3019cc456c4aa750464daf5f",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_off/final_state.json.gz": "f7d136b04563fbd72d7d6954127165fa348704830c6ab61b2e88be8da3292cc8",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_off/performance.json": "4a5b0303cc952341e061db9d47a3fb0955a588179d8b8a0ee73a080e99ab5f20",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_off/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_off/record.json": "8e718541fb259536fdd52c27c0f1864ee148aa55f4e3b6955191ae9143ee13be",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_off/states.jsonl.gz": "1b128da396d47334d4166bd4f14f8b381aef59353eadb0e2b5bae88ba1c79397",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_off/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_off.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_off.job.json": "c2e29d3479cb026115215a855d484093d8a8f8f41b72f2f06eead06482cbe020",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_off.log": "1c036a4fc5aa2167d902e20e8b9bb090f5ab7d65bfdbfd17dd5c82fa8565af1b",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_off.run.json": "5a942c12b2fee3b7d9d4fa32997ec64aaf74047a4e51d74bd6f8401f5d7b1687",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_reference/final_state.json.gz": "00aa0d92e4443832e4ced79f0468bda5f47324f14e378c37201234b1773243b8",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_reference/performance.json": "1e5315f7666a71a3c6a9509356032e65c5a990fea8be974feffed6c2d0efc301",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_reference/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_reference/record.json": "f1a6da656bcd69ca2508d6f59a462be0f309a07b97fc16807f9d5d56846f022f",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_reference/states.jsonl.gz": "5cc4590b91adc0dbb289fc1cef1b75aadc88cfe4031225bf128958423cfb9775",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_reference/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_reference.accuracy.json": "19411c5b013c1a6566c4460c67666fec5ffe1e23fc200e06d1ea8a71a099ee80",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_reference.job.json": "a6abf6c3f9f3116da1ee20f6cbc73cad3d90af2b92bc296c0727d073706c40ce",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_reference.log": "55a07998995235441ac004dfe63fc2322a6b6b52be9156c5b4371b4afebbe65f",
+    "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_reference.run.json": "ff1aa2371d8f5f7637cca0a7ad10d5230a968d66565c1f1b7dc6f122eb510d13",
+    "dist/rbpf_move_plan_route_field_20261018/run.json": "31223106009f5b85d93e1239abb51570a823cb8282e2b5e323d1b58813bf8e50",
+    "dist/rbpf_move_plan_route_preservation_20261018.json": "f4cef21fb8665bc543adf2a1f717c544aa65b557a19ba8893c238c13c6000c09",
+    "dist/rbpf_move_plan_route_tests_20261018.json": "dfa022120c1ce048e89258ba607a91d51194a32668fa2fccb7c2487059be2b73",
+    "dist/rbpf_move_plan_route_tests_20261018.log": "b754b026472e9923d40e557ca217449954f85fb916ab0a99f73f05f4171a55e1",
+    "dist/rbpf_move_plan_route_tests_20261018.plan.json": "f5f6d9a0109d7b48c0984e8c5820a6cc4ec427ae7ca405cd54ef461babfeba51",
+    "dist/run_rbpf_move_plan_route_20261018.py": "967821ff9112eeb221c4bf2183a459ab76aa35bb9517bed785a4aea86f01aff2",
+    "dist/run_rbpf_move_plan_route_tests_20261018.py": "d9f402221854b108b605cc79cbd5c8205cef775773480c0463ee31fa49f30afa",
+    "benchmarks/rbpf_move_plan_checked.py": "9e8bb08a277e99dd244883cf3d761bf9dcbea91780e67452fd65a8c6b4976487",
+    "benchmarks/rbpf_move_plan_validation.py": "a09e05958e070bb0982ed3629155dd1247e336f906d05c28616eb558d971db57",
+    "benchmarks/rbpf_move_plan_20261018.json": "521abbd875376ff838c08c070ff6d6f4645946207aab6e00ba8ecfd6d291db93",
+    "benchmarks/rbpf_move_plan_completion_check_20261018.json": "e7024c1b611a24a12f5f1d7ea6d351f5097866ccc73603afa39c59da73ee5717",
+    "dist/rbpf_move_plan_field_audit_20261018.json": "f4aa6c25914b2d9e488272ae732dade2f93f3ea2dfd5d2b769f573a2344ee619",
+    "dist/rbpf_move_plan_measurements_audit_20261018.json": "d27c5cbbe56fce55d77a7de8212804ef19bf7d8c86ceceac350de301216da1a6",
+    "dist/rbpf_move_plan_final_verification_20261018.json": "ac27e6b7a9ef1e791accd3fcf91f36d0f0ec5107e55e63920e8732fa8b1a0e5f"
+  },
+  "preservation": {
+    "timestamp_utc": "2026-10-17T15:27:50.884619+00:00",
+    "runner_sha256": "0a48af991626613a11bb19f6c97d08ebe6030d70ae6f5d83c27e33217f51feb9",
+    "production_source_sha256": {
+      "src/raytrace/bvh.cu": "7d9d06f128710f12eea70b09b8f0d475d16223957ddfdf41a7cf5ec77ac09d98",
+      "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+      "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+      "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+      "python/gnss_gpu/urban_signal_sim.py": "d3b332eeaa6b099449cb13ef4517aa4223cd8e561a5b753d8f7c5f99cf146075",
+      "src/signal_sim/signal_sim.cu": "31dc2c2a6e06d9f020c1b054371f0652c777dc3a6724f8a46b99297cda18be41",
+      "include/gnss_gpu/signal_sim.h": "2788f41ff6175da2d6c0db5212470ab3759f4e350d91f977a532e48fc70fa945",
+      "python/gnss_gpu/_signal_sim_bindings.cpp": "524f9460570f0b39f4165f8fb6526af927e6c2c8f39ff661c2731d34ee82bcff",
+      "python/gnss_gpu/signal_sim.py": "f316c47c4a9a9359498e6905f8d6afa8046f7b631f876e258074d44d527780d4",
+      "python/gnss_gpu/atmosphere.py": "8c7432e714699ae918f73d49346f43b9eb0a8b36802ad4618e1e042c09ddb76f",
+      "python/gnss_gpu/_atmosphere_bindings.cpp": "36c75159886ae798f28bd17c9d13d3b89e8797f3e81a07d3270aef9ea3b913ef",
+      "src/atmosphere/atmosphere.cu": "95e420949eac72a6ea2866add6a2cff6477c7ea4a27392830e526ebe23e86913",
+      "include/gnss_gpu/atmosphere.h": "e2d54dfb590391b6ca176a8bb9abc0156dc78fe51a330e6321a1579c752e8394",
+      "python/gnss_gpu/raytrace.py": "3d12a36b3db0b79d35fe54d38ed1f0fa0365c6b2064ff89fdaddc6c8140aab18",
+      "python/gnss_gpu/_raytrace_bindings.cpp": "472cae5221d1e5455570da2015a7a2ff8b5247482d540e50f88fb44470481896",
+      "src/raytrace/raytrace.cu": "454f371dd760e663ebb86563014bb56a16023d9bbff9b1df81ad4e54d855c7fa",
+      "include/gnss_gpu/raytrace.h": "02b0d9448a792a851aaa05397ee850748869430ba9c58f8fa998bfbad394b91c",
+      "python/gnss_gpu/double_reflection.py": "7a3950ba7c67efe6e2061f9541d993c8e52212994d0503f192f2d29906d11a80",
+      "python/gnss_gpu/diffraction.py": "7e6171943c90c8018bc87fe068533097938c139fbc59e5e2af47c9ca087aa52a",
+      "python/gnss_gpu/input_validation.py": "c1c4c08f1830edc254d38bcbdb05414041af2670f628f119cf7792759d2ea824",
+      "python/gnss_gpu/_diffraction_bindings.cpp": "94c12c172df10f32c0beb6f9409810996b932d3b9b3165bc1a21a4b62975c39a",
+      "src/diffraction/diffraction.cu": "f886d1cbc445707fabfc9e3dc5492ff1eebe82b27306d8a21ccf00404b43ff88",
+      "src/diffraction/utd.cu": "1ef9507efebb3c4fbc87e650d74a94067cdf6ab956ab0c8b0230a2a7bad34f82",
+      "include/gnss_gpu/diffraction.h": "3d276a6545b3db34f50fd2e7a4714e0b0e8cca1fbfa9dbe2fb28e3c256ccd5a9",
+      "python/gnss_gpu/reflection_diffraction.py": "90078b4ac1905bc291a7699c9ff7ccda7b723bcfdf10853e05f9a5ad4e2e39f8",
+      "src/particle_filter/pf_device.cu": "a20de06f6a6081670d39677b265d6fa58eb64baf69d816cb8173ea68aad9a7fe",
+      "include/gnss_gpu/pf_device.h": "9616ae2e4fb898b562143f04405e1006586548b98d461881eb37e11d57b51d85",
+      "python/gnss_gpu/_pf_device_bindings.cpp": "24ea505b9fbd1171f073d56db239f63fe23f0ed65f65c83c2df61383c0521c59",
+      "python/gnss_gpu/pf_device_runtime.py": "7a3ada45383ad7cc2377b43f6bf92b6ac75be101a5f319337819ab0dc8cd1361",
+      "python/gnss_gpu/realtime_runtime.py": "997b670f9186e01d6e6c9468d8804df47a39390b6a087ef92ae3978694a2432a",
+      "src/positioning/fgo.cu": "860deb60bbf03c3c0e7f25bda5d39a29f489284e1c081c45f63eb64a66e0f1b9",
+      "include/gnss_gpu/fgo.h": "443ffe8845dc85d8454704debef8e36bcddb7927d728871b91bfc0c3c203a6ee",
+      "python/gnss_gpu/fgo.py": "2eb5cefde7a7c91eef4b88e7175c0e00e6c85e9abd8883c00b2abfe11219e1c4",
+      "python/gnss_gpu/_bindings.cpp": "99eacd7c53fab0eb693c00699f97a0549bb06651c2b9907bf3b4fbf4f7546efd",
+      "experiments/rbpf_fgo/rbpf_fgo.py": "c977508d6a20413f7669efb39dfb1d87d74b254ce89cf1f57ae8681d7d6b8bb6",
+      "experiments/rbpf_fgo/gtsam_rtk_standalone.py": "1cdf4a7931bce541a3ad0c41a7d7e7e5aa404ca11e47bacdbbd832b17e5f8f38"
+    },
+    "production_extension_sha256": {
+      "_raytrace.cp312-win_amd64.pyd": "f9b3f83aede53d8cc03dff03c937529431b5143398f24ddc2aa1a2f50d0c2516",
+      "_gnss_gpu_signal_sim.cp312-win_amd64.pyd": "3ae8d0dc0c6136167fe4e1adde91972ce75fe0f00f3714021bd5bed851bfd5c6",
+      "_gnss_gpu_diffraction.cp312-win_amd64.pyd": "ca28ef50c132edd2ba87965ba934c6c6c274737f7a6b436ceea55a64c4cb6542",
+      "_gnss_gpu_pf_device.cp312-win_amd64.pyd": "48572e69d6bf1bd4b8257988b88a270c86c19be81c49b5a1e24e4dcfc785df52",
+      "_gnss_gpu.cp312-win_amd64.pyd": "8cc9cf532a0073bc2978ffc8b8daefe11f5195230bc23c269422ce4209c3f429"
+    },
+    "PF_build_PE_sha256": "48572e69d6bf1bd4b8257988b88a270c86c19be81c49b5a1e24e4dcfc785df52",
+    "prototype_DLL_sha256": "520258d5bccf5c921d29152004c19e25a19003c8bfe6eb986be4b43b784ad097",
+    "previous_reports_preserved": {
+      "benchmarks/double_geometry_gpu_20261016.json": "948b8797191d7c351e2710bec4578c749ea8893f6656f3f0e8cbe96fdbeabc7d",
+      "benchmarks/double_geometry_completion_check_20261016.json": "73c2f397ef645200090ae51346a9b9000d400767cc092d17a8ffe564553354e7",
+      "benchmarks/double_predicates_rejected_20261016.json": "309c46bed95ebc240657d54f591ea1b345575959ba2804c70ba8a5ca96a02f89",
+      "benchmarks/double_predicates_rejected_completion_check_20261016.json": "254bbf04216c7d24d602b42f530887b9fa93abb8e9f4760900e551e2ac43928b",
+      "benchmarks/diffraction_loss_rejected_20261016.json": "68680726625e1ddc840e6dabc4afb1cb02f90ac2547f21045687960b743faa8f",
+      "benchmarks/diffraction_loss_rejected_completion_check_20261016.json": "3dea35c50471c13fb0b18879fd9244d0e8447a83af8615d34f52ec16a577c4ec",
+      "benchmarks/composite_geometry_gpu_20261016.json": "d62537d0cf6fadcc546d7f4de78ac466829ffdde1b38a8b068cc36daab318747",
+      "benchmarks/composite_geometry_completion_check_20261016.json": "c1d2a40ed0144701fa8844dea1abf0116b308bd48749f56aa1fd2e495cf30203",
+      "benchmarks/pf_certified_division_rejected_20261016.json": "a9bef86816e1e420f9d9ecf8074bbf9c7a27d4510030798fd3d03accb823bfba",
+      "benchmarks/pf_certified_division_completion_check_20261016.json": "79bf4bff65429c904aeac6defff8f070d539d7c4179db9bc6a466340e86dfeeb",
+      "benchmarks/rbpf_fgo_gpu_feasibility_20261016.json": "feb4eeb242ce40f06975e4f1bb03c6b6610915aafb1a1d9737f4a1ccf12517de",
+      "benchmarks/rbpf_fgo_gpu_feasibility_completion_check_20261016.json": "17653b9558bcb84d144342ff40ee34a8cef3ea46d2880afd28613e40a3c60598",
+      "benchmarks/rbpf_likelihood_gpu_prototype_20261016.json": "6a6591cff2c515a31e02691032b6b20709064d56203264b5934010e7c8c48e07",
+      "benchmarks/rbpf_likelihood_gpu_prototype_completion_check_20261016.json": "305d24817650e54cd9185a235fe97a0f1bc6a7c2c4185850b207cff0a1fbae49",
+      "benchmarks/rbpf_move_batch_integration_20261016.json": "72f8c88908a0ea73757ffe54e7b7c0539ea7145442181f16292fe42a6eee4648",
+      "benchmarks/rbpf_move_batch_integration_completion_check_20261016.json": "80580c866e6e03f285f8476e74cfe9089bc8431ad3c86b82a74bd0bb6b4b3e68",
+      "benchmarks/rbpf_move_reuse_20261016.json": "8578f86a8c072194c5281bc48d94981ecc40272051ac9e228ac987c9f7c4c54f",
+      "benchmarks/rbpf_move_reuse_completion_check_20261016.json": "478e434ec64a61b5783367bc00fffe98efb3105b2db542034975fd6cb6b2c618",
+      "benchmarks/rbpf_epoch_memo_20261016.json": "e1b9079bee4fdcbff3c64cf2e9fc8b48544f61191dd70d2c19111ff2e6bb1915",
+      "benchmarks/rbpf_epoch_memo_completion_check_20261016.json": "103b960dd652e505d34f52dd02bec8e002cb8dd3d2d40591cc92669ee30cc26a",
+      "benchmarks/rbpf_proposal_reuse_20261016.json": "0be7ca23fdb752405e30307dfb43e30059b70e5646aef3851f7d32098b1c78a7",
+      "benchmarks/rbpf_proposal_reuse_completion_check_20261016.json": "a212f0813ce5f54e0129fb714e72eb03974a8346d01bf3c90513cd38c1bdf89e",
+      "benchmarks/rbpf_warp_likelihood_20261016.json": "3b502ebaa61172cad83a364878285b2b74110b6e0692e64d33638a038bfbe699",
+      "benchmarks/rbpf_warp_likelihood_completion_check_20261016.json": "c16af302ed55d6c517948410b3d8d6879b4b0a36e62555436b90b86ef46fb137",
+      "benchmarks/rbpf_dd_pack_20261016.json": "3541e177c7b9aab9588e9f5f370002d0b88273ea26617ad5dc49368dbe959f2f",
+      "benchmarks/rbpf_dd_pack_completion_check_20261016.json": "215126a7b5c5c2d3c0ed1830565ed599b0b87a698c5c2396405fed1a0b7565ee",
+      "benchmarks/rbpf_native_canonical_20261016.json": "80782b6be0ae8ac4360ff680666eab3338a412cfe699c139412d6b79a571e818",
+      "benchmarks/rbpf_native_canonical_completion_check_20261016.json": "a729d1b3c809a2f8b145cba4761c39e9fa663d399daf01494ac335c7ce89a51b",
+      "benchmarks/rbpf_parent_score_20261016.json": "827f9f71733661870fcd4092059153d785ce10007af9950d3efbd4a6163718d9",
+      "benchmarks/rbpf_parent_score_completion_check_20261016.json": "976d3f6f39a2ec9f4b20ae143d55a4361499c0136cb2499047d71212b9676a36",
+      "benchmarks/rbpf_component_mass_20261016.json": "21ce17d5b7912ea9ac67e5deaa80f951d989fe602bc348503c66804df7ea4a5b",
+      "benchmarks/rbpf_component_mass_completion_check_20261016.json": "7638a89c0021b4022ed80e065ddc8bf1382d15c1eb8897b00afab6f0e126ac2f",
+      "benchmarks/rbpf_feedback_mass_20261016.json": "860f6ed1c3685c4e37fe0164eb502518de017aeb8d6e3506b2ee41559404281f",
+      "benchmarks/rbpf_feedback_mass_completion_check_20261016.json": "a683d0410915d2959ced3223aaf9678832f4bd25817394d630ade3c2a8cccb08",
+      "benchmarks/rbpf_shrink_20261016.json": "e9ab9e68198ad1a7fa6391bbce9016e0e2963fce8c53f9bd249b190645854466",
+      "benchmarks/rbpf_shrink_completion_check_20261016.json": "aa1faf02b3f231d131f876f6ae5bed9e88eebeb0ec95358dc9a38596a2599424",
+      "benchmarks/rbpf_phase_profile_20261016.json": "c874f3cf0c21ab1ccc7600e5ca20854de9eb081b309695468f4c3b7f83809a05",
+      "benchmarks/rbpf_phase_profile_completion_check_20261016.json": "4f50c9b45476944a5947604d0fe734f5dd40d93c6fab1c54dd78e2956986d1a5",
+      "benchmarks/rbpf_score_index_memo_20261016.json": "1ef7247da4743550f13d0a3cddd40878106b61a978b74e15fac4923017534fa6",
+      "benchmarks/rbpf_score_index_memo_completion_check_20261016.json": "4c1446ceb4ac79f6cd8d4efde7417c03138dd74a2a765f40971f47279000c92d",
+      "benchmarks/rbpf_ordered_keys_20261016.json": "7383d0185865ad422bbd6476b285d7829036d3f5fa61acbeab42f21443b5a1f0",
+      "benchmarks/rbpf_ordered_keys_completion_check_20261016.json": "ee0bbb979af88aaaf3c1435fe6f93b20b932477ff8e9439ebb71d71a169c7494",
+      "benchmarks/rbpf_native_staging_20261016.json": "87e816c273deaca1fd23e26dc52c69e2cbeda554aaf34dc5da1e3d41b4435b7e",
+      "benchmarks/rbpf_native_staging_completion_check_20261016.json": "ec28a3c6acd32f3f716ecde1e75c693ba96d26843c5c31442e453fa066edbad0",
+      "benchmarks/rbpf_irls_identity_20261016.json": "a3f322e47a5f7b674c8a569e9f2848f3bed13642eeb032e0da5a0ff31da029b8",
+      "benchmarks/rbpf_irls_identity_completion_check_20261016.json": "3b0eac874ecee69fa432ae5e3b60c55dd388b091541899ce1b5d88046cfd20a9",
+      "benchmarks/rbpf_irls_replay_20261016.json": "fa5b1ece36bcce76a1aa500fa96d96b969be2dc7eaf2313c70b8dbb58f1b9bb6",
+      "benchmarks/rbpf_irls_replay_completion_check_20261016.json": "f51b020ef63dc8c75df99302ec06163e7e1c39bf44ef577bc731011eb49d243e",
+      "benchmarks/rbpf_fused_staging_20261016.json": "7fb662a3b11e5f0e97591aa0f86e4982c0646adcdf4d64d1c5ff72a4b2cc0b43",
+      "benchmarks/rbpf_fused_staging_completion_check_20261016.json": "fd4b8bfc117ea2caa22be40f5d04e9f0d87478938d50597600bcc5a18c7a23d8",
+      "benchmarks/rbpf_call_profile_20261016.json": "a896c3a49660bb29386a2fc1cea058c4d63a9d150cc18d3f9a4483a517299729",
+      "benchmarks/rbpf_call_profile_completion_check_20261016.json": "548f8d632848a3089f43cd10e246a2366df4131d72c6999640a35d267eaeac06",
+      "benchmarks/rbpf_ambiguity_initx_20261016.json": "6ea34852ebcc0ff611f471f3301250b5e3ceceb7ece1d16f72d0b02e0b06d658",
+      "benchmarks/rbpf_ambiguity_initx_completion_check_20261016.json": "1f21bec571c804b1727483f1e22fe44c9985c784d89c7cd0f26c5e3be31e7282",
+      "benchmarks/rbpf_ambiguity_bookkeeping_20261016.json": "d90b7cd05be77e3453a8aa52618f4d45f02dc2b451d54dc1fdd679715ee7d209",
+      "benchmarks/rbpf_ambiguity_bookkeeping_completion_check_20261016.json": "3f496832034112a1a018041b8b89c84b0cd97409b8e4c47c08d447e4e596de30",
+      "benchmarks/rbpf_gpu_stream_20261016.json": "01f6c1f7c8a3adbfbc6db1af15f5c4a954d1769701b905c5b9f8bcd747a19e0a",
+      "benchmarks/rbpf_gpu_stream_completion_check_20261016.json": "ea877ca251b3ce62d04398c375cd83d713f58244af8fec1d294342c878c93540",
+      "benchmarks/rbpf_gpu_graph_20261017.json": "67900d34cc2d61c2339d81b468e160a22f834edcfa42ebfe2f182ca99ed60834",
+      "benchmarks/rbpf_gpu_graph_completion_check_20261017.json": "bf7c332d9c279168840ac5403d295752a058338fe96e699f2ec58a77f9f61345",
+      "benchmarks/rbpf_sparse_normal_20261017.json": "4442af48ec617c1e6db8f976ff9527afa0415adcc83655e900c88b95bd413dbf",
+      "benchmarks/rbpf_sparse_normal_completion_check_20261017.json": "cd9790daa6b7e8c220f080a5beabc8b1a335ded7dd0eeb571a739b8385362a3b",
+      "benchmarks/rbpf_gpu_stages_20261017.json": "4e7c0e614e1f9ce4c8e7571051bfd0a60b095c48758b04f7ea6606ae2fbc5088",
+      "benchmarks/rbpf_gpu_stages_completion_check_20261017.json": "46c57b436b05cafc0315cd24c4b5b500e36bcc544d9adbdb2dd4445da6e93018",
+      "benchmarks/rbpf_fixed_lu_20261017.json": "6fd5652e2b2d4491d6b7a7f0b9d36b893c64ba44436be801325027bab7e8bbff",
+      "benchmarks/rbpf_fixed_lu_completion_check_20261017.json": "4587a872376b3fc6a8d7c30c2bb7cb67ce2c89de9a4b83560f03f6fc0c0887ec",
+      "benchmarks/rbpf_register_lu_20261017.json": "b570c0b049239c5d969d7d75f36940116cbba7aa62a9662eaf6297cc16fa83bb",
+      "benchmarks/rbpf_register_lu_completion_check_20261017.json": "f45c51bf8978545fb77612d4fb3b49201a653186ea11f5f4267b38e3db177ae5",
+      "benchmarks/rbpf_register_lu_skip_swap_20261017.json": "4b210510642efb9efa0609ac9d3cf9d430a127e864051ba4eb7684c97fcbb10b",
+      "benchmarks/rbpf_register_lu_skip_swap_completion_check_20261017.json": "b755c9d6f4f3b75acb52ffd1c82fd20ccb5a121993bfdd7c41925b258d922731",
+      "benchmarks/rbpf_register_lu_back_cache_20261017.json": "65eb0b12ba1d21aa885bea4939ff1c6ff7c48a77d7235ed9b8bbf44a7445405a",
+      "benchmarks/rbpf_register_lu_back_cache_completion_check_20261017.json": "3c5de941da83cde2c82bcd34f09096905991c16045cf150192dc4f174a30fc9f",
+      "benchmarks/rbpf_block_lu_20261017.json": "34f381a74e78757b06600e93abcf68e2374a159f5c90e90e9986bd777bb497fc",
+      "benchmarks/rbpf_block_lu_completion_check_20261017.json": "88b86ec2a46eb34cf4fa22d1596d7d1cd4a6924a48508eb8db1e334512ce9e3a",
+      "benchmarks/rbpf_lu_phases_20261017.json": "4131b2f58e85a6d6aaeb18c67ec16a9af0556cb2a26a562c03c59f1a4a20e7f0",
+      "benchmarks/rbpf_lu_phases_completion_check_20261017.json": "43a3f87001556bcdb8fa0c1dcbb2d665fb79f3390fa5a9c647af53f52d12037d",
+      "benchmarks/rbpf_compact_scratch_20261017.json": "d849a00028621b59536a82243aa693a7d0d08b2fc1f609196297dc26e77b19ef",
+      "benchmarks/rbpf_compact_scratch_completion_check_20261017.json": "2ba2b7630673ef409ddca4fec500498a289928df0d968651843038f96ce96ebe",
+      "benchmarks/rbpf_score_host_phases_20261017.json": "2161778966a9fa2e7f35ac8d8b434c07ab5fcd0c5411d15e19777d3614fd5503",
+      "benchmarks/rbpf_score_host_phases_completion_check_20261017.json": "4db5304cae3fa1034fa81d96a164c3a0d0dc4a437ec89f4a0338f4551a13fce4",
+      "benchmarks/rbpf_cluster_batch_20261017.json": "ab3663c6ed9e1d59c222cde765a4cd675b3a4fa5710b706cadd1fda939cbfdd4",
+      "benchmarks/rbpf_cluster_batch_completion_check_20261017.json": "da273f6f3d3c865d852e64c03f4cb51cf7d559d72ac4098ac4432f22ffdfbf8a",
+      "benchmarks/rbpf_cluster_fast_guard_20261017.json": "579b801405348aa914fa136358467fc06ea0bfac69a6cd7de65f79dcbbb11430",
+      "benchmarks/rbpf_cluster_fast_guard_completion_check_20261017.json": "609e9151de95c9b1ffde63ba544cb2714d601540a00ccdf28f0ed1fe6916f019",
+      "benchmarks/rbpf_cluster_parameter_reuse_20261017.json": "694f4a9f93bb0915aeaf2e909fe0888c5c37a91a42aa43aeb68c5ff3f1b06c67",
+      "benchmarks/rbpf_cluster_parameter_reuse_completion_check_20261017.json": "9715bb6e2f12cf51ce53979d34034fe88d484b1d5ab5eeec21e55461a6e34dd2",
+      "benchmarks/rbpf_pf_boundaries_20261017.json": "985ca812be105737659c1aa5338b294b53764fbcc041bf00a3d758d4013372f5",
+      "benchmarks/rbpf_pf_boundaries_completion_check_20261017.json": "4d13ae3a6f6ef049af8b9a6c62d079133fc256bcb9af81c735589218131b41eb",
+      "benchmarks/rbpf_extend_support_20261017.json": "c02ad4d6b0d292cd595f798a24d604adc17a79b3dd9ad751a335c54c8b86d682",
+      "benchmarks/rbpf_extend_support_completion_check_20261017.json": "878142266c3a7872de1afff1d8b58e4b87b73279c49199ecec52bb5667c4a464",
+      "benchmarks/rbpf_versioned_staging_20261017.json": "7dc229c61846b3d1ae7723ff1ac0423188b875d84a949e6e1c0e737f3438194f",
+      "benchmarks/rbpf_versioned_staging_completion_check_20261017.json": "c235d8d67f039c9c7ba2d544936ba7fde571db9aeeb2e48884c462c36ac0e097",
+      "benchmarks/rbpf_weight_rows_20261017.json": "33713f57c8135b6d6850de5631fcb945d0d20d2494b0decfe7e529853c45b503",
+      "benchmarks/rbpf_weight_rows_completion_check_20261017.json": "df2cb9b672967ef8edf8ad43418129209625bfc9d4bee12359199aba4feaddf9",
+      "benchmarks/rbpf_initial_share_20261017.json": "a271490eb13bf0ede35cbbff0cdd62646789215c2380e8de2acfee0484f92371",
+      "benchmarks/rbpf_initial_share_completion_check_20261017.json": "4bd1f4d5ab625a922d197eaf3032559f6fcbb534b180038619f2f4b895cd4261",
+      "benchmarks/rbpf_qcedit_batch_20261017.json": "00d3b620c53cd7229dddf92fb408b28f6ea0178da2b35af14dfdccf76c563f7c",
+      "benchmarks/rbpf_qcedit_batch_completion_check_20261017.json": "4179d62e9284a7fc839a1af650c86aa1b34a881cb4ffa21f54f1eeae7fe24983",
+      "benchmarks/rbpf_preprocess_bundle_20261017.json": "4597c71f6d8a2b09bce374ec1baf01a132c1488c7df0d2ec95b14849bdd3378d",
+      "benchmarks/rbpf_preprocess_bundle_completion_check_20261017.json": "a2f06e655494c764b5e971c6954fbb43db84a89dec569ea888bdc0a1d07f66e6",
+      "benchmarks/rbpf_epoch_clocks_20261017.json": "d99ac1d53422aa128a73b44a0f77ea9d703599163fcf1a4cb753462257c5a475",
+      "benchmarks/rbpf_epoch_clocks_completion_check_20261017.json": "a0a7ae4d18939d6ee22fc7dde17274067edbb2425d9b317cb7fda574dddc0c99",
+      "benchmarks/rbpf_epoch_lockstep_20261017.json": "2a44e15a8095a22010d08ae68d2a1bee5f7f3506ec465199ea0121fd5e406fee",
+      "benchmarks/rbpf_epoch_lockstep_completion_check_20261017.json": "3fafb34ba70e6f838a94a2330e80817f3cec9ce51300f8ff178dcff0918ee77b",
+      "benchmarks/rbpf_joint_covariance_20261017.json": "46d8b7b062b848135599ce5dc4c691f4f914a918170f33a681d5e39167eb835e",
+      "benchmarks/rbpf_joint_covariance_completion_check_20261017.json": "7a1c6a157dfba4a4717feb98835c487c8a618597549667662bf339008993a18a",
+      "benchmarks/rbpf_common_staging_20261018.json": "6c449532700916c594def2873380ac336d2732077c2b51dd348763a62b585454",
+      "benchmarks/rbpf_common_staging_completion_check_20261018.json": "3934ba7f41915f6178d9efc9d62e918ecb567580166cc358179b75c938e47757",
+      "benchmarks/rbpf_extend_factor_20261018.json": "9588c8421ac317379ff184911dc956c9a8595e24fa2e57a36ff6413b81f0031b",
+      "benchmarks/rbpf_extend_factor_completion_check_20261018.json": "4e29d98ff0810c7359c6d34caa5a91615d2bb5f19c9f05671d79c79488a66210",
+      "benchmarks/rbpf_view_release_20261018.json": "c3eb68aa33b45568f314b73a7aa632ea6168dcdaf3036255a847f9c9317bb5d0",
+      "benchmarks/rbpf_view_release_completion_check_20261018.json": "834bdc4ef5f14ffa05afd87a4aedc5080aeb39ff1f105e490e3ad7e09d3d849f",
+      "benchmarks/rbpf_gc_clocks_20261018.json": "5ed6ee6ad2df2c0c6cd95999ad489c2c586e00336c4780039e5e259f06ea23a2",
+      "benchmarks/rbpf_gc_clocks_completion_check_20261018.json": "604799d548fe6efeba2692b9999ac8f0e6f5c348cdeea85c7925027552d3a005",
+      "benchmarks/rbpf_direct_view_20261018.json": "f52fd8f99e6538f1a61c99428344a8927cac0354e5fc25762be0ca4047afc0fc",
+      "benchmarks/rbpf_direct_view_completion_check_20261018.json": "29a7ce88b443ba0fcb70250d2070d26c2a095f6529b4e27f92c449af23d31984",
+      "benchmarks/rbpf_copy_work_20261018.json": "393cdb3616046cf30330922d3122b4e25888c9f763cacc6a4de4e8f1b7a99138",
+      "benchmarks/rbpf_copy_work_completion_check_20261018.json": "441539539de81454432e4d945e63669f6c08f7ab225f6f368907a349156fb74f",
+      "benchmarks/rbpf_move_plan_20261018.json": "521abbd875376ff838c08c070ff6d6f4645946207aab6e00ba8ecfd6d291db93",
+      "benchmarks/rbpf_move_plan_completion_check_20261018.json": "e7024c1b611a24a12f5f1d7ea6d351f5097866ccc73603afa39c59da73ee5717"
+    },
+    "archives_verified": {
+      "composite_geometry_candidate": {
+        "files": 305,
+        "manifest_sha256": "c5a0d912f148921b170b05f8eb1f4c0a0fa774ed62e4e278f2b672bf8b441b6e"
+      },
+      "pf_certified_division_rejected_20261016": {
+        "files": 94,
+        "manifest_sha256": "bdae75c0d2e7587e98dc2f6dfc86ca6d533d4604f25aee93c2398a68a0d24b05"
+      },
+      "rbpf_fgo_gpu_feasibility_20261016": {
+        "files": 149,
+        "manifest_sha256": "6854719596359dd1129e3c19bc74fef0f30830132d0f728e2b4667ae32c0f1ab"
+      },
+      "rbpf_likelihood_gpu_prototype_20261016": {
+        "files": 161,
+        "manifest_sha256": "e338e38ff4f52e9c11aaa0d4667ba60842e3902e0223ea1b25ded5805c4eb03c"
+      },
+      "rbpf_move_batch_integration_20261016": {
+        "files": 74,
+        "manifest_sha256": "ac31a335946f8b78909c41c837fcf35a5dfcc7a599ab79e34d4c9f9d925a28e8"
+      },
+      "rbpf_move_reuse_measured_source_20261016": {
+        "files": 1,
+        "manifest_sha256": "6f2dc57a14927150cb1ebb7c3b23c7b466197d17ef1aeea8449becabaf622145"
+      },
+      "rbpf_move_reuse_20261016": {
+        "files": 121,
+        "manifest_sha256": "c7b69513ee6e031774eb230d83a5d7a61fb3bfadd8163e5e97095667b5d93218"
+      },
+      "rbpf_epoch_memo_20261016": {
+        "files": 140,
+        "manifest_sha256": "35ec46c9f34924625376273054b9cb10acc49def9b0a7ccbe640b3ac0a0c435e"
+      },
+      "rbpf_proposal_reuse_20261016": {
+        "files": 84,
+        "manifest_sha256": "38ef475c10b65a1c208f6153cdedeb63a0d9ff35d7fcfc6c185ec962f305049b"
+      },
+      "rbpf_warp_likelihood_20261016": {
+        "files": 96,
+        "manifest_sha256": "4ed5c84af854b3e7414e912961a768551278d7d9086ba68ff9bf3ad615def45a"
+      },
+      "rbpf_warp_likelihood_text_correction_20261016": {
+        "files": 4,
+        "manifest_sha256": "d75888f7db8571ce798c6504b6c79a739dcbd8937710851027296c166d930075"
+      },
+      "rbpf_dd_pack_20261016": {
+        "files": 139,
+        "manifest_sha256": "8c6e10d94457fdaa6c73d825a86a679a0abc2e1dcbf87d77630eafd7fb0de0e5"
+      },
+      "rbpf_native_canonical_20261016": {
+        "files": 101,
+        "manifest_sha256": "d4cd45b5ffc110c931804314c60786aeb77391f9eec08f77cc0f273ea64ba91d"
+      },
+      "rbpf_parent_score_20261016": {
+        "files": 161,
+        "manifest_sha256": "25696234a36f1253c294ba92d0fceff2c799c7e9aee1ff45aae95feb7071e728"
+      },
+      "rbpf_component_mass_20261016": {
+        "files": 143,
+        "manifest_sha256": "3f1ec07899d1e991db9b120fe076d55b47b7648aaee487edaeb88edb7864daf9"
+      },
+      "rbpf_feedback_mass_20261016": {
+        "files": 130,
+        "manifest_sha256": "f44dad77d66367d2b70821fb033fc64e5a869a4647fbc225c033ca529c5c0da7"
+      },
+      "rbpf_shrink_20261016": {
+        "files": 157,
+        "manifest_sha256": "b812f3c78df09f769b68cd62318b0e437ed8cdb015af5093b2d5898de919dad3"
+      },
+      "rbpf_phase_profile_20261016": {
+        "files": 98,
+        "manifest_sha256": "5551e3d8ca990e9d236a8b90bbf93ef02cc63bb4a4e6ba5e9e6dc28d558196c9"
+      },
+      "rbpf_score_index_memo_20261016": {
+        "files": 187,
+        "manifest_sha256": "237a869eecf3ed0262a79194a8cfeea850657781fa8a2c36c1119533eb8d0182"
+      },
+      "rbpf_ordered_keys_20261016": {
+        "files": 154,
+        "manifest_sha256": "ce08a9383b4612471accd02e05039bea6eabf1b4dd3f940b860550953e3aa250"
+      },
+      "rbpf_native_staging_20261016": {
+        "files": 174,
+        "manifest_sha256": "3f3f88e3030b673c7f61cc9e1b64599eab0e254b351365ac6710b248475731be"
+      },
+      "rbpf_irls_identity_20261016": {
+        "files": 198,
+        "manifest_sha256": "f70e798c05dd997e0b9348059515d5a03dccec43d0b84877b5578dfeb5f43c51"
+      },
+      "rbpf_irls_replay_20261016": {
+        "files": 147,
+        "manifest_sha256": "0198f4b92f9a991f9d550e0e2341ec06e1a814d87935697a84b1221abe39a692"
+      },
+      "rbpf_fused_staging_20261016": {
+        "files": 246,
+        "manifest_sha256": "bb02cf3e8e87b131ace4c3a61bdff9bb7a8c39044830713f4461a6be09f56974"
+      },
+      "rbpf_call_profile_20261016": {
+        "files": 175,
+        "manifest_sha256": "707c689dcc844883452cdb2b0e49268c29284045e82f7da2f285e21df4338f5c"
+      },
+      "rbpf_ambiguity_initx_20261016": {
+        "files": 410,
+        "manifest_sha256": "1ed8bbfb3979c9659983dc5d72eedcb119bf802b1471ce8d1cf47b793ecbb744"
+      },
+      "rbpf_ambiguity_bookkeeping_20261016": {
+        "files": 347,
+        "manifest_sha256": "a1bac1e99727a2bd7ad81ec275af2ad7b898b0c1b219475e53969d5e90a50d06"
+      },
+      "rbpf_gpu_stream_20261016": {
+        "files": 179,
+        "manifest_sha256": "0858036b208df0fd1f8f535a4495dc729c8af919546fcb83d9732c6f796dab2d"
+      },
+      "rbpf_gpu_graph_20261017": {
+        "files": 180,
+        "manifest_sha256": "31db0dbe7d8987382402e4cc8764a6c6901010db6ce054f277cceb695cc35990"
+      },
+      "rbpf_sparse_normal_20261017": {
+        "files": 189,
+        "manifest_sha256": "9590f39e5badd67383e57e3fb289a7d08b88002ceb7f320bad41fcba9f8a9d1c"
+      },
+      "rbpf_gpu_stages_20261017": {
+        "files": 146,
+        "manifest_sha256": "1583640daba5175677bc5ab721ee9c4cfdda5797273ace039105b494e3460d2b"
+      },
+      "rbpf_fixed_lu_20261017": {
+        "files": 190,
+        "manifest_sha256": "77628776263597a94108c3ac3bfe3759b0797620909a1a547670c3294625e947"
+      },
+      "rbpf_register_lu_20261017": {
+        "files": 272,
+        "manifest_sha256": "ecd21c6aaf285e28cc6fa47c981d0d076ed123940f7805131d365a61087ae22e"
+      },
+      "rbpf_register_lu_skip_swap_20261017": {
+        "files": 204,
+        "manifest_sha256": "bfa37a04f08b51babdccfcc2ab3b49c7f67ca3a3e98e0067fe5e516d473b7d85"
+      },
+      "rbpf_register_lu_back_cache_20261017": {
+        "files": 207,
+        "manifest_sha256": "b15f445bb54464cd50c058215827e0e5dde6d1e8013f29f2a4ef8f37101702ef"
+      },
+      "rbpf_block_lu_20261017": {
+        "files": 211,
+        "manifest_sha256": "a6a26edaf9730f2397556d0bed18e7bcce8c01ed9d73d9cfc1278383c5319f58"
+      },
+      "rbpf_lu_phases_20261017": {
+        "files": 148,
+        "manifest_sha256": "903f764bde4fea4b05cfb35c6f148da73429f621a33a923184e1b474d6e7e505"
+      },
+      "rbpf_compact_scratch_20261017": {
+        "files": 209,
+        "manifest_sha256": "9d348ab80f7531274b051e3e5340d9b7c511f89c7fec7f97f46ea63ebf4ba961"
+      },
+      "rbpf_score_host_phases_20261017": {
+        "files": 133,
+        "manifest_sha256": "4151dbddcd7204edc6b6c293236e75ebb2f110abcf05913b8bf857ca71fc95e9"
+      },
+      "rbpf_cluster_batch_20261017": {
+        "files": 148,
+        "manifest_sha256": "1bfed72e3d1ad5209eb43432177f1adb0236da9323df449a009252b16b9ff0e8"
+      },
+      "rbpf_cluster_fast_guard_20261017": {
+        "files": 219,
+        "manifest_sha256": "47ddf65862f90a27af6e150f55fd9f21a457a672aeef1fbf25a845cbbf14fa04"
+      },
+      "rbpf_cluster_parameter_reuse_20261017": {
+        "files": 261,
+        "manifest_sha256": "4db44a52e369b0111d12f965350e806026c9c1b84108e2b2f0220c9a6b81e32a"
+      },
+      "rbpf_pf_boundaries_20261017": {
+        "manifest_sha256": "60cf3d32959c6f5f5c7b65aa65b445572f9d477f1ae77f769ae30f5f83bd4e27",
+        "files": 249
+      },
+      "rbpf_extend_support_20261017": {
+        "manifest_sha256": "fc5355a33091526c5cf43c91d95fc4b3b1f1eedad5c03999593ba77a8396b9fa",
+        "files": 313
+      },
+      "rbpf_versioned_staging_20261017": {
+        "manifest_sha256": "999cfa2bf0d7fc033a005f0ddac4f4afa60f7652d28dc604e062939d35584558",
+        "files": 359
+      },
+      "rbpf_weight_rows_20261017": {
+        "manifest_sha256": "8fd7bed723dfe93b790d8ebd0340d6653f68cb05f558e24d93da0058397f5260",
+        "files": 189
+      },
+      "rbpf_initial_share_20261017": {
+        "manifest_sha256": "afcdf48858f70a3fa9ee0d95fb28e7aac1b43ccd3dbbd15807903a75cd32f1d3",
+        "files": 245
+      },
+      "rbpf_qcedit_batch_20261017": {
+        "manifest_sha256": "a3529393c34ead9e0a86b68363737b34cf88ece522ae6702a410a8cf067cc367",
+        "files": 452
+      },
+      "rbpf_preprocess_bundle_20261017": {
+        "manifest_sha256": "e196f34393dd408f0705ed06239cffb5d53b9b9af0142c77db70baf6da658b59",
+        "files": 446
+      },
+      "rbpf_epoch_clocks_20261017": {
+        "manifest_sha256": "5ac828b43683ba7977b16df660bd2f9b4c9978d68827534ec6e72dbc259f6976",
+        "files": 243
+      },
+      "rbpf_epoch_lockstep_20261017": {
+        "manifest_sha256": "e3d6c66d92d4c93bfbdcaa631ff72e86b86607e511961bce938e09ba7f063410",
+        "files": 288
+      },
+      "rbpf_joint_covariance_20261017": {
+        "manifest_sha256": "477aeb479abcd79553c531eaf776eb2545b9a096ce7006cc3b37597dcd203a4e",
+        "files": 682
+      },
+      "rbpf_common_staging_20261018": {
+        "manifest_sha256": "d8ddfa0d0f621e98120e74c96a85c560e04cd7508665f5f96338a3ec8056cac7",
+        "files": 308
+      },
+      "rbpf_extend_factor_20261018": {
+        "manifest_sha256": "98e58e5ac2e707f447ee4cf70038cb40057898243d8a8b47a8f33c30a1cd8747",
+        "files": 201
+      },
+      "rbpf_view_release_20261018": {
+        "manifest_sha256": "b3a6d3b7e89ab5ec94cb02a7de0d96fb067ee61da77c11feabc92be6864fee0e",
+        "files": 235
+      },
+      "rbpf_gc_clocks_20261018": {
+        "manifest_sha256": "c17157e1b02d113f6a7c03407aa49f5a84d3a5b4edffb6f2d5ab19648a78843b",
+        "files": 374
+      },
+      "rbpf_direct_view_20261018": {
+        "manifest_sha256": "26e29e525c5304a9523a4af44592a2546935b8942798ee798511d23ce46b418a",
+        "files": 234
+      },
+      "rbpf_copy_work_20261018": {
+        "manifest_sha256": "d9f997c4f981077601a17f2116d4bc1450dcd8d53e33eeba90bad422b0ff5d0c",
+        "files": 211
+      },
+      "rbpf_move_plan_20261018": {
+        "manifest_sha256": "bb5d06f70a6c798c717165b311fab41aa86d978f409523d187dadb9dfe49a224",
+        "files": 249
+      }
+    },
+    "product_diff_paths_vs_main": [
+      "python/gnss_gpu/double_reflection.py",
+      "python/gnss_gpu/pf_device_runtime.py",
+      "python/gnss_gpu/raytrace.py",
+      "python/gnss_gpu/realtime_runtime.py",
+      "python/gnss_gpu/reflection_diffraction.py",
+      "python/gnss_gpu/signal_sim.py",
+      "python/gnss_gpu/urban_signal_sim.py",
+      "src/raytrace/bvh.cu"
+    ],
+    "production_changes": [],
+    "default_changed": false,
+    "archived_files_verified": 12370,
+    "source_sha256": {
+      "benchmarks/rbpf_extend_support.py": "0ddf1e2f64ea77ae7d9bae88c57380ab4562589b8e28bde72042ed26a8a38b9c",
+      "tests/test_rbpf_extend_support.py": "b2a7e79b1b08c1cff75159758d1de3658fd6946d5e7e5507e0e22c0bd22e97f4",
+      "benchmarks/probes/rbpf_extend_support/CMakeLists.txt": "5e947b9f78ebd0c017d8300928d8fccfe5344d845c4c831612472ba9f0b13e1c",
+      "benchmarks/probes/rbpf_extend_support/README.md": "3d241f44fb0e0d4ee7d345fb332bd563e0af7af92a44a755a9e0b6d509e9c412",
+      "benchmarks/probes/rbpf_extend_support/support.cpp": "223016f9f6ec7899c0c2c35565db001ea0f5beb920a76502ef4d06120e4fcc38"
+    },
+    "verified": true,
+    "scope": "Reuse prior independent full archive-byte verification;check all manifest/report/product/PE hashes and latest249 archive files. Full old archive-byte verification once at finalization,outside timings.",
+    "prior_full_verification_sha256": "ac27e6b7a9ef1e791accd3fcf91f36d0f0ec5107e55e63920e8732fa8b1a0e5f"
+  },
+  "tests": {
+    "exit_code": 0,
+    "sources_unchanged": true,
+    "log_sha256": "b754b026472e9923d40e557ca217449954f85fb916ab0a99f73f05f4171a55e1"
+  },
+  "functional_tests": 19,
+  "audit": {
+    "verified": true,
+    "timestamp_utc": "2026-10-18T04:17:24.369291+00:00",
+    "auditor_sha256": "298302a8048cdf8dbe8b7f5f9486b09a87314df692d0bb76b4f5d0af7af31616",
+    "audit_plan_sha256": "0ac9e8f8eacc9d21879ab386d474a76dfea4d376a10f17539e7577d6e7ddd7ab",
+    "field_plan_sha256": "89f1c324f33be231f3f03e136c1acae586152f8dd7adc8d4887dd6d51ce57fdc",
+    "run_sha256": "31223106009f5b85d93e1239abb51570a823cb8282e2b5e323d1b58813bf8e50",
+    "warm_prefixes": 4,
+    "timed_prefixes": 20,
+    "all_RTK_epochs": 9600,
+    "timed_RTK_epochs": 8000,
+    "final_saved_states": 24,
+    "PF_calls": 4800,
+    "all_24_trajectories_and_final_states_exact": true,
+    "all_metadata_configs_inputs_source_external_binaries_verified": true,
+    "cache_files": 56,
+    "cache_policy_valid": true,
+    "independent_raw_integer_aggregation_and_gates_verified": true,
+    "measurement_sha256": {
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_reference/performance.json": "1e5315f7666a71a3c6a9509356032e65c5a990fea8be974feffed6c2d0efc301",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_reference/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_reference/record.json": "f1a6da656bcd69ca2508d6f59a462be0f309a07b97fc16807f9d5d56846f022f",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_reference/final_state.json.gz": "00aa0d92e4443832e4ced79f0468bda5f47324f14e378c37201234b1773243b8",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_reference/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_off/performance.json": "4a5b0303cc952341e061db9d47a3fb0955a588179d8b8a0ee73a080e99ab5f20",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_off/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_off/record.json": "8e718541fb259536fdd52c27c0f1864ee148aa55f4e3b6955191ae9143ee13be",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_off/final_state.json.gz": "f7d136b04563fbd72d7d6954127165fa348704830c6ab61b2e88be8da3292cc8",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_off/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_candidate/performance.json": "b84295b0726b1687fb759232c01cb884d1914b799f8c922ed346ecae95a57739",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_candidate/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_candidate/record.json": "cd40274b2ea4bacfcda7e5f16ac67867bd00c6303d34280075b62a82ec39476c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_candidate/final_state.json.gz": "00b5a807fea0a63542bd09e6bc7f49b55d3df9ec14f4f0b33ead6c210ee61477",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_candidate/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_AA/performance.json": "05d3f3d8a064d35e010557e020748ba53d2c41c1d2cbd798f09bc438b423640a",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_AA/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_AA/record.json": "6a8bcdaa717f9bd2680781b6eaff88286fa741e1771ea4b67689addc03db4da8",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_AA/final_state.json.gz": "71e7f9f4801edd60017b26a9ca52dcd63a1203551847bcc696a2d5bbb0cec25a",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_warm_AA/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_reference/performance.json": "3acde8186d814594aa8cbf59f390571b61889af6b0fd341b216cf162e6cc558a",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_reference/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_reference/record.json": "40d84e74acfea62c4eb2d40af68e5c7a79cc8a88aaf183861fe962a1c7e6e8b7",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_reference/final_state.json.gz": "a34d5a18ed1b21e952fe6d279e4ea290005ae86ddb68bb5b13ec7f3e9470dd83",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_reference/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_off/performance.json": "5b06abccee4f0b91df5aef2d46d7585c951f5b935c60dd0e544b8c9e95e5a2a2",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_off/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_off/record.json": "5bcda0eb53f73200a8024c4d05715201f74f71c5a4f2877452b604141c761676",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_off/final_state.json.gz": "2ce1bc7c59b1b547752d8c635e779edb89b21896833fef6508e998199dbdf7bb",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_off/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_AA/performance.json": "85df7ec2a93331df3070f24a0f24866e9c6cc304a1981ab3a87feba2c2a72bdc",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_AA/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_AA/record.json": "9eb3cdcf477469251cbc95d7c205c98f83d805c5804798d70d2833342edfe91e",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_AA/final_state.json.gz": "7c5b58be6557e0cf994495121982817992315081ca9d67b2e5bc733205785451",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_AA/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_candidate/performance.json": "d43fd1d1de72357e61357625e1fe5ded9dfd1a61d3c78195c137aa88b9390b8d",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_candidate/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_candidate/record.json": "7277ddad690f96ee9f59cd96117d08ac1b08fe5c2d06690f37ec2fd88ccf4fcc",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_candidate/final_state.json.gz": "6fc7cc4ad8c405380e757715d854b848c00ead690d9986f0d7a368a044d87fb8",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r0_candidate/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_off/performance.json": "4ad947cd5a6728fa32d04e817abee38fcdf26e715c7487a8785f868921049676",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_off/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_off/record.json": "1f90cd903dfd1c92152d4c541f23f73c9e6fc4f7a84c2f95ce253514c5f7c13b",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_off/final_state.json.gz": "1adb5a7e3cac07c1be478dd9d92155a74f95dc532b50287abfe63445c5b38384",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_off/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_candidate/performance.json": "0cf57d5f48a27b3c82d1265e8ca3cae8e38a891b50338348e8cda5206e96facb",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_candidate/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_candidate/record.json": "162ab7a77136c3c634544782c60a6c47f2f5928f9a788b42970760d9b2a11714",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_candidate/final_state.json.gz": "3cde3b8c10feb5216c3383ececa7a3e8e1e127343b3c4c9dc05432ba207d3a3d",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_candidate/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_reference/performance.json": "0bf275c823d0b9d08f30372f520cd8c08d786dad9b2a0ec188b2fe52afdaab20",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_reference/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_reference/record.json": "d0fa13e4421f3c7ae911e88a699c45763fda2ef095a400fe63c288161850c09e",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_reference/final_state.json.gz": "64f723728447a182d5e92215926a55a45394cff0ee37ec099b78512f194e4eb0",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_reference/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_AA/performance.json": "9c8dc536fa308a4699ef2daa32df9a5c8387c242f6872a1a7b732ab051a65759",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_AA/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_AA/record.json": "82a228ae941bf82c4bccbaf63e51208d13e5240f0e36bdccd227dd72bf77a1c7",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_AA/final_state.json.gz": "69db4600b6fe74f24d78978f4e526a7efc5ab4d9aff6ab847ef14c26d46cffad",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r1_AA/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_candidate/performance.json": "d1e575408720c42772356facfa7587ec88a99aeca2ad663b34c2d41d10545a71",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_candidate/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_candidate/record.json": "4b849851426083e54b5b03b3785d4477375570d942807a822ea9e89108ab73ae",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_candidate/final_state.json.gz": "19cc1162872fb55c45ae89e2e5f13cdf6be7afb181c207f07a2ec033887217a6",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_candidate/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_AA/performance.json": "485ec8a7983385bef6d19438940e8d6c81eda3ba3c4d21bd0a55488efc347fec",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_AA/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_AA/record.json": "0b5909d7019f799c4b875f419ef1e649f0291c1fd9749b7c84e153a80ec0bdc4",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_AA/final_state.json.gz": "d1c45e3a51a1ed2b3a03dbb0391571a36a66fd5b93403112e7851c6c0c17aa12",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_AA/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_off/performance.json": "3b839bf1ad2944b15d4e1bd4e59722fb29217f24eb5f048b4c82e5762e96d24d",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_off/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_off/record.json": "e3806818df72a48839d5aef03d8237a72e1747bd03f3d8ada93e145813be6c01",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_off/final_state.json.gz": "6287f2c91d1ef5521a1fe899fd19698eab9c5a46720f19f37434dc98de1433a8",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_off/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_reference/performance.json": "4c14359b2aa439b834ac293e48d3fef036a76f42108bb425f4807c01622fb668",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_reference/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_reference/record.json": "df9547c65233cbc0b5421ed060fcaa2455a71941b338831a32fb8fd8bb5f0f11",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_reference/final_state.json.gz": "2ad414483b809a10493728f577a7700f1dfb872f63002539d232280320b03fd3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r2_reference/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_AA/performance.json": "d7e186d019f88ecc8a366aba02412e900d814dc93464d745538a48c3d86d061a",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_AA/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_AA/record.json": "7408dc3d7885a9f5d06543b6a9d8f79d0a6fbcdb70f17b3e9ed69d57c784ad82",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_AA/final_state.json.gz": "8e8dc7dc2d534b34b24855a2a2a438f6cc0f51a807b14a11e628bf566704da67",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_AA/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_reference/performance.json": "9a8a38f770719ccb5b18d5ea9df66f7c058b592e23f255233d965ca8b7fa2567",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_reference/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_reference/record.json": "9f4aea5ba63d16c79b33efcf8c05a9adb014c3bc5d8b4445d78ee6d0abca167a",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_reference/final_state.json.gz": "3995a7447acc2d4442d0cc46bce93f93f1587a45d3572b7dc51ea6e11b8cd88e",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_reference/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_candidate/performance.json": "9c06a7f9b3049c18b6658397d98af695e0d6c3af5a166d35b63e6a1a5c933415",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_candidate/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_candidate/record.json": "ca7fc6994a8a69faf76f4b6d952c0ecab3bc8abe1d10b614b7cc66eac8ffa298",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_candidate/final_state.json.gz": "9a0e1a0d677535deef08150f3b6845b0515652b37d1a2eb4c2fd72a97564266b",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_candidate/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_off/performance.json": "3546802e1b514efa62446ecf2acf71c0bd1db6cd4744c1fced0e57a3501ab7a3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_off/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_off/record.json": "cd084018d45f14634e66a777c15c2e42e2152fd0e70e4e251583b85cd7c1cd75",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_off/final_state.json.gz": "d60d25912da775fc0e9ad9a761e7cfbb3027b7059ebafd20bcb9b2e44f4d4538",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r3_off/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_candidate/performance.json": "a32c7ecffe59f7e46a72abe173734660f92a2342233857258f0ddc6cffe174a8",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_candidate/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_candidate/record.json": "edbbf1314ed623617c1f1e9f2e2ad729e27c9bb2840efbaaade8ecf2fd14ff72",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_candidate/final_state.json.gz": "2eb978ef129cc376721df56c2e5f027a0221cd84a0a498aa1d74b0b61be6476b",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_candidate/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_AA/performance.json": "747cf4e6789d666cfefa0ee93d0e2902ea7ba50e4305442bcc7cb4408205bbab",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_AA/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_AA/record.json": "5d48ff90f5388e5cd5c1871216128d1a6c55d590eb686fc3d512a6fa5518c1b3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_AA/final_state.json.gz": "b8b67ba44d34658abdbaca8dfb808d3385fe5446c2cf88a5863177b9c7fe7798",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_AA/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_off/performance.json": "85a12ef8a7630a6c12ca031f187e7d2b6bc890bcdf04a01a15206591a744d5a3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_off/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_off/record.json": "e5e253ca61528b78c14e595810194c9bfad208a57ae5601a10774f9ca0167b02",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_off/final_state.json.gz": "b94602ed4e9a83efb327feb8a123aaeff4e9c0fed8895e8f99910ffa736ae817",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_off/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_reference/performance.json": "344451df68c97a706cfb62aacef09a570bb192dd127af22f1b66e5c90272dca0",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_reference/plan.json": "0ab5ca870f6ead685aeed818a2d8e7dedcde0e7222cd1507e8c95ea5ec2e73c3",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_reference/record.json": "7c2e26dce89099d99084a47dca4601705fabdd3009679dc6cae55a3e88ec5ce1",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_reference/final_state.json.gz": "e9a373b62129bfd3c2076a742bf9caac3d3af7b09664510ca576a363155bf16f",
+      "dist/rbpf_move_plan_route_field_20261018/r3_seed0_r4_reference/trajectory/run3.npz": "b4ed21ea79049629b806aad0ae4367dc8dea58b3c39fa5dc9fa4ff6c27a6012c"
+    },
+    "summary": {
+      "metrics": {
+        "all": {
+          "minimum_percent": 3.0,
+          "contrasts": {
+            "reference": {
+              "paired_percent": [
+                -12.048700455145124,
+                -44.07134032420405,
+                -16.909720903719116,
+                11.056473661274115,
+                -7.508690201815442
+              ],
+              "median_percent": -12.048700455145124,
+              "positive_rounds": 1,
+              "absolute_median_percent": 12.048700455145124,
+              "absolute_rounds_under5": 0,
+              "gain_gate": false
+            },
+            "off": {
+              "paired_percent": [
+                -20.303988416445637,
+                13.63640267688432,
+                -18.31896694673071,
+                4.2815001395246775,
+                19.303114576023994
+              ],
+              "median_percent": 4.2815001395246775,
+              "positive_rounds": 3,
+              "absolute_median_percent": 18.31896694673071,
+              "absolute_rounds_under5": 1,
+              "gain_gate": false
+            },
+            "AA": {
+              "paired_percent": [
+                -26.020179409186692,
+                -0.7224440226095324,
+                -69.22637191350502,
+                3.1715674691443265,
+                -18.891906404023608
+              ],
+              "median_percent": -18.891906404023608,
+              "positive_rounds": 1,
+              "absolute_median_percent": 18.891906404023608,
+              "absolute_rounds_under5": 2
+            }
+          },
+          "AA_valid": false,
+          "pass_gate": false
+        },
+        "2": {
+          "minimum_percent": 5.0,
+          "contrasts": {
+            "reference": {
+              "paired_percent": [
+                -14.346438442554236,
+                6.310627044009057,
+                -28.987885570364305,
+                9.37140326720668,
+                -13.598640517863826
+              ],
+              "median_percent": -13.598640517863826,
+              "positive_rounds": 2,
+              "absolute_median_percent": 13.598640517863826,
+              "absolute_rounds_under5": 0,
+              "gain_gate": false
+            },
+            "off": {
+              "paired_percent": [
+                -24.242352692922363,
+                48.24581202440785,
+                -10.033514109650689,
+                3.3952794121572185,
+                5.803073287676082
+              ],
+              "median_percent": 3.3952794121572185,
+              "positive_rounds": 3,
+              "absolute_median_percent": 10.033514109650689,
+              "absolute_rounds_under5": 1,
+              "gain_gate": false
+            },
+            "AA": {
+              "paired_percent": [
+                -37.67895310606683,
+                5.813578735783219,
+                -125.79161717108568,
+                -0.46004283868608953,
+                -5.919124399472379
+              ],
+              "median_percent": -5.919124399472379,
+              "positive_rounds": 1,
+              "absolute_median_percent": 5.919124399472379,
+              "absolute_rounds_under5": 1
+            }
+          },
+          "AA_valid": false,
+          "pass_gate": false
+        },
+        "driver": {
+          "minimum_percent": 3.0,
+          "contrasts": {
+            "reference": {
+              "paired_percent": [
+                -6.962417237128788,
+                -64.54590036662785,
+                -10.77366465714726,
+                10.218416172864096,
+                -5.536618690920134
+              ],
+              "median_percent": -6.962417237128788,
+              "positive_rounds": 1,
+              "absolute_median_percent": 10.218416172864096,
+              "absolute_rounds_under5": 0,
+              "gain_gate": false
+            },
+            "off": {
+              "paired_percent": [
+                -20.854205555871513,
+                -5.996059985974922,
+                -16.95279987709925,
+                4.764219181519342,
+                22.9468664700957
+              ],
+              "median_percent": -5.996059985974922,
+              "positive_rounds": 2,
+              "absolute_median_percent": 16.95279987709925,
+              "absolute_rounds_under5": 1,
+              "gain_gate": false
+            },
+            "AA": {
+              "paired_percent": [
+                -15.034622063780501,
+                0.5480503982122065,
+                -51.88259012124121,
+                3.393798244835465,
+                -24.59813513840551
+              ],
+              "median_percent": -15.034622063780501,
+              "positive_rounds": 2,
+              "absolute_median_percent": 15.034622063780501,
+              "absolute_rounds_under5": 2
+            }
+          },
+          "AA_valid": false,
+          "pass_gate": false
+        }
+      },
+      "speed_gate": false,
+      "all_warm_and_timed_prefixes_retained": true,
+      "no_completed_timing_retry": true,
+      "cache_policy_valid": true,
+      "accepted_speed_gain": false,
+      "all_24_trajectories_and_final_states_exact": true,
+      "source_and_external_binary_integrity": true
+    }
+  },
+  "summary": {
+    "metrics": {
+      "all": {
+        "minimum_percent": 3.0,
+        "contrasts": {
+          "reference": {
+            "paired_percent": [
+              -12.048700455145124,
+              -44.07134032420405,
+              -16.909720903719116,
+              11.056473661274115,
+              -7.508690201815442
+            ],
+            "median_percent": -12.048700455145124,
+            "positive_rounds": 1,
+            "absolute_median_percent": 12.048700455145124,
+            "absolute_rounds_under5": 0,
+            "gain_gate": false
+          },
+          "off": {
+            "paired_percent": [
+              -20.303988416445637,
+              13.63640267688432,
+              -18.31896694673071,
+              4.2815001395246775,
+              19.303114576023994
+            ],
+            "median_percent": 4.2815001395246775,
+            "positive_rounds": 3,
+            "absolute_median_percent": 18.31896694673071,
+            "absolute_rounds_under5": 1,
+            "gain_gate": false
+          },
+          "AA": {
+            "paired_percent": [
+              -26.020179409186692,
+              -0.7224440226095324,
+              -69.22637191350502,
+              3.1715674691443265,
+              -18.891906404023608
+            ],
+            "median_percent": -18.891906404023608,
+            "positive_rounds": 1,
+            "absolute_median_percent": 18.891906404023608,
+            "absolute_rounds_under5": 2
+          }
+        },
+        "AA_valid": false,
+        "pass_gate": false
+      },
+      "2": {
+        "minimum_percent": 5.0,
+        "contrasts": {
+          "reference": {
+            "paired_percent": [
+              -14.346438442554236,
+              6.310627044009057,
+              -28.987885570364305,
+              9.37140326720668,
+              -13.598640517863826
+            ],
+            "median_percent": -13.598640517863826,
+            "positive_rounds": 2,
+            "absolute_median_percent": 13.598640517863826,
+            "absolute_rounds_under5": 0,
+            "gain_gate": false
+          },
+          "off": {
+            "paired_percent": [
+              -24.242352692922363,
+              48.24581202440785,
+              -10.033514109650689,
+              3.3952794121572185,
+              5.803073287676082
+            ],
+            "median_percent": 3.3952794121572185,
+            "positive_rounds": 3,
+            "absolute_median_percent": 10.033514109650689,
+            "absolute_rounds_under5": 1,
+            "gain_gate": false
+          },
+          "AA": {
+            "paired_percent": [
+              -37.67895310606683,
+              5.813578735783219,
+              -125.79161717108568,
+              -0.46004283868608953,
+              -5.919124399472379
+            ],
+            "median_percent": -5.919124399472379,
+            "positive_rounds": 1,
+            "absolute_median_percent": 5.919124399472379,
+            "absolute_rounds_under5": 1
+          }
+        },
+        "AA_valid": false,
+        "pass_gate": false
+      },
+      "driver": {
+        "minimum_percent": 3.0,
+        "contrasts": {
+          "reference": {
+            "paired_percent": [
+              -6.962417237128788,
+              -64.54590036662785,
+              -10.77366465714726,
+              10.218416172864096,
+              -5.536618690920134
+            ],
+            "median_percent": -6.962417237128788,
+            "positive_rounds": 1,
+            "absolute_median_percent": 10.218416172864096,
+            "absolute_rounds_under5": 0,
+            "gain_gate": false
+          },
+          "off": {
+            "paired_percent": [
+              -20.854205555871513,
+              -5.996059985974922,
+              -16.95279987709925,
+              4.764219181519342,
+              22.9468664700957
+            ],
+            "median_percent": -5.996059985974922,
+            "positive_rounds": 2,
+            "absolute_median_percent": 16.95279987709925,
+            "absolute_rounds_under5": 1,
+            "gain_gate": false
+          },
+          "AA": {
+            "paired_percent": [
+              -15.034622063780501,
+              0.5480503982122065,
+              -51.88259012124121,
+              3.393798244835465,
+              -24.59813513840551
+            ],
+            "median_percent": -15.034622063780501,
+            "positive_rounds": 2,
+            "absolute_median_percent": 15.034622063780501,
+            "absolute_rounds_under5": 2
+          }
+        },
+        "AA_valid": false,
+        "pass_gate": false
+      }
+    },
+    "speed_gate": false,
+    "all_warm_and_timed_prefixes_retained": true,
+    "no_completed_timing_retry": true,
+    "cache_policy_valid": true,
+    "accepted_speed_gain": false,
+    "all_24_trajectories_and_final_states_exact": true,
+    "source_and_external_binary_integrity": true
+  },
+  "cpu_diagnostic": {
+    "verified": true,
+    "diagnostic_only": true,
+    "new_timings": 0,
+    "numerical_or_wall_gate_changes": false,
+    "source_sha256": "f20bd43620ad6ade97a420c1e2821ca837bb316ac24810bcb608b1e4065ac89e",
+    "plan_sha256": "ce3b7c7aab99fd6ff4e14cb6402a4a85b91006866e96896a154166c097bbc428",
+    "diagnostics": {
+      "all": {
+        "wall_ns": {
+          "raw_round_sums": {
+            "0": {
+              "reference": 22579501500,
+              "off": 21030090800,
+              "AA": 28454728300,
+              "candidate": 25300038000
+            },
+            "1": {
+              "off": 44801936000,
+              "candidate": 38692563600,
+              "reference": 26856530600,
+              "AA": 27050554000
+            },
+            "2": {
+              "candidate": 26757573600,
+              "AA": 38731485000,
+              "off": 22614779600,
+              "reference": 22887381300
+            },
+            "3": {
+              "AA": 20469666100,
+              "reference": 21140139900,
+              "candidate": 18802785900,
+              "off": 19643836800
+            },
+            "4": {
+              "candidate": 26146520700,
+              "AA": 28914962000,
+              "off": 32400904400,
+              "reference": 24320378800
+            }
+          },
+          "contrasts": {
+            "reference": {
+              "paired_percent": [
+                -12.048700455145124,
+                -44.07134032420405,
+                -16.909720903719116,
+                11.056473661274115,
+                -7.508690201815442
+              ],
+              "median_percent": -12.048700455145124,
+              "positive_rounds": 1,
+              "absolute_median_percent": 12.048700455145124
+            },
+            "off": {
+              "paired_percent": [
+                -20.303988416445637,
+                13.63640267688432,
+                -18.31896694673071,
+                4.2815001395246775,
+                19.303114576023994
+              ],
+              "median_percent": 4.2815001395246775,
+              "positive_rounds": 3,
+              "absolute_median_percent": 18.31896694673071
+            },
+            "AA": {
+              "paired_percent": [
+                -26.020179409186692,
+                -0.7224440226095324,
+                -69.22637191350502,
+                3.1715674691443265,
+                -18.891906404023608
+              ],
+              "median_percent": -18.891906404023608,
+              "positive_rounds": 1,
+              "absolute_median_percent": 18.891906404023608
+            }
+          }
+        },
+        "process_cpu_ns": {
+          "raw_round_sums": {
+            "0": {
+              "reference": 22218750000,
+              "off": 20625000000,
+              "AA": 28062500000,
+              "candidate": 24687500000
+            },
+            "1": {
+              "off": 38187500000,
+              "candidate": 31781250000,
+              "reference": 26375000000,
+              "AA": 26890625000
+            },
+            "2": {
+              "candidate": 26015625000,
+              "AA": 33218750000,
+              "off": 22046875000,
+              "reference": 22562500000
+            },
+            "3": {
+              "AA": 20062500000,
+              "reference": 20859375000,
+              "candidate": 18625000000,
+              "off": 18906250000
+            },
+            "4": {
+              "candidate": 23375000000,
+              "AA": 26140625000,
+              "off": 28687500000,
+              "reference": 22468750000
+            }
+          },
+          "contrasts": {
+            "reference": {
+              "paired_percent": [
+                -11.11111111111111,
+                -20.497630331753555,
+                -15.304709141274238,
+                10.711610486891386,
+                -4.033379694019471
+              ],
+              "median_percent": -11.11111111111111,
+              "positive_rounds": 1,
+              "absolute_median_percent": 11.11111111111111
+            },
+            "off": {
+              "paired_percent": [
+                -19.696969696969695,
+                16.775777414075286,
+                -18.001417434443656,
+                1.487603305785124,
+                18.51851851851852
+              ],
+              "median_percent": 1.487603305785124,
+              "positive_rounds": 3,
+              "absolute_median_percent": 18.001417434443656
+            },
+            "AA": {
+              "paired_percent": [
+                -26.30098452883263,
+                -1.9549763033175356,
+                -47.229916897506925,
+                3.8202247191011236,
+                -16.34214186369958
+              ],
+              "median_percent": -16.34214186369958,
+              "positive_rounds": 1,
+              "absolute_median_percent": 16.34214186369958
+            }
+          }
+        },
+        "thread_cpu_ns": {
+          "raw_round_sums": {
+            "0": {
+              "reference": 22203125000,
+              "off": 20609375000,
+              "AA": 28062500000,
+              "candidate": 24687500000
+            },
+            "1": {
+              "off": 38156250000,
+              "candidate": 31765625000,
+              "reference": 26375000000,
+              "AA": 26890625000
+            },
+            "2": {
+              "candidate": 26015625000,
+              "AA": 33203125000,
+              "off": 22046875000,
+              "reference": 22562500000
+            },
+            "3": {
+              "AA": 20031250000,
+              "reference": 20859375000,
+              "candidate": 18625000000,
+              "off": 18906250000
+            },
+            "4": {
+              "candidate": 23375000000,
+              "AA": 26125000000,
+              "off": 28687500000,
+              "reference": 22453125000
+            }
+          },
+          "contrasts": {
+            "reference": {
+              "paired_percent": [
+                -11.189303307529908,
+                -20.438388625592417,
+                -15.304709141274238,
+                10.711610486891386,
+                -4.105775922059847
+              ],
+              "median_percent": -11.189303307529908,
+              "positive_rounds": 1,
+              "absolute_median_percent": 11.189303307529908
+            },
+            "off": {
+              "paired_percent": [
+                -19.787717968157697,
+                16.74856674856675,
+                -18.001417434443656,
+                1.487603305785124,
+                18.51851851851852
+              ],
+              "median_percent": 1.487603305785124,
+              "positive_rounds": 3,
+              "absolute_median_percent": 18.001417434443656
+            },
+            "AA": {
+              "paired_percent": [
+                -26.389866291344124,
+                -1.9549763033175356,
+                -47.1606648199446,
+                3.9700374531835205,
+                -16.353514265831592
+              ],
+              "median_percent": -16.353514265831592,
+              "positive_rounds": 1,
+              "absolute_median_percent": 16.353514265831592
+            }
+          }
+        }
+      },
+      "1": {
+        "wall_ns": {
+          "raw_round_sums": {
+            "0": {
+              "reference": 8760336500,
+              "off": 8311623500,
+              "AA": 9428646600,
+              "candidate": 9498315000
+            },
+            "1": {
+              "off": 13517686100,
+              "candidate": 22501654100,
+              "reference": 9575051400,
+              "AA": 10773747200
+            },
+            "2": {
+              "candidate": 10502780300,
+              "AA": 10277680600,
+              "off": 7842195600,
+              "reference": 10285582900
+            },
+            "3": {
+              "AA": 7458659700,
+              "reference": 8188715600,
+              "candidate": 7065091800,
+              "off": 7493608500
+            },
+            "4": {
+              "candidate": 8293910900,
+              "AA": 12269227600,
+              "off": 13448471000,
+              "reference": 8604865200
+            }
+          },
+          "contrasts": {
+            "reference": {
+              "paired_percent": [
+                -8.424088503906214,
+                -135.00295883529148,
+                -2.1116683625193473,
+                13.72161221474098,
+                3.6137033268109766
+              ],
+              "median_percent": -2.1116683625193473,
+              "positive_rounds": 2,
+              "absolute_median_percent": 8.424088503906214
+            },
+            "off": {
+              "paired_percent": [
+                -14.27749344036096,
+                -66.46084199277271,
+                -33.92652817789957,
+                5.718429245402932,
+                38.3282240784101
+              ],
+              "median_percent": -14.27749344036096,
+              "positive_rounds": 2,
+              "absolute_median_percent": 33.92652817789957
+            },
+            "AA": {
+              "paired_percent": [
+                -7.6288176829737075,
+                -12.51894898444096,
+                0.07682889804913244,
+                8.915389612505287,
+                -42.58477401830769
+              ],
+              "median_percent": -7.6288176829737075,
+              "positive_rounds": 2,
+              "absolute_median_percent": 8.915389612505287
+            }
+          }
+        },
+        "process_cpu_ns": {
+          "raw_round_sums": {
+            "0": {
+              "reference": 8468750000,
+              "off": 8031250000,
+              "AA": 9125000000,
+              "candidate": 8984375000
+            },
+            "1": {
+              "off": 12734375000,
+              "candidate": 15640625000,
+              "reference": 9312500000,
+              "AA": 10562500000
+            },
+            "2": {
+              "candidate": 10015625000,
+              "AA": 9984375000,
+              "off": 7546875000,
+              "reference": 9953125000
+            },
+            "3": {
+              "AA": 7234375000,
+              "reference": 7984375000,
+              "candidate": 6953125000,
+              "off": 7343750000
+            },
+            "4": {
+              "candidate": 7640625000,
+              "AA": 10796875000,
+              "off": 11265625000,
+              "reference": 8062500000
+            }
+          },
+          "contrasts": {
+            "reference": {
+              "paired_percent": [
+                -6.088560885608856,
+                -67.95302013422818,
+                -0.6279434850863422,
+                12.915851272015656,
+                5.232558139534884
+              ],
+              "median_percent": -0.6279434850863422,
+              "positive_rounds": 2,
+              "absolute_median_percent": 6.088560885608856
+            },
+            "off": {
+              "paired_percent": [
+                -11.867704280155642,
+                -22.822085889570552,
+                -32.71221532091097,
+                5.319148936170213,
+                32.17753120665742
+              ],
+              "median_percent": -11.867704280155642,
+              "positive_rounds": 2,
+              "absolute_median_percent": 22.822085889570552
+            },
+            "AA": {
+              "paired_percent": [
+                -7.749077490774908,
+                -13.422818791946309,
+                -0.3139717425431711,
+                9.393346379647749,
+                -33.91472868217054
+              ],
+              "median_percent": -7.749077490774908,
+              "positive_rounds": 1,
+              "absolute_median_percent": 9.393346379647749
+            }
+          }
+        },
+        "thread_cpu_ns": {
+          "raw_round_sums": {
+            "0": {
+              "reference": 8453125000,
+              "off": 8031250000,
+              "AA": 9125000000,
+              "candidate": 8984375000
+            },
+            "1": {
+              "off": 12718750000,
+              "candidate": 15625000000,
+              "reference": 9312500000,
+              "AA": 10562500000
+            },
+            "2": {
+              "candidate": 10015625000,
+              "AA": 9968750000,
+              "off": 7546875000,
+              "reference": 9953125000
+            },
+            "3": {
+              "AA": 7218750000,
+              "reference": 7984375000,
+              "candidate": 6953125000,
+              "off": 7343750000
+            },
+            "4": {
+              "candidate": 7640625000,
+              "AA": 10796875000,
+              "off": 11265625000,
+              "reference": 8062500000
+            }
+          },
+          "contrasts": {
+            "reference": {
+              "paired_percent": [
+                -6.284658040665434,
+                -67.78523489932886,
+                -0.6279434850863422,
+                12.915851272015656,
+                5.232558139534884
+              ],
+              "median_percent": -0.6279434850863422,
+              "positive_rounds": 2,
+              "absolute_median_percent": 6.284658040665434
+            },
+            "off": {
+              "paired_percent": [
+                -11.867704280155642,
+                -22.85012285012285,
+                -32.71221532091097,
+                5.319148936170213,
+                32.17753120665742
+              ],
+              "median_percent": -11.867704280155642,
+              "positive_rounds": 2,
+              "absolute_median_percent": 22.85012285012285
+            },
+            "AA": {
+              "paired_percent": [
+                -7.948243992606285,
+                -13.422818791946309,
+                -0.15698587127158556,
+                9.58904109589041,
+                -33.91472868217054
+              ],
+              "median_percent": -7.948243992606285,
+              "positive_rounds": 1,
+              "absolute_median_percent": 9.58904109589041
+            }
+          }
+        }
+      },
+      "2": {
+        "wall_ns": {
+          "raw_round_sums": {
+            "0": {
+              "reference": 13819165000,
+              "off": 12718467300,
+              "AA": 19026081700,
+              "candidate": 15801723000
+            },
+            "1": {
+              "off": 31284249900,
+              "candidate": 16190909500,
+              "reference": 17281479200,
+              "AA": 16276806800
+            },
+            "2": {
+              "candidate": 16254793300,
+              "AA": 28453804400,
+              "off": 14772584000,
+              "reference": 12601798400
+            },
+            "3": {
+              "AA": 13011006400,
+              "reference": 12951424300,
+              "candidate": 11737694100,
+              "off": 12150228300
+            },
+            "4": {
+              "candidate": 17852609800,
+              "AA": 16645734400,
+              "off": 18952433400,
+              "reference": 15715513600
+            }
+          },
+          "contrasts": {
+            "reference": {
+              "paired_percent": [
+                -14.346438442554236,
+                6.310627044009057,
+                -28.987885570364305,
+                9.37140326720668,
+                -13.598640517863826
+              ],
+              "median_percent": -13.598640517863826,
+              "positive_rounds": 2,
+              "absolute_median_percent": 13.598640517863826
+            },
+            "off": {
+              "paired_percent": [
+                -24.242352692922363,
+                48.24581202440785,
+                -10.033514109650689,
+                3.3952794121572185,
+                5.803073287676082
+              ],
+              "median_percent": 3.3952794121572185,
+              "positive_rounds": 3,
+              "absolute_median_percent": 10.033514109650689
+            },
+            "AA": {
+              "paired_percent": [
+                -37.67895310606683,
+                5.813578735783219,
+                -125.79161717108568,
+                -0.46004283868608953,
+                -5.919124399472379
+              ],
+              "median_percent": -5.919124399472379,
+              "positive_rounds": 1,
+              "absolute_median_percent": 5.919124399472379
+            }
+          }
+        },
+        "process_cpu_ns": {
+          "raw_round_sums": {
+            "0": {
+              "reference": 13750000000,
+              "off": 12593750000,
+              "AA": 18937500000,
+              "candidate": 15703125000
+            },
+            "1": {
+              "off": 25453125000,
+              "candidate": 16140625000,
+              "reference": 17062500000,
+              "AA": 16328125000
+            },
+            "2": {
+              "candidate": 16000000000,
+              "AA": 23234375000,
+              "off": 14500000000,
+              "reference": 12609375000
+            },
+            "3": {
+              "AA": 12828125000,
+              "reference": 12875000000,
+              "candidate": 11671875000,
+              "off": 11562500000
+            },
+            "4": {
+              "candidate": 15734375000,
+              "AA": 15343750000,
+              "off": 17421875000,
+              "reference": 14406250000
+            }
+          },
+          "contrasts": {
+            "reference": {
+              "paired_percent": [
+                -14.204545454545455,
+                5.402930402930403,
+                -26.889714993804212,
+                9.344660194174757,
+                -9.219088937093275
+              ],
+              "median_percent": -9.219088937093275,
+              "positive_rounds": 2,
+              "absolute_median_percent": 9.344660194174757
+            },
+            "off": {
+              "paired_percent": [
+                -24.68982630272953,
+                36.58686310620012,
+                -10.344827586206897,
+                -0.9459459459459459,
+                9.68609865470852
+              ],
+              "median_percent": -0.9459459459459459,
+              "positive_rounds": 2,
+              "absolute_median_percent": 10.344827586206897
+            },
+            "AA": {
+              "paired_percent": [
+                -37.72727272727273,
+                4.304029304029304,
+                -84.2627013630731,
+                0.3640776699029126,
+                -6.507592190889371
+              ],
+              "median_percent": -6.507592190889371,
+              "positive_rounds": 2,
+              "absolute_median_percent": 6.507592190889371
+            }
+          }
+        },
+        "thread_cpu_ns": {
+          "raw_round_sums": {
+            "0": {
+              "reference": 13750000000,
+              "off": 12578125000,
+              "AA": 18937500000,
+              "candidate": 15703125000
+            },
+            "1": {
+              "off": 25437500000,
+              "candidate": 16140625000,
+              "reference": 17062500000,
+              "AA": 16328125000
+            },
+            "2": {
+              "candidate": 16000000000,
+              "AA": 23234375000,
+              "off": 14500000000,
+              "reference": 12609375000
+            },
+            "3": {
+              "AA": 12812500000,
+              "reference": 12875000000,
+              "candidate": 11671875000,
+              "off": 11562500000
+            },
+            "4": {
+              "candidate": 15734375000,
+              "AA": 15328125000,
+              "off": 17421875000,
+              "reference": 14390625000
+            }
+          },
+          "contrasts": {
+            "reference": {
+              "paired_percent": [
+                -14.204545454545455,
+                5.402930402930403,
+                -26.889714993804212,
+                9.344660194174757,
+                -9.337676438653638
+              ],
+              "median_percent": -9.337676438653638,
+              "positive_rounds": 2,
+              "absolute_median_percent": 9.344660194174757
+            },
+            "off": {
+              "paired_percent": [
+                -24.84472049689441,
+                36.547911547911546,
+                -10.344827586206897,
+                -0.9459459459459459,
+                9.68609865470852
+              ],
+              "median_percent": -0.9459459459459459,
+              "positive_rounds": 2,
+              "absolute_median_percent": 10.344827586206897
+            },
+            "AA": {
+              "paired_percent": [
+                -37.72727272727273,
+                4.304029304029304,
+                -84.2627013630731,
+                0.4854368932038835,
+                -6.514657980456026
+              ],
+              "median_percent": -6.514657980456026,
+              "positive_rounds": 2,
+              "absolute_median_percent": 6.514657980456026
+            }
+          }
+        }
+      }
+    }
+  },
+  "warm_prefixes": 4,
+  "timed_prefixes": 20,
+  "all_RTK_epochs": 9600,
+  "timed_RTK_epochs": 8000,
+  "final_saved_states": 24,
+  "actual_PF_calls": 4800,
+  "prior_separate_200_PF_return_states_exact": true,
+  "all_new_trajectories_and_final_states_RNG_bits_equal": true,
+  "all_new_metadata_configs_inputs_sources_and_binaries_verified": true,
+  "intermediate_state_serialization_in_performance_runs": false,
+  "full_final_state_cross_arm_exact": true,
+  "final_gold_comparison_excludes_only_root_rtk": true,
+  "logical_candidates_numeric_moves_weight_arithmetic_FP64_priors_thresholds_RNG_unchanged": true,
+  "normal_GC_policy_unchanged": true,
+  "numerical_tolerance_changed": false,
+  "shared_warm_cache_valid": true,
+  "speed_gain_established": false,
+  "actual_whole_RTK_speed_established": false,
+  "performance_boundary": "Joint gate on complete RTK-process sums,phase2-process sums,and continuous adapted driver span. Driver excludes module imports and post-driver snapshot/performance encoding;includes setup,input hashing/decoding,graph/PF,logging,trajectory IO and teardown. Common light epoch clocks/latest-reference retention remain.",
+  "no_completed_timing_retry": true,
+  "production_changes": [],
+  "product_adoption": false,
+  "default_changed": false,
+  "new_GPU_source": false,
+  "new_GPU_transfer": false,
+  "new_GPU_utilization_established": false,
+  "CPU_vs_GPU_speed_established": false,
+  "full_route_or_multiseed_accuracy_established": false,
+  "new_sanitizer_run": false,
+  "scope": "One GPU/c0 Tokyo run3 seed20260710 400-epoch prefix. Four warm arms share a new cache with twenty serial timed children. Keep initial cold warm run,all phase1/all400/phase2 times,negative values and absolute AA checks;no after-the-fact epoch selection or retry. No changes to measured D279 candidate/numerical guards/source or prior failed experiments. New final state captured after driver,old200state PF-return precision evidence retained separately. Root rtk is excluded ONLY for old-boundary final gold comparison;full new post-driver state exact across24arms. Inherited scalar NaN codec limit. No claim for arbitrary public mutation/concurrency/OOM. Product/default unchanged."
+}

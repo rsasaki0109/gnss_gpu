@@ -1,0 +1,16 @@
+{
+  "verified": true,
+  "report_sha256": "4597c71f6d8a2b09bce374ec1baf01a132c1488c7df0d2ec95b14849bdd3378d",
+  "tests_passed": 157,
+  "actual_candidate_saved_PF_states": 800,
+  "phase2_QC_captures": 1600,
+  "phase2_ambiguity_captures": 800,
+  "whole_RTK_prefix_gate_passed": false,
+  "complete_RTK_epochs_with_warm": 7200,
+  "all_historical_failures_preserved": true,
+  "no_completed_same_source_timing_retry": true,
+  "numerical_tolerance_changed": false,
+  "production_changes": [],
+  "default_changed": false,
+  "new_GPU_source": false
+}

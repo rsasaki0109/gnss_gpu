@@ -1,0 +1,14 @@
+{
+  "verified": true,
+  "report_sha256": "0a2ff71fe69525241787d22c4070964298e391b4b26777ee162920f58436d399",
+  "functional_tests": 31,
+  "all_saved_integer_conservation_exact": true,
+  "all_new_accuracy_checks_exact": true,
+  "all_API_correlations_exact": true,
+  "original_failed_gates_preserved": true,
+  "native_API_or_driver_root_cause_established": false,
+  "new_optimization_speed_gain_established": false,
+  "profiler_shutdown_intervention_preserved": true,
+  "production_changes": [],
+  "default_changed": false
+}

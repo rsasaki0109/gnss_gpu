@@ -1,0 +1,16 @@
+{
+  "verified": true,
+  "report_sha256": "46d8b7b062b848135599ce5dc4c691f4f914a918170f33a681d5e39167eb835e",
+  "tests_passed": 64,
+  "saved_PF_states": 400,
+  "layout_blocks": 2656,
+  "component_passes": 4,
+  "component_timed_calls": 5760,
+  "forced_wait_screen_passed": true,
+  "unforced_stage_executed": true,
+  "unforced_complete_RTK_gate_passed": false,
+  "production_changes": [],
+  "default_changed": false,
+  "new_GPU_source": false,
+  "all_failures_preserved": true
+}

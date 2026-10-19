@@ -14,6 +14,15 @@ class ReflectionPath:
     incidence_angle: float
 
 
+def _cross3_float64(a, b):
+    """Evaluate the original cross-product components for bounded FP64 vectors."""
+    return np.array((
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ), dtype=np.float64)
+
+
 def _closest_point_on_triangle(point, triangle):
     """Return the closest point on a triangle to ``point`` (Ericson, RTCD 5.1.5).
 
@@ -204,10 +213,70 @@ class BuildingModel:
                 raise ValueError("ground_plane normal must be non-zero")
             ground_normal = ground_normal / normal_len
 
-        def _point_in_triangle(point, triangle):
-            a, b, c = triangle
-            v0 = b - a
-            v1 = c - a
+        # These constants depend only on this call's mesh and receiver. Keep
+        # each original three-vector expression; reuse no data across calls.
+        # The bounds avoid overflow in cross/norm/receiver mirror arithmetic;
+        # nonstandard NumPy policies retain the original scalar evaluation.
+        geometry = None
+        ready = None
+        policy = np.geterr()
+        if (sat.shape[0] >= 2 and type(tri) is np.ndarray and tri.dtype == np.float64
+                and 8 <= len(tri) <= (32 * 1024 * 1024) // 113
+                and policy["under"] == "ignore"
+                and all(mode in ("warn", "ignore") for mode in policy.values())
+                and np.all(np.isfinite(rx)) and np.all(np.isfinite(tri))
+                and np.max(np.abs(rx)) <= 1e50 and np.max(np.abs(tri)) <= 1e50):
+            geometry = np.empty((len(tri), 14), dtype=np.float64)
+            ready = np.zeros(len(tri), dtype=np.uint8)
+
+        # Valid reflection parameters lie strictly inside the image segment.
+        # Together with the bounded receiver/mesh above, these input bounds keep
+        # segment cross products finite. Underflow is already ignored. Preserve
+        # NumPy's component multiply/subtract order without its general axis
+        # dispatch; exceptional inputs retain the original implementation.
+        segment_cross = np.cross
+        if (geometry is not None and np.all(np.isfinite(sat))
+                and np.max(np.abs(sat)) <= 1e50
+                and (ground_point is None
+                     or (np.all(np.isfinite(ground_point))
+                         and np.all(np.isfinite(ground_normal))  # pyright: ignore[reportArgumentType, reportCallIssue]
+                         and np.max(np.abs(ground_point)) <= 1e50
+                         and np.max(np.abs(ground_normal)) <= 1.0))):  # pyright: ignore[reportArgumentType, reportCallIssue]
+            segment_cross = _cross3_float64
+
+        def _triangle_geometry(index, triangle):
+            row = geometry[index]  # pyright: ignore[reportOptionalSubscript]
+            if not (ready[index] & 1):  # pyright: ignore[reportOptionalSubscript]
+                p0, p1, p2 = triangle
+                edge1 = p1 - p0
+                edge2 = p2 - p0
+                normal = np.cross(edge1, edge2)
+                normal_len = float(np.linalg.norm(normal))
+                row[:3], row[3:6], row[9] = edge1, edge2, normal_len
+                if normal_len > area_eps:
+                    row[6:9] = normal / normal_len
+                ready[index] |= 1  # pyright: ignore[reportOptionalSubscript]
+            return row
+
+        # Retain only views of the existing bounded geometry, not new vector
+        # data. Limit Python view/tuple metadata independently of mesh payload.
+        triangle_vectors = [None] * len(tri) if geometry is not None and len(tri) <= 32768 else None
+
+        def _prepared_triangle(index, triangle):
+            cached = triangle_vectors[index]  # pyright: ignore[reportOptionalSubscript]
+            if cached is None:
+                row = _triangle_geometry(index, triangle)
+                cached = (triangle[0], row[:3], row[3:6], row[6:9], float(row[9]), row)
+                triangle_vectors[index] = cached  # pyright: ignore[reportArgumentType, reportCallIssue, reportOptionalSubscript]
+            return cached
+
+        def _point_in_triangle(point, triangle, triangle_id):
+            if triangle_vectors is None:
+                a, b, c = triangle
+                v0 = b - a
+                v1 = c - a
+            else:
+                a, v0, v1, _, _, _ = _prepared_triangle(triangle_id, triangle)
             v2 = point - a
 
             dot00 = float(np.dot(v0, v0))
@@ -226,19 +295,33 @@ class BuildingModel:
 
             return u >= -bary_tol and v >= -bary_tol and (u + v) <= 1.0 + bary_tol
 
-        def _segment_intersects_triangle(start, end, triangle):
-            direction = end - start
-            seg_len = float(np.linalg.norm(direction))
+        def _segment_intersects_triangle(start, end, triangle, triangle_id, segment):
+            if segment is None:
+                direction = end - start
+                seg_len = float(np.linalg.norm(direction))
+            else:
+                direction, seg_len = segment
             if seg_len <= intersect_eps:
                 return False
 
-            v0, v1, v2 = triangle
-            edge1 = v1 - v0
-            edge2 = v2 - v0
-            if np.linalg.norm(np.cross(edge1, edge2)) <= area_eps:
-                return False
+            if triangle_vectors is not None:
+                v0, edge1, edge2, _, normal_len, _ = _prepared_triangle(triangle_id, triangle)
+                if normal_len <= area_eps:
+                    return False
+            elif geometry is None:
+                v0, v1, v2 = triangle
+                edge1 = v1 - v0
+                edge2 = v2 - v0
+                if np.linalg.norm(np.cross(edge1, edge2)) <= area_eps:
+                    return False
+            else:
+                v0 = triangle[0]
+                row = _triangle_geometry(triangle_id, triangle)
+                if row[9] <= area_eps:
+                    return False
+                edge1, edge2 = row[:3], row[3:6]
 
-            pvec = np.cross(direction, edge2)
+            pvec = segment_cross(direction, edge2)
             det = float(np.dot(edge1, pvec))
             if abs(det) <= area_eps:
                 return False
@@ -249,7 +332,7 @@ class BuildingModel:
             if u < -bary_tol or u > 1.0 + bary_tol:
                 return False
 
-            qvec = np.cross(tvec, edge1)
+            qvec = segment_cross(tvec, edge1)
             v = float(np.dot(direction, qvec)) * inv_det
             if v < -bary_tol or (u + v) > 1.0 + bary_tol:
                 return False
@@ -259,10 +342,17 @@ class BuildingModel:
             return endpoint_tol < t < 1.0 - endpoint_tol
 
         def _segment_blocked(start, end, excluded_triangle_id):
+            segment = None
             for obstacle_id, obstacle in enumerate(tri):
                 if obstacle_id == excluded_triangle_id:
                     continue
-                if _segment_intersects_triangle(start, end, obstacle):
+                # The bounded FP64 path cannot warn or raise here. Evaluate the
+                # original subtraction/norm only at the first actual obstacle;
+                # keep strict/unsafe cases in their original per-triangle order.
+                if segment_cross is _cross3_float64 and segment is None:
+                    direction = end - start
+                    segment = (direction, float(np.linalg.norm(direction)))
+                if _segment_intersects_triangle(start, end, obstacle, obstacle_id, segment):
                     return True
             return False
 
@@ -326,14 +416,28 @@ class BuildingModel:
             paths = []
 
             for tri_idx, triangle in enumerate(tri):
-                p0, p1, p2 = triangle
-                normal = np.cross(p1 - p0, p2 - p0)
-                normal_len = float(np.linalg.norm(normal))
-                if normal_len <= area_eps:
-                    continue
-                normal = normal / normal_len
-
-                rx_side = float(np.dot(rx - p0, normal))
+                if geometry is None:
+                    p0, p1, p2 = triangle
+                    normal = np.cross(p1 - p0, p2 - p0)
+                    normal_len = float(np.linalg.norm(normal))
+                    if normal_len <= area_eps:
+                        continue
+                    normal = normal / normal_len
+                    rx_side = float(np.dot(rx - p0, normal))
+                else:
+                    if triangle_vectors is None:
+                        p0 = triangle[0]
+                        row = _triangle_geometry(tri_idx, triangle)
+                        normal_len = row[9]
+                        normal = row[6:9]
+                    else:
+                        p0, _, _, normal, normal_len, row = _prepared_triangle(tri_idx, triangle)
+                    if normal_len <= area_eps:
+                        continue
+                    if not (ready[tri_idx] & 2):  # pyright: ignore[reportOptionalSubscript]
+                        row[10] = float(np.dot(rx - p0, normal))
+                        ready[tri_idx] |= 2  # pyright: ignore[reportOptionalSubscript]
+                    rx_side = float(row[10])
                 if abs(rx_side) < plane_eps:
                     continue
 
@@ -341,7 +445,13 @@ class BuildingModel:
                 if abs(sat_side) < plane_eps or rx_side * sat_side <= 0.0:
                     continue
 
-                rx_img = rx - 2.0 * rx_side * normal
+                if geometry is None:
+                    rx_img = rx - 2.0 * rx_side * normal
+                else:
+                    if not (ready[tri_idx] & 4):  # pyright: ignore[reportOptionalSubscript]
+                        row[11:14] = rx - 2.0 * rx_side * normal
+                        ready[tri_idx] |= 4  # pyright: ignore[reportOptionalSubscript]
+                    rx_img = row[11:14]
                 image_dir = sat_pos - rx_img
                 denom = float(np.dot(image_dir, normal))
                 if abs(denom) < plane_eps:
@@ -352,7 +462,7 @@ class BuildingModel:
                     continue
 
                 reflection_point = rx_img + t * image_dir
-                if not _point_in_triangle(reflection_point, triangle):
+                if not _point_in_triangle(reflection_point, triangle, tri_idx):
                     if reflection_point_tol_m <= 0.0:
                         continue
                     closest = _closest_point_on_triangle(reflection_point, triangle)

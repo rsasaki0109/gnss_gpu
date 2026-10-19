@@ -1,0 +1,13 @@
+{
+  "verified": true,
+  "report_sha256": "ef7e42441b91998cdda32f4aa6e6cc0ed11f5cc0b38e2dcef6c46f4214a22308",
+  "functional_tests": 51,
+  "calibration_pass": false,
+  "all_accuracy_checks_passed": true,
+  "independent_raw_clock_and_accuracy_audit": true,
+  "old_optimization_gates_preserved": true,
+  "new_optimization_speed_gain_established": false,
+  "production_changes": [],
+  "default_changed": false,
+  "all_initial_failures_retained": true
+}

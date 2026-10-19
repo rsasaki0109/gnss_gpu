@@ -1,0 +1,15 @@
+{
+  "verified": true,
+  "report_sha256": "b9ee1c28e26cb28282b5a57e189c40760e464c1bcdae95c5eff68980c22236d3",
+  "functional_tests": 19,
+  "warm_prefixes": 4,
+  "timed_prefixes": 20,
+  "all_RTK_epochs": 9600,
+  "final_saved_states": 24,
+  "all_new_trajectories_and_final_states_RNG_bits_equal": true,
+  "cache_policy_valid": true,
+  "speed_gain_established": false,
+  "actual_whole_RTK_speed_established": false,
+  "production_changes": [],
+  "default_changed": false
+}

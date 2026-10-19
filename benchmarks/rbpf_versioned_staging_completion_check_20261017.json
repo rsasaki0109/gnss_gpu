@@ -1,0 +1,34 @@
+{
+  "timestamp_utc": "2026-10-17T05:39:43.768787+00:00",
+  "verified": true,
+  "report_sha256": "7dc229c61846b3d1ae7723ff1ac0423188b875d84a949e6e1c0e737f3438194f",
+  "tests_passed": 63,
+  "CPU_ASan_tests_passed": 41,
+  "CPU_ASan_error_diagnostics": 0,
+  "timed_calls": 3840,
+  "warm_calls": 256,
+  "actual_saved_PF_states": 800,
+  "all_saved_state_trajectory_cfg_prior_metadata_equal": true,
+  "gate_counts": {
+    "CPU_pass": 0,
+    "GPU_same_backend_pass": 0,
+    "GPU_joint_pass": 0,
+    "cpu_AA_valid": 4,
+    "gpu_AA_valid": 5
+  },
+  "product_adoption": false,
+  "default_changed": false,
+  "new_native_CPU_extension": true,
+  "new_CUDA_source_or_transfer": false,
+  "new_CUDA_sanitizer_runs": [],
+  "production_changes": [],
+  "no_completed_timing_retry": true,
+  "measured_sources_frozen": true,
+  "Ruff_compile_EOL_diff_checks_passed": true,
+  "public_text_files_checked": 3332,
+  "public_device_product_names_absent": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  }
+}

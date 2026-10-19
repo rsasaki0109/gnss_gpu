@@ -1,0 +1,62 @@
+--- a/src/particle_filter/pf_device.cu
++++ b/src/particle_filter/pf_device.cu
+@@ -339,6 +339,47 @@
+     double inv_sigma2 = s_inv_sigma2;
+     double log_w = 0.0;
+     #pragma unroll 2
++    for (int s = 0; s < n_sat; s++) {
++        double dx = x - s_sat[s * 3 + 0];
++        double dy = y - s_sat[s * 3 + 1];
++        double dz = z - s_sat[s * 3 + 2];
++        double r = sqrt(dx * dx + dy * dy + dz * dz);
++        double pred_pr = r + cb;
++        double residual = s_pr[s] - pred_pr;
++        log_w += -0.5 * s_ws[s] * residual * residual * inv_sigma2;
++    }
++    log_weights[tid] = log_w;
++}
++
++// Four independent satellite geometries may overlap; the FP64 expression
++// and ordered per-satellite log accumulation are retained exactly.
++__global__ void pfd_weight_gaussian_four_kernel(const double* px, const double* py,
++                                          const double* pz, const double* pcb,
++                                          const double* sat_ecef,
++                                          const double* pseudoranges,
++                                          const double* weights_sat,
++                                          double* log_weights,
++                                          int N, int n_sat, double sigma_pr) {
++    extern __shared__ double s_data[];
++    __shared__ double s_inv_sigma2;
++    double* s_sat = s_data;
++    double* s_pr = s_data + n_sat * 3;
++    double* s_ws = s_data + n_sat * 4;
++    if (threadIdx.x == 0) s_inv_sigma2 = 1.0 / (sigma_pr * sigma_pr);
++    for (int s = threadIdx.x; s < n_sat; s += blockDim.x) {
++        s_sat[s * 3 + 0] = sat_ecef[s * 3 + 0];
++        s_sat[s * 3 + 1] = sat_ecef[s * 3 + 1];
++        s_sat[s * 3 + 2] = sat_ecef[s * 3 + 2];
++        s_pr[s] = pseudoranges[s];
++        s_ws[s] = weights_sat[s];
++    }
++    __syncthreads();
++    int tid = blockIdx.x * blockDim.x + threadIdx.x;
++    if (tid >= N) return;
++    double x = px[tid], y = py[tid], z = pz[tid], cb = pcb[tid];
++    double inv_sigma2 = s_inv_sigma2;
++    double log_w = 0.0;
++    #pragma unroll 4
+     for (int s = 0; s < n_sat; s++) {
+         double dx = x - s_sat[s * 3 + 0];
+         double dy = y - s_sat[s * 3 + 1];
+@@ -3357,6 +3398,11 @@
+             state->d_px, state->d_py, state->d_pz, state->d_pcb,
+             state->d_sat_ecef, state->d_pseudoranges, state->d_weights_sat,
+             state->d_log_weights, N, n_sat, sigma_pr, nu);
++    } else if (gaussian_only && N >= 65536 && n_sat >= 8 && n_sat <= 32) {
++        pfd_weight_gaussian_four_kernel<<<grid, BLOCK_SIZE, smem_weight, state->stream>>>(
++            state->d_px, state->d_py, state->d_pz, state->d_pcb,
++            state->d_sat_ecef, state->d_pseudoranges, state->d_weights_sat,
++            state->d_log_weights, N, n_sat, sigma_pr);
+     } else if (gaussian_only) {
+         pfd_weight_gaussian_kernel<<<grid, BLOCK_SIZE, smem_weight, state->stream>>>(
+             state->d_px, state->d_py, state->d_pz, state->d_pcb,

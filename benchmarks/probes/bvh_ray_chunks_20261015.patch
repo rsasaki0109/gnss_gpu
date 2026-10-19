@@ -1,0 +1,86 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -964,6 +964,7 @@
+   bool mirrors_active = false;
+   int mirror_epochs = 0;
+   bool cached_serial = false;
++  int parallel_epochs = 0;
+ 
+   ~Impl() {
+     int previous = 0;
+@@ -1002,6 +1003,7 @@
+     mirrors_active = false;
+     mirror_epochs = 0;
+     cached_serial = false;
++    parallel_epochs = 0;
+     points.reserve((size_t)total * 3);
+     delays.reserve((size_t)total);
+     if (!ordered) return 0;
+@@ -1013,7 +1015,12 @@
+     }
+     // Substantial meshes amortize one winner reduction per ray. Keep the
+     // candidate scratch bounded to 16,384 winners (640 KiB).
+-    bool large_parallel = n_order >= 64 && total <= 16384;
++    // Reuse the existing candidate kernels for large batches, with at most
++    // one bounded epoch group in winner scratch. Keep unusually wide epochs
++    // and smaller meshes on the existing serial path.
++    bool chunk_parallel = total > 16384 && n_order >= 8192 && n_sat <= 16384;
++    if (chunk_parallel) parallel_epochs = std::max(1, 4096 / n_sat);
++    bool large_parallel = n_order >= 64 && (total <= 16384 || chunk_parallel);
+     if (total > 4096 && !large_parallel) {
+       if (!normals_ready) {
+         normals.reserve((size_t)n_order);
+@@ -1028,7 +1035,8 @@
+     int tiles = std::min(32, std::min(
+         (n_order + MULTIPATH_BLOCK_SIZE - 1) / MULTIPATH_BLOCK_SIZE,
+         std::max(1, 256 / total)));
+-    partial.reserve((size_t)total * tiles);
++    int partial_rays = parallel_epochs ? parallel_epochs * n_sat : total;
++    partial.reserve((size_t)partial_rays * tiles);
+     // Prepare only for the parallel reflection path. LOS-only, small meshes and
+     // serial fallback batches do not allocate or launch normal preparation.
+     if (!normals_ready) {
+@@ -1045,6 +1053,7 @@
+     mirrors_active = n_order >= 8192 && n_sat >= 16 && max_epochs > 0;
+     if (mirrors_active) {
+       mirror_epochs = (int)std::min((size_t)n_epoch, max_epochs);
++      if (parallel_epochs) mirror_epochs = std::min(mirror_epochs, parallel_epochs);
+       mirrors.reserve((size_t)mirror_epochs * n_order);
+     }
+     return tiles;
+@@ -1052,7 +1061,34 @@
+ 
+   void launch_multipath(int n_epoch, int n_sat, int tiles) {
+     int total = n_epoch * n_sat;
+-    if (tiles) {
++    if (tiles && parallel_epochs) {
++      int epoch_step = mirrors_active ? std::min(parallel_epochs, mirror_epochs) : parallel_epochs;
++      for (int first_epoch = 0; first_epoch < n_epoch; first_epoch += epoch_step) {
++        int epochs = std::min(epoch_step, n_epoch - first_epoch);
++        size_t ray_offset = (size_t)first_epoch * n_sat;
++        if (mirrors_active) {
++          reflection_mirrors_kernel<<<dim3((n_order + 255) / 256, epochs), 256>>>(
++              rx.data + (size_t)first_epoch * 3, triangles.data, order.data,
++              normals.data, mirrors.data, n_order);
++          CUDA_CHECK_LAST();
++          multipath_candidates_kernel<true, true><<<epochs * n_sat * tiles, MULTIPATH_BLOCK_SIZE>>>(
++              rx.data + (size_t)first_epoch * 3, sat.data + ray_offset * 3,
++              triangles.data, order.data, partial.data, n_sat, n_order, tiles,
++              normals.data, mirrors.data);
++        } else {
++          multipath_candidates_kernel<true, false><<<epochs * n_sat * tiles, MULTIPATH_BLOCK_SIZE>>>(
++              rx.data + (size_t)first_epoch * 3, sat.data + ray_offset * 3,
++              triangles.data, order.data, partial.data, n_sat, n_order, tiles,
++              normals.data, nullptr);
++        }
++        CUDA_CHECK_LAST();
++        int rays = epochs * n_sat;
++        multipath_finalize_kernel<<<(rays + MULTIPATH_BLOCK_SIZE - 1) / MULTIPATH_BLOCK_SIZE,
++                                    MULTIPATH_BLOCK_SIZE>>>(
++            partial.data, points.data + ray_offset * 3, delays.data + ray_offset, rays, tiles);
++        CUDA_CHECK_LAST();
++      }
++    } else if (tiles) {
+       if (mirrors_active) {
+         for (int first_epoch = 0; first_epoch < n_epoch; first_epoch += mirror_epochs) {
+           int epochs = std::min(mirror_epochs, n_epoch - first_epoch);

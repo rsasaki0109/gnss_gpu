@@ -1,0 +1,126 @@
+--- a/src/raytrace/bvh.cu
++++ b/src/raytrace/bvh.cu
+@@ -911,6 +911,114 @@
+   if (threadIdx.x == 0) partial[blockIdx.x] = winners[0];
+ }
+ 
++__device__ static bool multipath_cohort_candidate(const double rx[3], const double sat[3],
++                                           double d_rx_sat, const Triangle& tri,
++                                           MultipathCandidate& result,
++                                           const ReflectionNormal* normal,
++                                           const ReflectionMirror* prepared_mirror) {
++  if (!normal->valid) return false;
++  double mirror[3] = {prepared_mirror->point[0], prepared_mirror->point[1], prepared_mirror->point[2]};
++
++  double dir[3] = {sat[0] - mirror[0], sat[1] - mirror[1], sat[2] - mirror[2]};
++  // The key only proposes sharing. Compare every original mirror bit before
++  // reusing the exact same FP64 expression for this block's common satellite.
++  unsigned mask = __activemask();
++  unsigned key = (unsigned)(__double2loint(mirror[0]) ^ __double2hiint(mirror[0]) ^
++      __double2loint(mirror[1]) ^ __double2hiint(mirror[1]) ^
++      __double2loint(mirror[2]) ^ __double2hiint(mirror[2]));
++  unsigned peers = __match_any_sync(mask, key);
++  int leader = __ffs(peers) - 1;
++  bool identical = true;
++  #pragma unroll
++  for (int d = 0; d < 3; ++d) {
++    long long bits = __double_as_longlong(mirror[d]);
++    long long other = __shfl_sync(mask, bits, leader);
++    identical = identical && bits == other;
++  }
++  bool valid = true;
++  if ((threadIdx.x & 31) == leader || !identical) {
++    double dir_len = sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
++    valid = !(dir_len < 1e-15);
++    if (valid) {
++      dir[0] /= dir_len; dir[1] /= dir_len; dir[2] /= dir_len;
++    }
++  }
++  int shared_valid = __shfl_sync(mask, (int)valid, leader);
++  #pragma unroll
++  for (int d = 0; d < 3; ++d) {
++    double shared_dir = __shfl_sync(mask, dir[d], leader);
++    if (identical) dir[d] = shared_dir;
++  }
++  if (identical) valid = shared_valid != 0;
++  if (!valid) return false;
++
++  double t;
++  if (!mt_intersect(mirror, dir, tri.v0, tri.v1, tri.v2, t)) return false;
++
++  double refl[3] = {mirror[0] + t * dir[0],
++                     mirror[1] + t * dir[1],
++                     mirror[2] + t * dir[2]};
++  double d_rx_refl = sqrt((rx[0] - refl[0]) * (rx[0] - refl[0]) +
++                           (rx[1] - refl[1]) * (rx[1] - refl[1]) +
++                           (rx[2] - refl[2]) * (rx[2] - refl[2]));
++  double d_refl_sat = sqrt((refl[0] - sat[0]) * (refl[0] - sat[0]) +
++                            (refl[1] - sat[1]) * (refl[1] - sat[1]) +
++                            (refl[2] - sat[2]) * (refl[2] - sat[2]));
++  double excess = (d_rx_refl + d_refl_sat) - d_rx_sat;
++  if (!(excess > 0.0)) return false;
++  result.delay = excess;
++  result.point[0] = refl[0]; result.point[1] = refl[1]; result.point[2] = refl[2];
++  return true;
++}
++
++__global__ void multipath_cohort_candidates_kernel(const double* rx_ecef,
++                                            const double* sat_ecef,
++                                            const Triangle* tris,
++                                            const int* triangle_order,
++                                            MultipathCandidate* partial,
++                                            int n_sat, int n_tri, int tiles,
++                                            const ReflectionNormal* normals,
++                                            const ReflectionMirror* mirrors) {
++  int ray = blockIdx.x / tiles;
++  int tile = blockIdx.x % tiles;
++  int eid = ray / n_sat;
++  double rx[3] = {rx_ecef[eid * 3], rx_ecef[eid * 3 + 1], rx_ecef[eid * 3 + 2]};
++  double sat[3] = {sat_ecef[ray * 3], sat_ecef[ray * 3 + 1], sat_ecef[ray * 3 + 2]};
++  MultipathCandidate best = {};
++  best.order = -1;
++  if (!isfinite(rx[0]) || !isfinite(rx[1]) || !isfinite(rx[2]) ||
++      !isfinite(sat[0]) || !isfinite(sat[1]) || !isfinite(sat[2])) {
++    if (threadIdx.x == 0) partial[blockIdx.x] = best;
++    return;
++  }
++  double d_rx_sat = sqrt((rx[0] - sat[0]) * (rx[0] - sat[0]) +
++                          (rx[1] - sat[1]) * (rx[1] - sat[1]) +
++                          (rx[2] - sat[2]) * (rx[2] - sat[2]));
++  for (int ordinal = tile * blockDim.x + threadIdx.x;
++       ordinal < n_tri; ordinal += tiles * blockDim.x) {
++    MultipathCandidate candidate = {};
++    candidate.order = ordinal;
++    const ReflectionNormal* normal = nullptr;
++    normal = normals + ordinal;
++    const ReflectionMirror* mirror = nullptr;
++    mirror = mirrors + (size_t)eid * n_tri + ordinal;
++    if (multipath_cohort_candidate(
++            rx, sat, d_rx_sat, tris[triangle_order[ordinal]], candidate, normal, mirror) &&
++        better_multipath(candidate, best)) best = candidate;
++  }
++  __shared__ MultipathCandidate winners[MULTIPATH_BLOCK_SIZE];
++  winners[threadIdx.x] = best;
++  __syncthreads();
++  for (int stride = blockDim.x / 2; stride > 0; stride /= 2) {
++    if (threadIdx.x < stride &&
++        better_multipath(winners[threadIdx.x + stride], winners[threadIdx.x])) {
++      winners[threadIdx.x] = winners[threadIdx.x + stride];
++    }
++    __syncthreads();
++  }
++  if (threadIdx.x == 0) partial[blockIdx.x] = winners[0];
++}
++
+ __global__ void multipath_finalize_kernel(const MultipathCandidate* partial,
+                                           double* reflection_points,
+                                           double* excess_delays, int n_rays, int tiles) {
+@@ -1207,7 +1315,7 @@
+               rx.data + (size_t)first_epoch * 3, triangles.data, order.data,
+               normals.data, mirrors.data, n_order);
+           CUDA_CHECK_LAST();
+-          multipath_candidates_kernel<true, true><<<epochs * n_sat * tiles, MULTIPATH_BLOCK_SIZE>>>(
++          multipath_cohort_candidates_kernel<<<epochs * n_sat * tiles, MULTIPATH_BLOCK_SIZE>>>(
+               rx.data + (size_t)first_epoch * 3, sat.data + ray_offset * 3,
+               triangles.data, order.data, partial.data, n_sat, n_order, tiles,
+               normals.data, mirrors.data);

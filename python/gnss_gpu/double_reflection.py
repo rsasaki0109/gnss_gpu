@@ -63,10 +63,22 @@ def _triangle_normal(triangle):
     return normal / normal_len
 
 
-def _point_in_triangle(point, triangle):
-    a, b, c = triangle
-    v0 = b - a
-    v1 = c - a
+def _cross3_float64(a, b):
+    """Original component multiply/subtract order for bounded FP64 vectors."""
+    return np.array((
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ), dtype=np.float64)
+
+
+def _point_in_triangle(point, triangle, geometry=None):
+    if geometry is None:
+        a, b, c = triangle
+        v0 = b - a
+        v1 = c - a
+    else:
+        a, v0, v1 = geometry
     v2 = point - a
 
     d00 = v0 @ v0
@@ -85,19 +97,28 @@ def _point_in_triangle(point, triangle):
     return bool(u >= -bary_tol and v >= -bary_tol and (u + v) <= 1.0 + bary_tol)
 
 
-def _segment_intersects_triangle(start, end, triangle):
-    direction = end - start
-    seg_len = _norm(direction)
+def _segment_intersects_triangle(start, end, triangle, geometry=None, segment=None):
+    if segment is None:
+        direction = end - start
+        seg_len = _norm(direction)
+    else:
+        direction, seg_len = segment
     if seg_len <= intersect_eps:
         return False
 
-    v0, v1, v2 = triangle
-    edge1 = v1 - v0
-    edge2 = v2 - v0
-    if _norm(np.cross(edge1, edge2)) <= area_eps:
+    if geometry is None:
+        v0, v1, v2 = triangle
+        edge1 = v1 - v0
+        edge2 = v2 - v0
+        normal_len = _norm(np.cross(edge1, edge2))
+        cross = np.cross
+    else:
+        v0, edge1, edge2, normal_len = geometry
+        cross = _cross3_float64
+    if normal_len <= area_eps:
         return False
 
-    pvec = np.cross(direction, edge2)
+    pvec = cross(direction, edge2)
     det = edge1 @ pvec
     if abs(det) <= area_eps:
         return False
@@ -108,7 +129,7 @@ def _segment_intersects_triangle(start, end, triangle):
     if u < -bary_tol or u > 1.0 + bary_tol:
         return False
 
-    qvec = np.cross(tvec, edge1)
+    qvec = cross(tvec, edge1)
     v = (direction @ qvec) * inv_det
     if v < -bary_tol or (u + v) > 1.0 + bary_tol:
         return False
@@ -118,11 +139,23 @@ def _segment_intersects_triangle(start, end, triangle):
     return bool(endpoint_tol < t < 1.0 - endpoint_tol)
 
 
-def _segment_blocked(start, end, tri_array, excluded_ids):
+def _segment_blocked(start, end, tri_array, excluded_ids, invariants=None):
+    segment = None
     for oid, obstacle in enumerate(tri_array):
         if oid in excluded_ids:
             continue
-        if _segment_intersects_triangle(start, end, obstacle):
+        if invariants is None:
+            blocked = _segment_intersects_triangle(start, end, obstacle)
+        else:
+            if segment is None:
+                direction = end - start
+                segment = (direction, _norm(direction))
+            # Preserve the original short-segment rejection before geometry.
+            geometry = None
+            if segment[1] > intersect_eps:
+                geometry = invariants.obstacle_geometry(oid)
+            blocked = _segment_intersects_triangle(start, end, obstacle, geometry, segment)
+        if blocked:
             return True
     return False
 
@@ -155,53 +188,154 @@ def _unit(vector):
     return vector / length
 
 
-def _compute_single_path(tri_array, normals, rx, sat, direct_len, tri_a_id, tri_b_id):
-    tri_a = tri_array[tri_a_id]
-    tri_b = tri_array[tri_b_id]
+class _ImageInvariants:
+    """Bounded call-local arrays; every original ordered pair is still visited."""
+
+    __slots__ = ("triangles", "vertices", "receiver_distances", "receiver_images",
+                 "pair_images", "satellite_distances", "receiver_numerators",
+                 "pair_numerators", "edges", "obstacles")
+
+    def __init__(self, triangles, pair_count):
+        self.triangles = list(triangles)
+        self.vertices = [triangle[0] for triangle in self.triangles]
+        self.receiver_distances = [None] * len(triangles)
+        self.receiver_images = [None] * len(triangles)
+        self.pair_images = [None] * pair_count
+        self.satellite_distances = [None] * len(triangles)
+        self.receiver_numerators = [None] * len(triangles)
+        self.pair_numerators = [None] * pair_count
+        self.edges = [None] * len(triangles)
+        self.obstacles = [None] * len(triangles)
+
+    def triangle_edges(self, index):
+        cached = self.edges[index]
+        if cached is None:
+            a, b, c = self.triangles[index]
+            cached = (a, b - a, c - a)
+            self.edges[index] = cached
+        return cached
+
+    def obstacle_geometry(self, index):
+        cached = self.obstacles[index]
+        if cached is None:
+            a, edge1, edge2 = self.triangle_edges(index)
+            cached = (a, edge1, edge2, _norm(np.cross(edge1, edge2)))
+            self.obstacles[index] = cached  # pyright: ignore[reportArgumentType, reportCallIssue]
+        return cached
+
+
+def _compute_single_path(tri_array, normals, rx, sat, direct_len, tri_a_id, tri_b_id,
+                         invariants=None, pair_index=None):
+    if invariants is None:
+        tri_a = tri_array[tri_a_id]
+        tri_b = tri_array[tri_b_id]
+    else:
+        tri_a = invariants.triangles[tri_a_id]
+        tri_b = invariants.triangles[tri_b_id]
     na = normals[tri_a_id]
     nb = normals[tri_b_id]
     if na is None or nb is None:
         return None
 
-    a0 = tri_a[0]
-    b0 = tri_b[0]
-
-    rx_plane_distance = float(np.dot(rx - a0, na))
-    sat_plane_distance = float(np.dot(sat - b0, nb))
+    if invariants is None:
+        a0 = tri_a[0]
+        b0 = tri_b[0]
+        rx_plane_distance = float(np.dot(rx - a0, na))
+        sat_plane_distance = float(np.dot(sat - b0, nb))
+    else:
+        a0 = invariants.vertices[tri_a_id]
+        b0 = invariants.vertices[tri_b_id]
+        rx_plane_distance = invariants.receiver_distances[tri_a_id]
+        if rx_plane_distance is None:
+            rx_plane_distance = float(np.dot(rx - a0, na))
+            invariants.receiver_distances[tri_a_id] = rx_plane_distance
+        sat_plane_distance = invariants.satellite_distances[tri_b_id]
+        if sat_plane_distance is None:
+            sat_plane_distance = float(np.dot(sat - b0, nb))
+            invariants.satellite_distances[tri_b_id] = sat_plane_distance
     if abs(rx_plane_distance) <= plane_eps or abs(sat_plane_distance) <= plane_eps:
         return None
 
-    i1 = rx - 2.0 * rx_plane_distance * na
-    i12 = i1 - 2.0 * float(np.dot(i1 - b0, nb)) * nb
+    if invariants is None:
+        i1 = rx - 2.0 * rx_plane_distance * na
+        i12 = i1 - 2.0 * float(np.dot(i1 - b0, nb)) * nb
+    else:
+        i1 = invariants.receiver_images[tri_a_id]
+        if i1 is None:
+            i1 = rx - 2.0 * rx_plane_distance * na
+            invariants.receiver_images[tri_a_id] = i1
+        i12 = invariants.pair_images[pair_index]
+        if i12 is None:
+            i12 = i1 - 2.0 * float(np.dot(i1 - b0, nb)) * nb
+            invariants.pair_images[pair_index] = i12
 
-    denom2 = float(np.dot(sat - i12, nb))
+    if invariants is None:
+        denom2 = float(np.dot(sat - i12, nb))
+    else:
+        sat_delta = sat - i12
+        denom2 = float(np.dot(sat_delta, nb))
     if abs(denom2) <= plane_eps:
         return None
-    t2 = float(np.dot(b0 - i12, nb) / denom2)
+    if invariants is None:
+        t2 = float(np.dot(b0 - i12, nb) / denom2)
+    else:
+        numerator2 = invariants.pair_numerators[pair_index]
+        if numerator2 is None:
+            numerator2 = np.dot(b0 - i12, nb)
+            invariants.pair_numerators[pair_index] = numerator2
+        t2 = float(numerator2 / denom2)
     if not np.isfinite(t2) or t2 <= param_eps or t2 >= 1.0 - param_eps:
         return None
-    p2 = i12 + t2 * (sat - i12)
-
-    denom1 = float(np.dot(p2 - i1, na))
+    if invariants is None:
+        p2 = i12 + t2 * (sat - i12)
+        denom1 = float(np.dot(p2 - i1, na))
+    else:
+        p2 = i12 + t2 * sat_delta
+        first_delta = p2 - i1
+        denom1 = float(np.dot(first_delta, na))
     if abs(denom1) <= plane_eps:
         return None
-    t1 = float(np.dot(a0 - i1, na) / denom1)
+    if invariants is None:
+        t1 = float(np.dot(a0 - i1, na) / denom1)
+    else:
+        numerator1 = invariants.receiver_numerators[tri_a_id]
+        if numerator1 is None:
+            numerator1 = np.dot(a0 - i1, na)
+            invariants.receiver_numerators[tri_a_id] = numerator1
+        t1 = float(numerator1 / denom1)
     if not np.isfinite(t1) or t1 <= param_eps or t1 >= 1.0 - param_eps:
         return None
-    p1 = i1 + t1 * (p2 - i1)
+    if invariants is None:
+        p1 = i1 + t1 * (p2 - i1)
+    else:
+        p1 = i1 + t1 * first_delta
 
-    if not _point_in_triangle(p1, tri_a):
-        return None
-    if not _point_in_triangle(p2, tri_b):
-        return None
+    if invariants is None:
+        if not _point_in_triangle(p1, tri_a):
+            return None
+        if not _point_in_triangle(p2, tri_b):
+            return None
+    else:
+        if not _point_in_triangle(p1, tri_a, invariants.triangle_edges(tri_a_id)):
+            return None
+        if not _point_in_triangle(p2, tri_b, invariants.triangle_edges(tri_b_id)):
+            return None
 
     excluded_ids = {tri_a_id, tri_b_id}
-    if _segment_blocked(rx, p1, tri_array, excluded_ids):
-        return None
-    if _segment_blocked(p1, p2, tri_array, excluded_ids):
-        return None
-    if _segment_blocked(p2, sat, tri_array, excluded_ids):
-        return None
+    if invariants is None:
+        if _segment_blocked(rx, p1, tri_array, excluded_ids):
+            return None
+        if _segment_blocked(p1, p2, tri_array, excluded_ids):
+            return None
+        if _segment_blocked(p2, sat, tri_array, excluded_ids):
+            return None
+    else:
+        if _segment_blocked(rx, p1, tri_array, excluded_ids, invariants):
+            return None
+        if _segment_blocked(p1, p2, tri_array, excluded_ids, invariants):
+            return None
+        if _segment_blocked(p2, sat, tri_array, excluded_ids, invariants):
+            return None
 
     seg1 = _norm(p1 - rx)
     seg2 = _norm(p2 - p1)
@@ -226,6 +360,10 @@ def _compute_single_path(tri_array, normals, rx, sat, direct_len, tri_a_id, tri_
         normals=[na.copy(), nb.copy()],
         incidence_angles=(inc1, inc2),
     )
+
+
+_IMAGE_HELPERS = (_compute_single_path, _triangle_normal, _norm, _ordered_pairs,
+                  _point_in_triangle, _segment_blocked, _segment_intersects_triangle, _cross3_float64)
 
 
 def compute_double_reflection_paths(
@@ -259,20 +397,41 @@ def compute_double_reflection_paths(
 
     normals = [_triangle_normal(triangle) for triangle in tri_array]
 
+    # Keep exceptional inputs/policies and replaced helper hooks in their
+    # original evaluation order. Finite bounded vectors keep mirror arithmetic
+    # safe; prepare each original expression only on its first actual use.
+    invariants = None
+    policy = np.geterr()
+    if (n_sat >= 2 and 8 <= len(tri_array) <= 256
+            and 64 <= len(pairs) <= 32768 and n_sat * len(pairs) >= 1024
+            and all(current is original for current, original in zip(
+                (_compute_single_path, _triangle_normal, _norm, _ordered_pairs,
+                 _point_in_triangle, _segment_blocked, _segment_intersects_triangle, _cross3_float64), _IMAGE_HELPERS))
+            and area_eps == 1e-12 and plane_eps == 1e-6
+            and type(tri_array) is np.ndarray and tri_array.dtype == np.float64
+            and type(rx) is np.ndarray and type(sat_array) is np.ndarray
+            and policy["under"] == "ignore"
+            and all(mode in ("warn", "ignore") for mode in policy.values())
+            and np.all(np.isfinite(tri_array)) and np.all(np.isfinite(rx))
+            and np.all(np.isfinite(sat_array))
+            and np.max(np.abs(tri_array)) <= 1e50 and np.max(np.abs(rx)) <= 1e50
+            and np.max(np.abs(sat_array)) <= 1e50):
+        invariants = _ImageInvariants(tri_array, len(pairs))
+
     results = []
     for sat in sat_array:
         direct_len = _norm(sat - rx)
+        if invariants is not None:
+            invariants.satellite_distances = [None] * len(tri_array)
         paths = []
-        for tri_a_id, tri_b_id in pairs:
-            path = _compute_single_path(
-                tri_array,
-                normals,
-                rx,
-                sat,
-                direct_len,
-                tri_a_id,
-                tri_b_id,
-            )
+        for pair_index, (tri_a_id, tri_b_id) in enumerate(pairs):
+            if invariants is None:
+                path = _compute_single_path(
+                    tri_array, normals, rx, sat, direct_len, tri_a_id, tri_b_id)
+            else:
+                path = _compute_single_path(
+                    tri_array, normals, rx, sat, direct_len, tri_a_id, tri_b_id,
+                    invariants, pair_index)
             if path is not None:
                 paths.append(path)
 

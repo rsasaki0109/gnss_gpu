@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-10-15T10:00:31.126554+00:00",
+  "verified": true,
+  "adopted": false,
+  "report": {
+    "path": "benchmarks/bvh_direction_cohorts_rejected_20261015.json",
+    "sha256": "5bd118f5e7d2fcf7be4a31ebb417ff9a8d4618d078047114039f7d1c2b944706"
+  },
+  "runtime_reference": {
+    "path": "benchmarks/bvh_los_frontier_batches_gpu_20261015.json",
+    "sha256": "9031bc9cbe1c1b092fca8f158ac6d95e2e9763bcfe03e25be32a1208b166fcf9",
+    "source_and_build_PE_restored": true
+  },
+  "current_source_and_build_PE_exact_D211": true,
+  "installed_PE_preserved": true,
+  "restoration_smoke_tests_passed": 42,
+  "rejected_candidate_timed_pairs": 144,
+  "all_timed_outputs_bit_identical": true,
+  "candidate_broad_validation_regression_sanitizers_newly_run": false,
+  "existing_GPU_SASS_and_resources_identical": 12,
+  "new_GPU_functions_rejected": 1,
+  "archive_manifests_sha256": {
+    "bvh_direction_cohorts_baseline": "e148eec19edfa4e676761c365e97ada640a232a4269b40c4739e10f45f341bee",
+    "bvh_direction_cohorts_rejected": "734ce22c55cc0e08c95bd4421e6f824340e2efcac4902f57ca96b80d4e01cef9",
+    "bvh_los_frontier_batches_candidate": "0be0e8a3e4f7c1dc1a5b28d02749df7bf613c0d507b57e1dd7c4795d73273570"
+  },
+  "measured_helpers_unchanged": true,
+  "exact_patch_forward_check_passed": true,
+  "preserved_PF_signal": {
+    "pf_fused_uniform_gpu_20261015.json": {
+      "source_exact": true,
+      "build_and_installed_PE_exact": true
+    },
+    "signal_wide_static_gpu_20261014.json": {
+      "source_exact": true,
+      "build_and_installed_PE_exact": true
+    }
+  },
+  "previous_D211_and_earlier_reports_unchanged": true,
+  "main_Python_type_comments_compiled_identical": true,
+  "public_text_files_checked": 2833,
+  "public_device_product_names_absent": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  }
+}

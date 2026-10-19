@@ -1,0 +1,12 @@
+{
+  "verified": true,
+  "report_sha256": "54776664ad877c5cf709eb98f5db16908b31e005d40e08e879a24b38315ddd20",
+  "new_policy_tests": 4,
+  "total_unique_functional_tests": 18,
+  "Windows_x64_collection": 18,
+  "Linux_execution_performed": false,
+  "numeric_diagnostic_set_retried": false,
+  "production_changes": [],
+  "product_adoption": false,
+  "default_changed": false
+}

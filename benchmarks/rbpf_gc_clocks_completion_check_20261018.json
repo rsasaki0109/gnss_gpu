@@ -1,0 +1,14 @@
+{
+  "verified": true,
+  "report_sha256": "5ed6ee6ad2df2c0c6cd95999ad489c2c586e00336c4780039e5e259f06ea23a2",
+  "functional_tests": 51,
+  "complete_RTK_prefixes": 18,
+  "complete_RTK_epochs": 7200,
+  "saved_PF_states": 3600,
+  "raw_protocol_events": 14400,
+  "all_same_backend_bits_equal": true,
+  "primary_stability_gate_passed": false,
+  "optimization_candidate": false,
+  "speed_gain_established": false,
+  "default_changed": false
+}

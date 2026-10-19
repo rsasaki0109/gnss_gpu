@@ -1,0 +1,18 @@
+{
+  "verified": true,
+  "report_sha256": "530c5e5280bc5c50f39212677d92321dcc5fdb30f3e5934590eb6f131192c7a6",
+  "audit_sha256": "3168ad90b353e858ed5bccef26459d9862cc174c4ba621a070af7ad5ab880db8",
+  "functional_tests": 33,
+  "warm_full_states": 64,
+  "timed_calls": 960,
+  "all1024state_RNG_metadata_exact": true,
+  "standard_CPU_pass": false,
+  "standard_GPU_pass": false,
+  "accepted_speed_improvement": false,
+  "actual_field_runs": 0,
+  "original_preflight_failure_retained": true,
+  "original_failed_gates_preserved": true,
+  "production_changes": [],
+  "product_adoption": false,
+  "default_changed": false
+}

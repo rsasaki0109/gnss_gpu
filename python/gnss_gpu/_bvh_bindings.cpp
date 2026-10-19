@@ -121,6 +121,7 @@ void validate_batch_rx_sat(const py::buffer_info& brx,
 }  // namespace
 
 PYBIND11_MODULE(_bvh, m) {
+  m.attr("_bvh_iterative_build") = true;
   m.doc() = "BVH-accelerated ray tracing for GNSS NLOS detection";
 
   py::class_<gnss_gpu::DeviceBVH>(m, "DeviceBVH", py::module_local())

@@ -1,0 +1,79 @@
+{
+  "timestamp_utc": "2026-10-15T23:23:55.416070+00:00",
+  "verified": true,
+  "adopted": false,
+  "decision": "reject all three unique component certificate algorithms",
+  "product_changes": [],
+  "maintained_adoption": "D223",
+  "report": {
+    "path": "benchmarks/pf_certified_division_rejected_20261016.json",
+    "sha256": "a9bef86816e1e420f9d9ecf8074bbf9c7a27d4510030798fd3d03accb823bfba"
+  },
+  "gate_sha256": "cef87353a3e5df56833fa28f9f16a18d6ddbc0c26d586485a218207fa0be9730",
+  "production_sources_unchanged": 30,
+  "installed_extensions_unchanged": 4,
+  "PF_build_extension_unchanged": true,
+  "previous_reports_preserved": {
+    "benchmarks/double_geometry_gpu_20261016.json": "948b8797191d7c351e2710bec4578c749ea8893f6656f3f0e8cbe96fdbeabc7d",
+    "benchmarks/double_geometry_completion_check_20261016.json": "73c2f397ef645200090ae51346a9b9000d400767cc092d17a8ffe564553354e7",
+    "benchmarks/double_predicates_rejected_20261016.json": "309c46bed95ebc240657d54f591ea1b345575959ba2804c70ba8a5ca96a02f89",
+    "benchmarks/double_predicates_rejected_completion_check_20261016.json": "254bbf04216c7d24d602b42f530887b9fa93abb8e9f4760900e551e2ac43928b",
+    "benchmarks/diffraction_loss_rejected_20261016.json": "68680726625e1ddc840e6dabc4afb1cb02f90ac2547f21045687960b743faa8f",
+    "benchmarks/diffraction_loss_rejected_completion_check_20261016.json": "3dea35c50471c13fb0b18879fd9244d0e8447a83af8615d34f52ec16a577c4ec",
+    "benchmarks/composite_geometry_gpu_20261016.json": "d62537d0cf6fadcc546d7f4de78ac466829ffdde1b38a8b068cc36daab318747",
+    "benchmarks/composite_geometry_completion_check_20261016.json": "c1d2a40ed0144701fa8844dea1abf0116b308bd48749f56aa1fd2e495cf30203"
+  },
+  "previous_archives_verified": {
+    "composite_geometry_candidate": {
+      "files": 305,
+      "manifest_sha256": "c5a0d912f148921b170b05f8eb1f4c0a0fa774ed62e4e278f2b672bf8b441b6e"
+    },
+    "composite_geometry_initial_rejected_20261016": {
+      "files": 65,
+      "manifest_sha256": "260c5ad940ecb2086f7facb82704d66fac4af59071e39ea86aab9c30855a338d"
+    },
+    "double_geometry_candidate": {
+      "files": 174,
+      "manifest_sha256": "72bcddd1a6505475bc0935ceaed21245569d5dfdc1a5f0018640302df1186e34"
+    },
+    "double_predicates_rejected": {
+      "files": 73,
+      "manifest_sha256": "2d361aa4cc926ac4f20519f6b3f4cfa7500869740740d75bc72291cf9b07f518"
+    },
+    "double_predicates_rejected_completion": {
+      "files": 132,
+      "manifest_sha256": "7fdf56f461ca8da4855225ff0ad93359102a5a1a0e143e6b8e14fff835c16248"
+    },
+    "diffraction_loss_rejected": {
+      "files": 63,
+      "manifest_sha256": "a2ec0246d5dbe4425ddfbfc2ecbcd320cc50503cb457ea33d11460ab90f9738a"
+    },
+    "diffraction_loss_rejected_completion": {
+      "files": 160,
+      "manifest_sha256": "44c0fdb09f3479cdedf877afef524bb1732df9852051c8c9e35f58164f2fd978"
+    },
+    "pf_certified_division_initial_build_20261016": {
+      "files": 6,
+      "manifest_sha256": "5f8b88babfaa44d29ac3288385abe4deb357e0ba9bd54539ecaedca0c6be4d7b"
+    },
+    "pf_certified_division_loader_failure_20261016": {
+      "files": 5,
+      "manifest_sha256": "619028e23408f0c254c9d64431c76bea22fdfee36c9347d114d0653c05d205aa"
+    }
+  },
+  "all_returned_outputs_bit_identical": true,
+  "candidate_output_comparisons": 400,
+  "AA_output_comparisons": 200,
+  "all_component_performance_gates_failed": true,
+  "new_production_tests_or_sanitizers_run": false,
+  "new_whole_PF_or_real_data_positioning_accuracy_claim": false,
+  "public_text_files_checked": 2898,
+  "public_device_product_names_absent": true,
+  "scoped_ruff_passed": true,
+  "compile_and_line_endings_passed": true,
+  "git_diff_check_passed": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  }
+}

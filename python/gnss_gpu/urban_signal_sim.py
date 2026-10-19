@@ -19,6 +19,8 @@ import warnings
 import numpy as np
 
 from gnss_gpu.signal_sim import SignalSimulator
+from gnss_gpu import atmosphere as _atmosphere
+
 from gnss_gpu.fresnel import reflection_coefficient
 from gnss_gpu.diffraction import (
     compute_diffraction_paths,
@@ -32,6 +34,7 @@ C_LIGHT = 299792458.0
 GPS_L1_FREQ = 1575.42e6
 GPS_L1_WAVELENGTH = C_LIGHT / GPS_L1_FREQ
 CA_CHIP_RATE = 1.023e6
+_BUILTIN_TROPO = _atmosphere.AtmosphereCorrection.tropo
 
 
 def ecef_to_lla(x, y, z):
@@ -74,6 +77,13 @@ def _sat_elevation_azimuth(rx_ecef, sat_ecef):
     el = np.arctan2(u, horiz)
     az = np.arctan2(e, n)
     return el, az
+
+
+def _atmospheric_scalar(value):
+    """Extract the same scalar bits from a built-in one-element array."""
+    if type(value) is np.ndarray and value.ndim > 0 and value.size == 1:
+        value = value.item()
+    return float(value)
 
 
 class UrbanSignalSimulator:
@@ -449,17 +459,29 @@ class UrbanSignalSimulator:
         if atmo_correction is not None:
             lat, lon, alt = ecef_to_lla(rx[0], rx[1], rx[2])
             rx_lla = np.array([lat, lon, alt])
-            for i in range(n_sat):
-                if not visible[i]:
-                    continue
-                tropo = atmo_correction.tropo(rx_lla, el[i])
-                atmo_delay[i] = float(tropo)
-                if iono_params is not None:
-                    iono = atmo_correction.iono(
-                        rx_lla, az[i], el[i], gps_time,
-                        alpha=iono_params.get('alpha'),
-                        beta=iono_params.get('beta'))
-                    atmo_delay[i] += float(iono)
+            # The built-in GPU kernel evaluates each satellite independently.
+            # Keep callbacks and CPU ufunc dispatch on their original scalar path.
+            if (
+                len(vis_idx) > 0
+                and iono_params is None
+                and type(atmo_correction) is _atmosphere.AtmosphereCorrection
+                and _atmosphere._HAS_GPU
+                and getattr(atmo_correction.tropo, "__func__", None) is _BUILTIN_TROPO
+                and getattr(atmo_correction.tropo, "__self__", None) is atmo_correction
+            ):
+                atmo_delay[vis_idx] = atmo_correction.tropo(rx_lla, el[vis_idx])
+            else:
+                for i in range(n_sat):
+                    if not visible[i]:
+                        continue
+                    tropo = atmo_correction.tropo(rx_lla, el[i])
+                    atmo_delay[i] = _atmospheric_scalar(tropo)
+                    if iono_params is not None:
+                        iono = atmo_correction.iono(
+                            rx_lla, az[i], el[i], gps_time,
+                            alpha=iono_params.get('alpha'),  # pyright: ignore[reportCallIssue]
+                            beta=iono_params.get('beta'))  # pyright: ignore[reportCallIssue]
+                        atmo_delay[i] += _atmospheric_scalar(iono)
 
         # --- Doppler ---
         doppler = np.zeros(n_sat, dtype=np.float64)

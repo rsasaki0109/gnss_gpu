@@ -1,0 +1,1874 @@
+{
+  "timestamp_utc": "2026-10-17T11:49:34.702116+00:00",
+  "experiment": "D270: diagnose complete RTK timing variability with instrumented three-clock A/A",
+  "implementation_sha256": {
+    "benchmarks/rbpf_epoch_clocks.py": "53db9f485b85fef1dd0b389777d14fb735780fed1dc280287c0c4508c27ba344",
+    "benchmarks/bench_rbpf_epoch_clocks_field.py": "b9ea7d7ada64d0f11f8f4546166bfb3174a9aba6c052769cf72785d3f6db5756",
+    "tests/test_rbpf_epoch_clocks.py": "732ca483f482b5a351f459801f268e64b2c89f8ae05401458578bb159735310f"
+  },
+  "evidence_sha256": {
+    "dist/audit_rbpf_epoch_clocks_20261017.py": "030a8ab704a67a3462a0c2f32b4ecd10a35a492d8a2ed06c12f06e04c7bd1380",
+    "dist/final_verify_rbpf_epoch_clocks_20261017.py": "b830db06fc76283d1bd663bef14e5687b8efc7ae381a4cfc2def0f1a6fa04ea4",
+    "dist/preserve_rbpf_epoch_clocks_20261017.py": "5457e3257433d43abb85d5f552d8eb02308dba0c9ffc35d70ed1e3689531f6bb",
+    "dist/publish_rbpf_epoch_clocks_20261017.py": "7c4076b572ab16348d3972590b29cd82f7454d1c5897b9b32bda888ad0eee9d4",
+    "dist/rbpf_epoch_clocks_audit_20261017.json": "5889842eaa60050a7d170dd099c8af9ef5dd39962889519f100a43a99e27a3b1",
+    "dist/rbpf_epoch_clocks_preservation_20261017.json": "b93bcd9f9ba2a82d5a12d60e3d71b61a68ab711bac8153c7d347a8f100beebf5",
+    "dist/rbpf_epoch_clocks_tests_20261017.job.json": "344fc443c991c67a2b3ee23c0f51cdd9f1b78454c99a08963b866e72d2efe18c",
+    "dist/rbpf_epoch_clocks_tests_20261017.json": "083b12e4a962e012f7d741ba77302c06e97f294f85d95fccec69975f94536f76",
+    "dist/rbpf_epoch_clocks_tests_20261017.log": "c85b775947f744f09abca65221d1ccd819222bb388c83cb48e954c4acd2e1fac",
+    "dist/rbpf_epoch_clocks_tests_20261017.plan.json": "be227fa9c17467f3484292ee22a8a59151837f0af7a8c6cbab12502b049e21b8",
+    "dist/run_rbpf_epoch_clocks_field_20261017.py": "f862f1844546faf6a9c647612a78bb2f54ca474c1a87ca5c3c15809f8e78139c",
+    "dist/test_rbpf_epoch_clocks_20261017.py": "dfd7b389790bb70a907caa40f476fa49cb1924755af5d4ea6eb82f405e7aa3bf",
+    "dist/rbpf_epoch_clocks_field_20261017/plan.json": "0dde7883a792f77e679af7b97b3a75b2446697a202fa7ab062619c1c08f86526",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r0_A.job.json": "b75abc6578a1e74ac795c3802498b9c52a054e8f57de10f5bf3e52e0b2ed8599",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r0_A.log": "06a7f3f8daba63a99a154600182b5ccf2a00f276bb5970b74b46733cc5315acd",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r0_A.run.json": "6026bfcd32792e23a72f4a21f9c2537ebb3ace61fce27314ffedc1d6dd758d83",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r0_AA.job.json": "abecbcd75279eca97cfddc90c6b9f83226d2008d3f7e4cbe4b2dd184b95c25fd",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r0_AA.log": "c9ee79f001331816928159f35116cfd6913cc1f90ca7466086ec060f7f61ef56",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r0_AA.run.json": "54e39136923471bd68a56c6202ce920bf6edf1911951334023f3c92242df7bf9",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r1_A.job.json": "5921aaab6b22d9b9868eea6049411ac7f4d453cfc351dae0e99436fb24d944a5",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r1_A.log": "3bf3f036e6f57dfd7c34709a3741428dcb2d36d61a5637e7a46b91a3836dd87f",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r1_A.run.json": "e18a32ab4d7333e31e9bfad95f87f23ce10e3a6312a3ab2f0bd28d682f03448a",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r1_AA.job.json": "d863306ecf86ebe3665b19e4e258ade324e30c1de0505cda214898561b90214e",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r1_AA.log": "d172d26b3ab1afef2521edf9991e6758a393bf59983aa970e96bfee0abc7844c",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r1_AA.run.json": "c0849cb62070aa771d89f8e24d1e77b6b5bb7e5cd415f4a6f454578603001893",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r2_A.job.json": "335a7ca0118146d0f8e0d680f2ee604f984fb195071f073b9ac1d05f6ed11d21",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r2_A.log": "399d66aca5471f584deef1b606589debb99a6405c98c6f3cf946cfa8897abb33",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r2_A.run.json": "603ba9401c7f27d4ffa89beba0730ae55682f861e7528a5509efe7946f56c470",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r2_AA.job.json": "1e1d92e418f70f8f867bb37b660d48c8704ed2883d0cf26a87aa05688c172b44",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r2_AA.log": "d6b0c9050ac0c09118e752038f4c7cdc94f4fe5f7217bc3c5a4278c4ed66a2d8",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r2_AA.run.json": "0f46d254db94100e8e4ffdfbb6312ef5862e9261b81e443594bbc3181c7019e2",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_warm_A.job.json": "588fa13b41b21e632e04c8dc689b1dfa3aa9a3e3c30762daf1f86e709e49b070",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_warm_A.log": "f30610e6211511411f6ba67e0ce2f4f8074b7009832d7550a12092d216a51db9",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_warm_A.run.json": "d6024103dd6e6a158e214c2bf47862258c435e1719dccbd5b0ac31a30af2c068",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_warm_AA.job.json": "cbe551d1eac18d8d8c9c6508970568ac54f2ea423e42e06ea07364682d7b0737",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_warm_AA.log": "8cd046c77cf81a46e2fa489a8f2b752af5acad802574fef52cc90e2127ada1d2",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_warm_AA.run.json": "0f38e49f85598fe75bc678ae183bf7063dd771e0ca78cc3776b820b454315f1a",
+    "dist/rbpf_epoch_clocks_field_20261017/run.json": "550c8e416994fc333c8b96127b76a0b3bd8a34cbc99520513edf643d00ddd71f",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r0_A/clocks.json": "ad2e023b9a5d601bd0e40c2a4aa6488c5dffff3c550701b5afd5a9bde217c86e",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r0_A/plan.json": "3439d7aa2da3794556d99e40d15110dd106b138c98badc868d24877f062bd3ea",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r0_A/record.json": "0a95c44954b332f61e7c5a511a1da86f060c45ec97c8a2e967f9cb915b33e95f",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r0_A/states.jsonl.gz": "fee3c88aacf6a542f2735d00f4caacfe43ea08e19c9ce3a3e2cf84c9159a90c7",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r0_AA/clocks.json": "9a8927f9954e199dbdcbc047d2e8114d9b08f9a49b2dd1360c9113a104c00d18",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r0_AA/plan.json": "3439d7aa2da3794556d99e40d15110dd106b138c98badc868d24877f062bd3ea",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r0_AA/record.json": "08929e4d75bd3c8a3e8900be8354439da15aca3d331bb66a4dd3cf1e9c6f1f5c",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r0_AA/states.jsonl.gz": "40cad110166ef72d4e28dfd14abc9fb7d45188abaa5ca8fe3ee9915c060b1eae",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r1_A/clocks.json": "67b5541fd565b8d23d023e459260d8e2167efdd92fe452690d263b7c4ce39ccd",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r1_A/plan.json": "3439d7aa2da3794556d99e40d15110dd106b138c98badc868d24877f062bd3ea",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r1_A/record.json": "697bcb0c14e91ac89bd9f1caf9376ed6378f62c3532811dda4dfd03f8e69070f",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r1_A/states.jsonl.gz": "b1eac959af21fd92d483c22afb84335d3158c0b7425aa0456db473b0cf0eb683",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r1_AA/clocks.json": "f66cbb9e2552d09fbe3aa73dcf978a4ce4be3c9e312cf99afb118a930d96f7bb",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r1_AA/plan.json": "3439d7aa2da3794556d99e40d15110dd106b138c98badc868d24877f062bd3ea",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r1_AA/record.json": "f2888f6646757ad2a5962b48b0240d5af627385d786f8b91b50b654aeafe60ad",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r1_AA/states.jsonl.gz": "abccc0254d02c44bb5abfc18c64248f4b2917885c5105aa5ae7a08c256bfedf0",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r2_A/clocks.json": "0f42eb449f954432c33c19ad1feecac7525f4bca855af99fcf92348a78d97179",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r2_A/plan.json": "3439d7aa2da3794556d99e40d15110dd106b138c98badc868d24877f062bd3ea",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r2_A/record.json": "d138f6b46ef7a0f84911437b9d01e0ee29149da9afeba64834329159d68cfa4a",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r2_A/states.jsonl.gz": "e86500959a5cbe741de908ffe00507f8cf9d0751bdc7301d42caf714e402549f",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r2_AA/clocks.json": "68ed175fa96e28b3fd5516c4a29852705967a9c89dd18d1bd72255dce15ed3c4",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r2_AA/plan.json": "3439d7aa2da3794556d99e40d15110dd106b138c98badc868d24877f062bd3ea",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r2_AA/record.json": "0830b855684882a79d666e61134460ff0f4421bd517221ff127481d905568da8",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r2_AA/states.jsonl.gz": "50234561846c313ae480375a9795d69627956b853abb3e7220608c65f5ab3230",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_warm_A/clocks.json": "d1e5cdfcd06b3d6e40986e591070488b8ec325246ef200f27aa88a1041afd394",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_warm_A/plan.json": "3439d7aa2da3794556d99e40d15110dd106b138c98badc868d24877f062bd3ea",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_warm_A/record.json": "e9df6f0c276649b3c2526d0191402b0ee8ec33cea8f16eb6606fe7abbc8b3a22",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_warm_A/states.jsonl.gz": "043741b4fff88136e7192ff2b52c6842437d3ad096d816bfca5f93d3d6ad7439",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_warm_AA/clocks.json": "2c5c091eab2545e7cd07172715a50924306ec0732277322f3d502493d79cdb06",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_warm_AA/plan.json": "3439d7aa2da3794556d99e40d15110dd106b138c98badc868d24877f062bd3ea",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_warm_AA/record.json": "d96839d6342fdac735dbf3144a9d3f439e17010d93479866bad02b69cc0e8ee6",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_warm_AA/states.jsonl.gz": "0df144b903222a19d411a004978325356d7049ad8f71bcd81c07117b920ae7ec",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r0_A/trajectory/run3.npz": "5b889c5706a1d9658174a32e954b460c4e9d4719ff0ae1de2d97650aae3d8ba4",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r0_A/trajectory/run3.pos": "355639d1320be4bd6b874fea9df1242edb5c071dcf66820bbcc0828add183128",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r0_AA/trajectory/run3.npz": "5b889c5706a1d9658174a32e954b460c4e9d4719ff0ae1de2d97650aae3d8ba4",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r0_AA/trajectory/run3.pos": "355639d1320be4bd6b874fea9df1242edb5c071dcf66820bbcc0828add183128",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r1_A/trajectory/run3.npz": "5b889c5706a1d9658174a32e954b460c4e9d4719ff0ae1de2d97650aae3d8ba4",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r1_A/trajectory/run3.pos": "355639d1320be4bd6b874fea9df1242edb5c071dcf66820bbcc0828add183128",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r1_AA/trajectory/run3.npz": "5b889c5706a1d9658174a32e954b460c4e9d4719ff0ae1de2d97650aae3d8ba4",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r1_AA/trajectory/run3.pos": "355639d1320be4bd6b874fea9df1242edb5c071dcf66820bbcc0828add183128",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r2_A/trajectory/run3.npz": "5b889c5706a1d9658174a32e954b460c4e9d4719ff0ae1de2d97650aae3d8ba4",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r2_A/trajectory/run3.pos": "355639d1320be4bd6b874fea9df1242edb5c071dcf66820bbcc0828add183128",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r2_AA/trajectory/run3.npz": "5b889c5706a1d9658174a32e954b460c4e9d4719ff0ae1de2d97650aae3d8ba4",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_r2_AA/trajectory/run3.pos": "355639d1320be4bd6b874fea9df1242edb5c071dcf66820bbcc0828add183128",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_warm_A/trajectory/run3.npz": "5b889c5706a1d9658174a32e954b460c4e9d4719ff0ae1de2d97650aae3d8ba4",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_warm_A/trajectory/run3.pos": "355639d1320be4bd6b874fea9df1242edb5c071dcf66820bbcc0828add183128",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_warm_AA/trajectory/run3.npz": "5b889c5706a1d9658174a32e954b460c4e9d4719ff0ae1de2d97650aae3d8ba4",
+    "dist/rbpf_epoch_clocks_field_20261017/r3_seed0_clocks_warm_AA/trajectory/run3.pos": "355639d1320be4bd6b874fea9df1242edb5c071dcf66820bbcc0828add183128"
+  },
+  "preservation": {
+    "timestamp_utc": "2026-10-17T11:41:08.591562+00:00",
+    "runner_sha256": "5457e3257433d43abb85d5f552d8eb02308dba0c9ffc35d70ed1e3689531f6bb",
+    "production_source_sha256": {
+      "src/raytrace/bvh.cu": "7d9d06f128710f12eea70b09b8f0d475d16223957ddfdf41a7cf5ec77ac09d98",
+      "include/gnss_gpu/bvh.h": "50b44813b584f5b6778fb983e07b587b6dc8ee268326672de9efbbff7f496e35",
+      "python/gnss_gpu/_bvh_bindings.cpp": "a043d669a98b24772c9ce4a3639d21bb869d65a35c30843979190025e4b44845",
+      "python/gnss_gpu/bvh.py": "41b31f806866fb515a0ec4556ad60bc8b93f18dccea77695f49f8bae754a347f",
+      "python/gnss_gpu/urban_signal_sim.py": "d3b332eeaa6b099449cb13ef4517aa4223cd8e561a5b753d8f7c5f99cf146075",
+      "src/signal_sim/signal_sim.cu": "31dc2c2a6e06d9f020c1b054371f0652c777dc3a6724f8a46b99297cda18be41",
+      "include/gnss_gpu/signal_sim.h": "2788f41ff6175da2d6c0db5212470ab3759f4e350d91f977a532e48fc70fa945",
+      "python/gnss_gpu/_signal_sim_bindings.cpp": "524f9460570f0b39f4165f8fb6526af927e6c2c8f39ff661c2731d34ee82bcff",
+      "python/gnss_gpu/signal_sim.py": "f316c47c4a9a9359498e6905f8d6afa8046f7b631f876e258074d44d527780d4",
+      "python/gnss_gpu/atmosphere.py": "8c7432e714699ae918f73d49346f43b9eb0a8b36802ad4618e1e042c09ddb76f",
+      "python/gnss_gpu/_atmosphere_bindings.cpp": "36c75159886ae798f28bd17c9d13d3b89e8797f3e81a07d3270aef9ea3b913ef",
+      "src/atmosphere/atmosphere.cu": "95e420949eac72a6ea2866add6a2cff6477c7ea4a27392830e526ebe23e86913",
+      "include/gnss_gpu/atmosphere.h": "e2d54dfb590391b6ca176a8bb9abc0156dc78fe51a330e6321a1579c752e8394",
+      "python/gnss_gpu/raytrace.py": "3d12a36b3db0b79d35fe54d38ed1f0fa0365c6b2064ff89fdaddc6c8140aab18",
+      "python/gnss_gpu/_raytrace_bindings.cpp": "472cae5221d1e5455570da2015a7a2ff8b5247482d540e50f88fb44470481896",
+      "src/raytrace/raytrace.cu": "454f371dd760e663ebb86563014bb56a16023d9bbff9b1df81ad4e54d855c7fa",
+      "include/gnss_gpu/raytrace.h": "02b0d9448a792a851aaa05397ee850748869430ba9c58f8fa998bfbad394b91c",
+      "python/gnss_gpu/double_reflection.py": "7a3950ba7c67efe6e2061f9541d993c8e52212994d0503f192f2d29906d11a80",
+      "python/gnss_gpu/diffraction.py": "7e6171943c90c8018bc87fe068533097938c139fbc59e5e2af47c9ca087aa52a",
+      "python/gnss_gpu/input_validation.py": "c1c4c08f1830edc254d38bcbdb05414041af2670f628f119cf7792759d2ea824",
+      "python/gnss_gpu/_diffraction_bindings.cpp": "94c12c172df10f32c0beb6f9409810996b932d3b9b3165bc1a21a4b62975c39a",
+      "src/diffraction/diffraction.cu": "f886d1cbc445707fabfc9e3dc5492ff1eebe82b27306d8a21ccf00404b43ff88",
+      "src/diffraction/utd.cu": "1ef9507efebb3c4fbc87e650d74a94067cdf6ab956ab0c8b0230a2a7bad34f82",
+      "include/gnss_gpu/diffraction.h": "3d276a6545b3db34f50fd2e7a4714e0b0e8cca1fbfa9dbe2fb28e3c256ccd5a9",
+      "python/gnss_gpu/reflection_diffraction.py": "90078b4ac1905bc291a7699c9ff7ccda7b723bcfdf10853e05f9a5ad4e2e39f8",
+      "src/particle_filter/pf_device.cu": "a20de06f6a6081670d39677b265d6fa58eb64baf69d816cb8173ea68aad9a7fe",
+      "include/gnss_gpu/pf_device.h": "9616ae2e4fb898b562143f04405e1006586548b98d461881eb37e11d57b51d85",
+      "python/gnss_gpu/_pf_device_bindings.cpp": "24ea505b9fbd1171f073d56db239f63fe23f0ed65f65c83c2df61383c0521c59",
+      "python/gnss_gpu/pf_device_runtime.py": "7a3ada45383ad7cc2377b43f6bf92b6ac75be101a5f319337819ab0dc8cd1361",
+      "python/gnss_gpu/realtime_runtime.py": "997b670f9186e01d6e6c9468d8804df47a39390b6a087ef92ae3978694a2432a",
+      "src/positioning/fgo.cu": "860deb60bbf03c3c0e7f25bda5d39a29f489284e1c081c45f63eb64a66e0f1b9",
+      "include/gnss_gpu/fgo.h": "443ffe8845dc85d8454704debef8e36bcddb7927d728871b91bfc0c3c203a6ee",
+      "python/gnss_gpu/fgo.py": "2eb5cefde7a7c91eef4b88e7175c0e00e6c85e9abd8883c00b2abfe11219e1c4",
+      "python/gnss_gpu/_bindings.cpp": "99eacd7c53fab0eb693c00699f97a0549bb06651c2b9907bf3b4fbf4f7546efd",
+      "experiments/rbpf_fgo/rbpf_fgo.py": "c977508d6a20413f7669efb39dfb1d87d74b254ce89cf1f57ae8681d7d6b8bb6",
+      "experiments/rbpf_fgo/gtsam_rtk_standalone.py": "1cdf4a7931bce541a3ad0c41a7d7e7e5aa404ca11e47bacdbbd832b17e5f8f38"
+    },
+    "production_extension_sha256": {
+      "_raytrace.cp312-win_amd64.pyd": "f9b3f83aede53d8cc03dff03c937529431b5143398f24ddc2aa1a2f50d0c2516",
+      "_gnss_gpu_signal_sim.cp312-win_amd64.pyd": "3ae8d0dc0c6136167fe4e1adde91972ce75fe0f00f3714021bd5bed851bfd5c6",
+      "_gnss_gpu_diffraction.cp312-win_amd64.pyd": "ca28ef50c132edd2ba87965ba934c6c6c274737f7a6b436ceea55a64c4cb6542",
+      "_gnss_gpu_pf_device.cp312-win_amd64.pyd": "48572e69d6bf1bd4b8257988b88a270c86c19be81c49b5a1e24e4dcfc785df52",
+      "_gnss_gpu.cp312-win_amd64.pyd": "8cc9cf532a0073bc2978ffc8b8daefe11f5195230bc23c269422ce4209c3f429"
+    },
+    "PF_build_PE_sha256": "48572e69d6bf1bd4b8257988b88a270c86c19be81c49b5a1e24e4dcfc785df52",
+    "prototype_DLL_sha256": "520258d5bccf5c921d29152004c19e25a19003c8bfe6eb986be4b43b784ad097",
+    "previous_reports_preserved": {
+      "benchmarks/double_geometry_gpu_20261016.json": "948b8797191d7c351e2710bec4578c749ea8893f6656f3f0e8cbe96fdbeabc7d",
+      "benchmarks/double_geometry_completion_check_20261016.json": "73c2f397ef645200090ae51346a9b9000d400767cc092d17a8ffe564553354e7",
+      "benchmarks/double_predicates_rejected_20261016.json": "309c46bed95ebc240657d54f591ea1b345575959ba2804c70ba8a5ca96a02f89",
+      "benchmarks/double_predicates_rejected_completion_check_20261016.json": "254bbf04216c7d24d602b42f530887b9fa93abb8e9f4760900e551e2ac43928b",
+      "benchmarks/diffraction_loss_rejected_20261016.json": "68680726625e1ddc840e6dabc4afb1cb02f90ac2547f21045687960b743faa8f",
+      "benchmarks/diffraction_loss_rejected_completion_check_20261016.json": "3dea35c50471c13fb0b18879fd9244d0e8447a83af8615d34f52ec16a577c4ec",
+      "benchmarks/composite_geometry_gpu_20261016.json": "d62537d0cf6fadcc546d7f4de78ac466829ffdde1b38a8b068cc36daab318747",
+      "benchmarks/composite_geometry_completion_check_20261016.json": "c1d2a40ed0144701fa8844dea1abf0116b308bd48749f56aa1fd2e495cf30203",
+      "benchmarks/pf_certified_division_rejected_20261016.json": "a9bef86816e1e420f9d9ecf8074bbf9c7a27d4510030798fd3d03accb823bfba",
+      "benchmarks/pf_certified_division_completion_check_20261016.json": "79bf4bff65429c904aeac6defff8f070d539d7c4179db9bc6a466340e86dfeeb",
+      "benchmarks/rbpf_fgo_gpu_feasibility_20261016.json": "feb4eeb242ce40f06975e4f1bb03c6b6610915aafb1a1d9737f4a1ccf12517de",
+      "benchmarks/rbpf_fgo_gpu_feasibility_completion_check_20261016.json": "17653b9558bcb84d144342ff40ee34a8cef3ea46d2880afd28613e40a3c60598",
+      "benchmarks/rbpf_likelihood_gpu_prototype_20261016.json": "6a6591cff2c515a31e02691032b6b20709064d56203264b5934010e7c8c48e07",
+      "benchmarks/rbpf_likelihood_gpu_prototype_completion_check_20261016.json": "305d24817650e54cd9185a235fe97a0f1bc6a7c2c4185850b207cff0a1fbae49",
+      "benchmarks/rbpf_move_batch_integration_20261016.json": "72f8c88908a0ea73757ffe54e7b7c0539ea7145442181f16292fe42a6eee4648",
+      "benchmarks/rbpf_move_batch_integration_completion_check_20261016.json": "80580c866e6e03f285f8476e74cfe9089bc8431ad3c86b82a74bd0bb6b4b3e68",
+      "benchmarks/rbpf_move_reuse_20261016.json": "8578f86a8c072194c5281bc48d94981ecc40272051ac9e228ac987c9f7c4c54f",
+      "benchmarks/rbpf_move_reuse_completion_check_20261016.json": "478e434ec64a61b5783367bc00fffe98efb3105b2db542034975fd6cb6b2c618",
+      "benchmarks/rbpf_epoch_memo_20261016.json": "e1b9079bee4fdcbff3c64cf2e9fc8b48544f61191dd70d2c19111ff2e6bb1915",
+      "benchmarks/rbpf_epoch_memo_completion_check_20261016.json": "103b960dd652e505d34f52dd02bec8e002cb8dd3d2d40591cc92669ee30cc26a",
+      "benchmarks/rbpf_proposal_reuse_20261016.json": "0be7ca23fdb752405e30307dfb43e30059b70e5646aef3851f7d32098b1c78a7",
+      "benchmarks/rbpf_proposal_reuse_completion_check_20261016.json": "a212f0813ce5f54e0129fb714e72eb03974a8346d01bf3c90513cd38c1bdf89e",
+      "benchmarks/rbpf_warp_likelihood_20261016.json": "3b502ebaa61172cad83a364878285b2b74110b6e0692e64d33638a038bfbe699",
+      "benchmarks/rbpf_warp_likelihood_completion_check_20261016.json": "c16af302ed55d6c517948410b3d8d6879b4b0a36e62555436b90b86ef46fb137",
+      "benchmarks/rbpf_dd_pack_20261016.json": "3541e177c7b9aab9588e9f5f370002d0b88273ea26617ad5dc49368dbe959f2f",
+      "benchmarks/rbpf_dd_pack_completion_check_20261016.json": "215126a7b5c5c2d3c0ed1830565ed599b0b87a698c5c2396405fed1a0b7565ee",
+      "benchmarks/rbpf_native_canonical_20261016.json": "80782b6be0ae8ac4360ff680666eab3338a412cfe699c139412d6b79a571e818",
+      "benchmarks/rbpf_native_canonical_completion_check_20261016.json": "a729d1b3c809a2f8b145cba4761c39e9fa663d399daf01494ac335c7ce89a51b",
+      "benchmarks/rbpf_parent_score_20261016.json": "827f9f71733661870fcd4092059153d785ce10007af9950d3efbd4a6163718d9",
+      "benchmarks/rbpf_parent_score_completion_check_20261016.json": "976d3f6f39a2ec9f4b20ae143d55a4361499c0136cb2499047d71212b9676a36",
+      "benchmarks/rbpf_component_mass_20261016.json": "21ce17d5b7912ea9ac67e5deaa80f951d989fe602bc348503c66804df7ea4a5b",
+      "benchmarks/rbpf_component_mass_completion_check_20261016.json": "7638a89c0021b4022ed80e065ddc8bf1382d15c1eb8897b00afab6f0e126ac2f",
+      "benchmarks/rbpf_feedback_mass_20261016.json": "860f6ed1c3685c4e37fe0164eb502518de017aeb8d6e3506b2ee41559404281f",
+      "benchmarks/rbpf_feedback_mass_completion_check_20261016.json": "a683d0410915d2959ced3223aaf9678832f4bd25817394d630ade3c2a8cccb08",
+      "benchmarks/rbpf_shrink_20261016.json": "e9ab9e68198ad1a7fa6391bbce9016e0e2963fce8c53f9bd249b190645854466",
+      "benchmarks/rbpf_shrink_completion_check_20261016.json": "aa1faf02b3f231d131f876f6ae5bed9e88eebeb0ec95358dc9a38596a2599424",
+      "benchmarks/rbpf_phase_profile_20261016.json": "c874f3cf0c21ab1ccc7600e5ca20854de9eb081b309695468f4c3b7f83809a05",
+      "benchmarks/rbpf_phase_profile_completion_check_20261016.json": "4f50c9b45476944a5947604d0fe734f5dd40d93c6fab1c54dd78e2956986d1a5",
+      "benchmarks/rbpf_score_index_memo_20261016.json": "1ef7247da4743550f13d0a3cddd40878106b61a978b74e15fac4923017534fa6",
+      "benchmarks/rbpf_score_index_memo_completion_check_20261016.json": "4c1446ceb4ac79f6cd8d4efde7417c03138dd74a2a765f40971f47279000c92d",
+      "benchmarks/rbpf_ordered_keys_20261016.json": "7383d0185865ad422bbd6476b285d7829036d3f5fa61acbeab42f21443b5a1f0",
+      "benchmarks/rbpf_ordered_keys_completion_check_20261016.json": "ee0bbb979af88aaaf3c1435fe6f93b20b932477ff8e9439ebb71d71a169c7494",
+      "benchmarks/rbpf_native_staging_20261016.json": "87e816c273deaca1fd23e26dc52c69e2cbeda554aaf34dc5da1e3d41b4435b7e",
+      "benchmarks/rbpf_native_staging_completion_check_20261016.json": "ec28a3c6acd32f3f716ecde1e75c693ba96d26843c5c31442e453fa066edbad0",
+      "benchmarks/rbpf_irls_identity_20261016.json": "a3f322e47a5f7b674c8a569e9f2848f3bed13642eeb032e0da5a0ff31da029b8",
+      "benchmarks/rbpf_irls_identity_completion_check_20261016.json": "3b0eac874ecee69fa432ae5e3b60c55dd388b091541899ce1b5d88046cfd20a9",
+      "benchmarks/rbpf_irls_replay_20261016.json": "fa5b1ece36bcce76a1aa500fa96d96b969be2dc7eaf2313c70b8dbb58f1b9bb6",
+      "benchmarks/rbpf_irls_replay_completion_check_20261016.json": "f51b020ef63dc8c75df99302ec06163e7e1c39bf44ef577bc731011eb49d243e",
+      "benchmarks/rbpf_fused_staging_20261016.json": "7fb662a3b11e5f0e97591aa0f86e4982c0646adcdf4d64d1c5ff72a4b2cc0b43",
+      "benchmarks/rbpf_fused_staging_completion_check_20261016.json": "fd4b8bfc117ea2caa22be40f5d04e9f0d87478938d50597600bcc5a18c7a23d8",
+      "benchmarks/rbpf_call_profile_20261016.json": "a896c3a49660bb29386a2fc1cea058c4d63a9d150cc18d3f9a4483a517299729",
+      "benchmarks/rbpf_call_profile_completion_check_20261016.json": "548f8d632848a3089f43cd10e246a2366df4131d72c6999640a35d267eaeac06",
+      "benchmarks/rbpf_ambiguity_initx_20261016.json": "6ea34852ebcc0ff611f471f3301250b5e3ceceb7ece1d16f72d0b02e0b06d658",
+      "benchmarks/rbpf_ambiguity_initx_completion_check_20261016.json": "1f21bec571c804b1727483f1e22fe44c9985c784d89c7cd0f26c5e3be31e7282",
+      "benchmarks/rbpf_ambiguity_bookkeeping_20261016.json": "d90b7cd05be77e3453a8aa52618f4d45f02dc2b451d54dc1fdd679715ee7d209",
+      "benchmarks/rbpf_ambiguity_bookkeeping_completion_check_20261016.json": "3f496832034112a1a018041b8b89c84b0cd97409b8e4c47c08d447e4e596de30",
+      "benchmarks/rbpf_gpu_stream_20261016.json": "01f6c1f7c8a3adbfbc6db1af15f5c4a954d1769701b905c5b9f8bcd747a19e0a",
+      "benchmarks/rbpf_gpu_stream_completion_check_20261016.json": "ea877ca251b3ce62d04398c375cd83d713f58244af8fec1d294342c878c93540",
+      "benchmarks/rbpf_gpu_graph_20261017.json": "67900d34cc2d61c2339d81b468e160a22f834edcfa42ebfe2f182ca99ed60834",
+      "benchmarks/rbpf_gpu_graph_completion_check_20261017.json": "bf7c332d9c279168840ac5403d295752a058338fe96e699f2ec58a77f9f61345",
+      "benchmarks/rbpf_sparse_normal_20261017.json": "4442af48ec617c1e6db8f976ff9527afa0415adcc83655e900c88b95bd413dbf",
+      "benchmarks/rbpf_sparse_normal_completion_check_20261017.json": "cd9790daa6b7e8c220f080a5beabc8b1a335ded7dd0eeb571a739b8385362a3b",
+      "benchmarks/rbpf_gpu_stages_20261017.json": "4e7c0e614e1f9ce4c8e7571051bfd0a60b095c48758b04f7ea6606ae2fbc5088",
+      "benchmarks/rbpf_gpu_stages_completion_check_20261017.json": "46c57b436b05cafc0315cd24c4b5b500e36bcc544d9adbdb2dd4445da6e93018",
+      "benchmarks/rbpf_fixed_lu_20261017.json": "6fd5652e2b2d4491d6b7a7f0b9d36b893c64ba44436be801325027bab7e8bbff",
+      "benchmarks/rbpf_fixed_lu_completion_check_20261017.json": "4587a872376b3fc6a8d7c30c2bb7cb67ce2c89de9a4b83560f03f6fc0c0887ec",
+      "benchmarks/rbpf_register_lu_20261017.json": "b570c0b049239c5d969d7d75f36940116cbba7aa62a9662eaf6297cc16fa83bb",
+      "benchmarks/rbpf_register_lu_completion_check_20261017.json": "f45c51bf8978545fb77612d4fb3b49201a653186ea11f5f4267b38e3db177ae5",
+      "benchmarks/rbpf_register_lu_skip_swap_20261017.json": "4b210510642efb9efa0609ac9d3cf9d430a127e864051ba4eb7684c97fcbb10b",
+      "benchmarks/rbpf_register_lu_skip_swap_completion_check_20261017.json": "b755c9d6f4f3b75acb52ffd1c82fd20ccb5a121993bfdd7c41925b258d922731",
+      "benchmarks/rbpf_register_lu_back_cache_20261017.json": "65eb0b12ba1d21aa885bea4939ff1c6ff7c48a77d7235ed9b8bbf44a7445405a",
+      "benchmarks/rbpf_register_lu_back_cache_completion_check_20261017.json": "3c5de941da83cde2c82bcd34f09096905991c16045cf150192dc4f174a30fc9f",
+      "benchmarks/rbpf_block_lu_20261017.json": "34f381a74e78757b06600e93abcf68e2374a159f5c90e90e9986bd777bb497fc",
+      "benchmarks/rbpf_block_lu_completion_check_20261017.json": "88b86ec2a46eb34cf4fa22d1596d7d1cd4a6924a48508eb8db1e334512ce9e3a",
+      "benchmarks/rbpf_lu_phases_20261017.json": "4131b2f58e85a6d6aaeb18c67ec16a9af0556cb2a26a562c03c59f1a4a20e7f0",
+      "benchmarks/rbpf_lu_phases_completion_check_20261017.json": "43a3f87001556bcdb8fa0c1dcbb2d665fb79f3390fa5a9c647af53f52d12037d",
+      "benchmarks/rbpf_compact_scratch_20261017.json": "d849a00028621b59536a82243aa693a7d0d08b2fc1f609196297dc26e77b19ef",
+      "benchmarks/rbpf_compact_scratch_completion_check_20261017.json": "2ba2b7630673ef409ddca4fec500498a289928df0d968651843038f96ce96ebe",
+      "benchmarks/rbpf_score_host_phases_20261017.json": "2161778966a9fa2e7f35ac8d8b434c07ab5fcd0c5411d15e19777d3614fd5503",
+      "benchmarks/rbpf_score_host_phases_completion_check_20261017.json": "4db5304cae3fa1034fa81d96a164c3a0d0dc4a437ec89f4a0338f4551a13fce4",
+      "benchmarks/rbpf_cluster_batch_20261017.json": "ab3663c6ed9e1d59c222cde765a4cd675b3a4fa5710b706cadd1fda939cbfdd4",
+      "benchmarks/rbpf_cluster_batch_completion_check_20261017.json": "da273f6f3d3c865d852e64c03f4cb51cf7d559d72ac4098ac4432f22ffdfbf8a",
+      "benchmarks/rbpf_cluster_fast_guard_20261017.json": "579b801405348aa914fa136358467fc06ea0bfac69a6cd7de65f79dcbbb11430",
+      "benchmarks/rbpf_cluster_fast_guard_completion_check_20261017.json": "609e9151de95c9b1ffde63ba544cb2714d601540a00ccdf28f0ed1fe6916f019",
+      "benchmarks/rbpf_cluster_parameter_reuse_20261017.json": "694f4a9f93bb0915aeaf2e909fe0888c5c37a91a42aa43aeb68c5ff3f1b06c67",
+      "benchmarks/rbpf_cluster_parameter_reuse_completion_check_20261017.json": "9715bb6e2f12cf51ce53979d34034fe88d484b1d5ab5eeec21e55461a6e34dd2",
+      "benchmarks/rbpf_pf_boundaries_20261017.json": "985ca812be105737659c1aa5338b294b53764fbcc041bf00a3d758d4013372f5",
+      "benchmarks/rbpf_pf_boundaries_completion_check_20261017.json": "4d13ae3a6f6ef049af8b9a6c62d079133fc256bcb9af81c735589218131b41eb",
+      "benchmarks/rbpf_extend_support_20261017.json": "c02ad4d6b0d292cd595f798a24d604adc17a79b3dd9ad751a335c54c8b86d682",
+      "benchmarks/rbpf_extend_support_completion_check_20261017.json": "878142266c3a7872de1afff1d8b58e4b87b73279c49199ecec52bb5667c4a464",
+      "benchmarks/rbpf_versioned_staging_20261017.json": "7dc229c61846b3d1ae7723ff1ac0423188b875d84a949e6e1c0e737f3438194f",
+      "benchmarks/rbpf_versioned_staging_completion_check_20261017.json": "c235d8d67f039c9c7ba2d544936ba7fde571db9aeeb2e48884c462c36ac0e097",
+      "benchmarks/rbpf_weight_rows_20261017.json": "33713f57c8135b6d6850de5631fcb945d0d20d2494b0decfe7e529853c45b503",
+      "benchmarks/rbpf_weight_rows_completion_check_20261017.json": "df2cb9b672967ef8edf8ad43418129209625bfc9d4bee12359199aba4feaddf9",
+      "benchmarks/rbpf_initial_share_20261017.json": "a271490eb13bf0ede35cbbff0cdd62646789215c2380e8de2acfee0484f92371",
+      "benchmarks/rbpf_initial_share_completion_check_20261017.json": "4bd1f4d5ab625a922d197eaf3032559f6fcbb534b180038619f2f4b895cd4261",
+      "benchmarks/rbpf_qcedit_batch_20261017.json": "00d3b620c53cd7229dddf92fb408b28f6ea0178da2b35af14dfdccf76c563f7c",
+      "benchmarks/rbpf_qcedit_batch_completion_check_20261017.json": "4179d62e9284a7fc839a1af650c86aa1b34a881cb4ffa21f54f1eeae7fe24983",
+      "benchmarks/rbpf_preprocess_bundle_20261017.json": "4597c71f6d8a2b09bce374ec1baf01a132c1488c7df0d2ec95b14849bdd3378d",
+      "benchmarks/rbpf_preprocess_bundle_completion_check_20261017.json": "a2f06e655494c764b5e971c6954fbb43db84a89dec569ea888bdc0a1d07f66e6"
+    },
+    "archives_verified": {
+      "composite_geometry_candidate": {
+        "files": 305,
+        "manifest_sha256": "c5a0d912f148921b170b05f8eb1f4c0a0fa774ed62e4e278f2b672bf8b441b6e"
+      },
+      "pf_certified_division_rejected_20261016": {
+        "files": 94,
+        "manifest_sha256": "bdae75c0d2e7587e98dc2f6dfc86ca6d533d4604f25aee93c2398a68a0d24b05"
+      },
+      "rbpf_fgo_gpu_feasibility_20261016": {
+        "files": 149,
+        "manifest_sha256": "6854719596359dd1129e3c19bc74fef0f30830132d0f728e2b4667ae32c0f1ab"
+      },
+      "rbpf_likelihood_gpu_prototype_20261016": {
+        "files": 161,
+        "manifest_sha256": "e338e38ff4f52e9c11aaa0d4667ba60842e3902e0223ea1b25ded5805c4eb03c"
+      },
+      "rbpf_move_batch_integration_20261016": {
+        "files": 74,
+        "manifest_sha256": "ac31a335946f8b78909c41c837fcf35a5dfcc7a599ab79e34d4c9f9d925a28e8"
+      },
+      "rbpf_move_reuse_measured_source_20261016": {
+        "files": 1,
+        "manifest_sha256": "6f2dc57a14927150cb1ebb7c3b23c7b466197d17ef1aeea8449becabaf622145"
+      },
+      "rbpf_move_reuse_20261016": {
+        "files": 121,
+        "manifest_sha256": "c7b69513ee6e031774eb230d83a5d7a61fb3bfadd8163e5e97095667b5d93218"
+      },
+      "rbpf_epoch_memo_20261016": {
+        "files": 140,
+        "manifest_sha256": "35ec46c9f34924625376273054b9cb10acc49def9b0a7ccbe640b3ac0a0c435e"
+      },
+      "rbpf_proposal_reuse_20261016": {
+        "files": 84,
+        "manifest_sha256": "38ef475c10b65a1c208f6153cdedeb63a0d9ff35d7fcfc6c185ec962f305049b"
+      },
+      "rbpf_warp_likelihood_20261016": {
+        "files": 96,
+        "manifest_sha256": "4ed5c84af854b3e7414e912961a768551278d7d9086ba68ff9bf3ad615def45a"
+      },
+      "rbpf_warp_likelihood_text_correction_20261016": {
+        "files": 4,
+        "manifest_sha256": "d75888f7db8571ce798c6504b6c79a739dcbd8937710851027296c166d930075"
+      },
+      "rbpf_dd_pack_20261016": {
+        "files": 139,
+        "manifest_sha256": "8c6e10d94457fdaa6c73d825a86a679a0abc2e1dcbf87d77630eafd7fb0de0e5"
+      },
+      "rbpf_native_canonical_20261016": {
+        "files": 101,
+        "manifest_sha256": "d4cd45b5ffc110c931804314c60786aeb77391f9eec08f77cc0f273ea64ba91d"
+      },
+      "rbpf_parent_score_20261016": {
+        "files": 161,
+        "manifest_sha256": "25696234a36f1253c294ba92d0fceff2c799c7e9aee1ff45aae95feb7071e728"
+      },
+      "rbpf_component_mass_20261016": {
+        "files": 143,
+        "manifest_sha256": "3f1ec07899d1e991db9b120fe076d55b47b7648aaee487edaeb88edb7864daf9"
+      },
+      "rbpf_feedback_mass_20261016": {
+        "files": 130,
+        "manifest_sha256": "f44dad77d66367d2b70821fb033fc64e5a869a4647fbc225c033ca529c5c0da7"
+      },
+      "rbpf_shrink_20261016": {
+        "files": 157,
+        "manifest_sha256": "b812f3c78df09f769b68cd62318b0e437ed8cdb015af5093b2d5898de919dad3"
+      },
+      "rbpf_phase_profile_20261016": {
+        "files": 98,
+        "manifest_sha256": "5551e3d8ca990e9d236a8b90bbf93ef02cc63bb4a4e6ba5e9e6dc28d558196c9"
+      },
+      "rbpf_score_index_memo_20261016": {
+        "files": 187,
+        "manifest_sha256": "237a869eecf3ed0262a79194a8cfeea850657781fa8a2c36c1119533eb8d0182"
+      },
+      "rbpf_ordered_keys_20261016": {
+        "files": 154,
+        "manifest_sha256": "ce08a9383b4612471accd02e05039bea6eabf1b4dd3f940b860550953e3aa250"
+      },
+      "rbpf_native_staging_20261016": {
+        "files": 174,
+        "manifest_sha256": "3f3f88e3030b673c7f61cc9e1b64599eab0e254b351365ac6710b248475731be"
+      },
+      "rbpf_irls_identity_20261016": {
+        "files": 198,
+        "manifest_sha256": "f70e798c05dd997e0b9348059515d5a03dccec43d0b84877b5578dfeb5f43c51"
+      },
+      "rbpf_irls_replay_20261016": {
+        "files": 147,
+        "manifest_sha256": "0198f4b92f9a991f9d550e0e2341ec06e1a814d87935697a84b1221abe39a692"
+      },
+      "rbpf_fused_staging_20261016": {
+        "files": 246,
+        "manifest_sha256": "bb02cf3e8e87b131ace4c3a61bdff9bb7a8c39044830713f4461a6be09f56974"
+      },
+      "rbpf_call_profile_20261016": {
+        "files": 175,
+        "manifest_sha256": "707c689dcc844883452cdb2b0e49268c29284045e82f7da2f285e21df4338f5c"
+      },
+      "rbpf_ambiguity_initx_20261016": {
+        "files": 410,
+        "manifest_sha256": "1ed8bbfb3979c9659983dc5d72eedcb119bf802b1471ce8d1cf47b793ecbb744"
+      },
+      "rbpf_ambiguity_bookkeeping_20261016": {
+        "files": 347,
+        "manifest_sha256": "a1bac1e99727a2bd7ad81ec275af2ad7b898b0c1b219475e53969d5e90a50d06"
+      },
+      "rbpf_gpu_stream_20261016": {
+        "files": 179,
+        "manifest_sha256": "0858036b208df0fd1f8f535a4495dc729c8af919546fcb83d9732c6f796dab2d"
+      },
+      "rbpf_gpu_graph_20261017": {
+        "files": 180,
+        "manifest_sha256": "31db0dbe7d8987382402e4cc8764a6c6901010db6ce054f277cceb695cc35990"
+      },
+      "rbpf_sparse_normal_20261017": {
+        "files": 189,
+        "manifest_sha256": "9590f39e5badd67383e57e3fb289a7d08b88002ceb7f320bad41fcba9f8a9d1c"
+      },
+      "rbpf_gpu_stages_20261017": {
+        "files": 146,
+        "manifest_sha256": "1583640daba5175677bc5ab721ee9c4cfdda5797273ace039105b494e3460d2b"
+      },
+      "rbpf_fixed_lu_20261017": {
+        "files": 190,
+        "manifest_sha256": "77628776263597a94108c3ac3bfe3759b0797620909a1a547670c3294625e947"
+      },
+      "rbpf_register_lu_20261017": {
+        "files": 272,
+        "manifest_sha256": "ecd21c6aaf285e28cc6fa47c981d0d076ed123940f7805131d365a61087ae22e"
+      },
+      "rbpf_register_lu_skip_swap_20261017": {
+        "files": 204,
+        "manifest_sha256": "bfa37a04f08b51babdccfcc2ab3b49c7f67ca3a3e98e0067fe5e516d473b7d85"
+      },
+      "rbpf_register_lu_back_cache_20261017": {
+        "files": 207,
+        "manifest_sha256": "b15f445bb54464cd50c058215827e0e5dde6d1e8013f29f2a4ef8f37101702ef"
+      },
+      "rbpf_block_lu_20261017": {
+        "files": 211,
+        "manifest_sha256": "a6a26edaf9730f2397556d0bed18e7bcce8c01ed9d73d9cfc1278383c5319f58"
+      },
+      "rbpf_lu_phases_20261017": {
+        "files": 148,
+        "manifest_sha256": "903f764bde4fea4b05cfb35c6f148da73429f621a33a923184e1b474d6e7e505"
+      },
+      "rbpf_compact_scratch_20261017": {
+        "files": 209,
+        "manifest_sha256": "9d348ab80f7531274b051e3e5340d9b7c511f89c7fec7f97f46ea63ebf4ba961"
+      },
+      "rbpf_score_host_phases_20261017": {
+        "files": 133,
+        "manifest_sha256": "4151dbddcd7204edc6b6c293236e75ebb2f110abcf05913b8bf857ca71fc95e9"
+      },
+      "rbpf_cluster_batch_20261017": {
+        "files": 148,
+        "manifest_sha256": "1bfed72e3d1ad5209eb43432177f1adb0236da9323df449a009252b16b9ff0e8"
+      },
+      "rbpf_cluster_fast_guard_20261017": {
+        "files": 219,
+        "manifest_sha256": "47ddf65862f90a27af6e150f55fd9f21a457a672aeef1fbf25a845cbbf14fa04"
+      },
+      "rbpf_cluster_parameter_reuse_20261017": {
+        "files": 261,
+        "manifest_sha256": "4db44a52e369b0111d12f965350e806026c9c1b84108e2b2f0220c9a6b81e32a"
+      },
+      "rbpf_pf_boundaries_20261017": {
+        "manifest_sha256": "60cf3d32959c6f5f5c7b65aa65b445572f9d477f1ae77f769ae30f5f83bd4e27",
+        "files": 249
+      },
+      "rbpf_extend_support_20261017": {
+        "manifest_sha256": "fc5355a33091526c5cf43c91d95fc4b3b1f1eedad5c03999593ba77a8396b9fa",
+        "files": 313
+      },
+      "rbpf_versioned_staging_20261017": {
+        "manifest_sha256": "999cfa2bf0d7fc033a005f0ddac4f4afa60f7652d28dc604e062939d35584558",
+        "files": 359
+      },
+      "rbpf_weight_rows_20261017": {
+        "manifest_sha256": "8fd7bed723dfe93b790d8ebd0340d6653f68cb05f558e24d93da0058397f5260",
+        "files": 189
+      },
+      "rbpf_initial_share_20261017": {
+        "manifest_sha256": "afcdf48858f70a3fa9ee0d95fb28e7aac1b43ccd3dbbd15807903a75cd32f1d3",
+        "files": 245
+      },
+      "rbpf_qcedit_batch_20261017": {
+        "manifest_sha256": "a3529393c34ead9e0a86b68363737b34cf88ece522ae6702a410a8cf067cc367",
+        "files": 452
+      },
+      "rbpf_preprocess_bundle_20261017": {
+        "manifest_sha256": "e196f34393dd408f0705ed06239cffb5d53b9b9af0142c77db70baf6da658b59",
+        "files": 446
+      }
+    },
+    "product_diff_paths_vs_main": [
+      "python/gnss_gpu/double_reflection.py",
+      "python/gnss_gpu/pf_device_runtime.py",
+      "python/gnss_gpu/raytrace.py",
+      "python/gnss_gpu/realtime_runtime.py",
+      "python/gnss_gpu/reflection_diffraction.py",
+      "python/gnss_gpu/signal_sim.py",
+      "python/gnss_gpu/urban_signal_sim.py",
+      "src/raytrace/bvh.cu"
+    ],
+    "production_changes": [],
+    "default_changed": false,
+    "archived_files_verified": 9345,
+    "source_sha256": {
+      "benchmarks/rbpf_extend_support.py": "0ddf1e2f64ea77ae7d9bae88c57380ab4562589b8e28bde72042ed26a8a38b9c",
+      "tests/test_rbpf_extend_support.py": "b2a7e79b1b08c1cff75159758d1de3658fd6946d5e7e5507e0e22c0bd22e97f4",
+      "benchmarks/probes/rbpf_extend_support/CMakeLists.txt": "5e947b9f78ebd0c017d8300928d8fccfe5344d845c4c831612472ba9f0b13e1c",
+      "benchmarks/probes/rbpf_extend_support/README.md": "3d241f44fb0e0d4ee7d345fb332bd563e0af7af92a44a755a9e0b6d509e9c412",
+      "benchmarks/probes/rbpf_extend_support/support.cpp": "223016f9f6ec7899c0c2c35565db001ea0f5beb920a76502ef4d06120e4fcc38"
+    },
+    "verified": true
+  },
+  "audit": {
+    "timestamp_utc": "2026-10-17T11:48:57.901531+00:00",
+    "runner_sha256": "030a8ab704a67a3462a0c2f32b4ecd10a35a492d8a2ed06c12f06e04c7bd1380",
+    "verified": true,
+    "plan_sha256": "0dde7883a792f77e679af7b97b3a75b2446697a202fa7ab062619c1c08f86526",
+    "run_sha256": "550c8e416994fc333c8b96127b76a0b3bd8a34cbc99520513edf643d00ddd71f",
+    "records": [
+      {
+        "case": {
+          "name": "r3_seed0_clocks_warm_A",
+          "label": "A",
+          "warm": true,
+          "round": -1
+        },
+        "summary": {
+          "all": {
+            "epochs": 400,
+            "wall_ns": 56213594600,
+            "process_cpu_ns": 50984375000,
+            "thread_cpu_ns": 50984375000,
+            "wall_minus_thread_cpu_ns": 5229219600,
+            "wall_minus_process_cpu_ns": 5229219600,
+            "process_minus_thread_cpu_ns": 0,
+            "thread_cpu_over_wall": 0.9069758901345903,
+            "process_cpu_over_wall": 0.9069758901345903,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          },
+          "1": {
+            "epochs": 200,
+            "wall_ns": 37034534200,
+            "process_cpu_ns": 33640625000,
+            "thread_cpu_ns": 33640625000,
+            "wall_minus_thread_cpu_ns": 3393909200,
+            "wall_minus_process_cpu_ns": 3393909200,
+            "process_minus_thread_cpu_ns": 0,
+            "thread_cpu_over_wall": 0.9083582587627091,
+            "process_cpu_over_wall": 0.9083582587627091,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          },
+          "2": {
+            "epochs": 200,
+            "wall_ns": 19179060400,
+            "process_cpu_ns": 17343750000,
+            "thread_cpu_ns": 17343750000,
+            "wall_minus_thread_cpu_ns": 1835310400,
+            "wall_minus_process_cpu_ns": 1835310400,
+            "process_minus_thread_cpu_ns": 0,
+            "thread_cpu_over_wall": 0.9043065529946399,
+            "process_cpu_over_wall": 0.9043065529946399,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          }
+        },
+        "clocks_sha256": "d1e5cdfcd06b3d6e40986e591070488b8ec325246ef200f27aa88a1041afd394",
+        "trajectory_sha256": "5b889c5706a1d9658174a32e954b460c4e9d4719ff0ae1de2d97650aae3d8ba4",
+        "all_trajectory_array_bits_equal": true,
+        "all_configs_and_input_equal": true
+      },
+      {
+        "case": {
+          "name": "r3_seed0_clocks_warm_AA",
+          "label": "AA",
+          "warm": true,
+          "round": -1
+        },
+        "summary": {
+          "all": {
+            "epochs": 400,
+            "wall_ns": 22332679900,
+            "process_cpu_ns": 20203125000,
+            "thread_cpu_ns": 20203125000,
+            "wall_minus_thread_cpu_ns": 2129554900,
+            "wall_minus_process_cpu_ns": 2129554900,
+            "process_minus_thread_cpu_ns": 0,
+            "thread_cpu_over_wall": 0.904644005576778,
+            "process_cpu_over_wall": 0.904644005576778,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          },
+          "1": {
+            "epochs": 200,
+            "wall_ns": 8933791800,
+            "process_cpu_ns": 8015625000,
+            "thread_cpu_ns": 8015625000,
+            "wall_minus_thread_cpu_ns": 918166800,
+            "wall_minus_process_cpu_ns": 918166800,
+            "process_minus_thread_cpu_ns": 0,
+            "thread_cpu_over_wall": 0.8972254088124149,
+            "process_cpu_over_wall": 0.8972254088124149,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          },
+          "2": {
+            "epochs": 200,
+            "wall_ns": 13398888100,
+            "process_cpu_ns": 12187500000,
+            "thread_cpu_ns": 12187500000,
+            "wall_minus_thread_cpu_ns": 1211388100,
+            "wall_minus_process_cpu_ns": 1211388100,
+            "process_minus_thread_cpu_ns": 0,
+            "thread_cpu_over_wall": 0.9095904010124541,
+            "process_cpu_over_wall": 0.9095904010124541,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          }
+        },
+        "clocks_sha256": "2c5c091eab2545e7cd07172715a50924306ec0732277322f3d502493d79cdb06",
+        "trajectory_sha256": "5b889c5706a1d9658174a32e954b460c4e9d4719ff0ae1de2d97650aae3d8ba4",
+        "all_trajectory_array_bits_equal": true,
+        "all_configs_and_input_equal": true
+      },
+      {
+        "case": {
+          "name": "r3_seed0_clocks_r0_A",
+          "label": "A",
+          "warm": false,
+          "round": 0
+        },
+        "summary": {
+          "all": {
+            "epochs": 400,
+            "wall_ns": 22596481900,
+            "process_cpu_ns": 20328125000,
+            "thread_cpu_ns": 20328125000,
+            "wall_minus_thread_cpu_ns": 2268356900,
+            "wall_minus_process_cpu_ns": 2268356900,
+            "process_minus_thread_cpu_ns": 0,
+            "thread_cpu_over_wall": 0.8996145988548775,
+            "process_cpu_over_wall": 0.8996145988548775,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          },
+          "1": {
+            "epochs": 200,
+            "wall_ns": 7846951800,
+            "process_cpu_ns": 7281250000,
+            "thread_cpu_ns": 7281250000,
+            "wall_minus_thread_cpu_ns": 565701800,
+            "wall_minus_process_cpu_ns": 565701800,
+            "process_minus_thread_cpu_ns": 0,
+            "thread_cpu_over_wall": 0.9279080827283787,
+            "process_cpu_over_wall": 0.9279080827283787,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          },
+          "2": {
+            "epochs": 200,
+            "wall_ns": 14749530100,
+            "process_cpu_ns": 13046875000,
+            "thread_cpu_ns": 13046875000,
+            "wall_minus_thread_cpu_ns": 1702655100,
+            "wall_minus_process_cpu_ns": 1702655100,
+            "process_minus_thread_cpu_ns": 0,
+            "thread_cpu_over_wall": 0.8845620783539402,
+            "process_cpu_over_wall": 0.8845620783539402,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          }
+        },
+        "clocks_sha256": "ad2e023b9a5d601bd0e40c2a4aa6488c5dffff3c550701b5afd5a9bde217c86e",
+        "trajectory_sha256": "5b889c5706a1d9658174a32e954b460c4e9d4719ff0ae1de2d97650aae3d8ba4",
+        "all_trajectory_array_bits_equal": true,
+        "all_configs_and_input_equal": true
+      },
+      {
+        "case": {
+          "name": "r3_seed0_clocks_r0_AA",
+          "label": "AA",
+          "warm": false,
+          "round": 0
+        },
+        "summary": {
+          "all": {
+            "epochs": 400,
+            "wall_ns": 28021355200,
+            "process_cpu_ns": 25515625000,
+            "thread_cpu_ns": 25500000000,
+            "wall_minus_thread_cpu_ns": 2521355200,
+            "wall_minus_process_cpu_ns": 2505730200,
+            "process_minus_thread_cpu_ns": 15625000,
+            "thread_cpu_over_wall": 0.9100202262879848,
+            "process_cpu_over_wall": 0.9105778367207593,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          },
+          "1": {
+            "epochs": 200,
+            "wall_ns": 10543254600,
+            "process_cpu_ns": 9484375000,
+            "thread_cpu_ns": 9468750000,
+            "wall_minus_thread_cpu_ns": 1074504600,
+            "wall_minus_process_cpu_ns": 1058879600,
+            "process_minus_thread_cpu_ns": 15625000,
+            "thread_cpu_over_wall": 0.8980860615848165,
+            "process_cpu_over_wall": 0.8995680517854515,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          },
+          "2": {
+            "epochs": 200,
+            "wall_ns": 17478100600,
+            "process_cpu_ns": 16031250000,
+            "thread_cpu_ns": 16031250000,
+            "wall_minus_thread_cpu_ns": 1446850600,
+            "wall_minus_process_cpu_ns": 1446850600,
+            "process_minus_thread_cpu_ns": 0,
+            "thread_cpu_over_wall": 0.9172192314764455,
+            "process_cpu_over_wall": 0.9172192314764455,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          }
+        },
+        "clocks_sha256": "9a8927f9954e199dbdcbc047d2e8114d9b08f9a49b2dd1360c9113a104c00d18",
+        "trajectory_sha256": "5b889c5706a1d9658174a32e954b460c4e9d4719ff0ae1de2d97650aae3d8ba4",
+        "all_trajectory_array_bits_equal": true,
+        "all_configs_and_input_equal": true
+      },
+      {
+        "case": {
+          "name": "r3_seed0_clocks_r1_AA",
+          "label": "AA",
+          "warm": false,
+          "round": 1
+        },
+        "summary": {
+          "all": {
+            "epochs": 400,
+            "wall_ns": 27945866100,
+            "process_cpu_ns": 25890625000,
+            "thread_cpu_ns": 25875000000,
+            "wall_minus_thread_cpu_ns": 2070866100,
+            "wall_minus_process_cpu_ns": 2055241100,
+            "process_minus_thread_cpu_ns": 15625000,
+            "thread_cpu_over_wall": 0.925897229572713,
+            "process_cpu_over_wall": 0.9264563462572377,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          },
+          "1": {
+            "epochs": 200,
+            "wall_ns": 13783524000,
+            "process_cpu_ns": 12671875000,
+            "thread_cpu_ns": 12656250000,
+            "wall_minus_thread_cpu_ns": 1127274000,
+            "wall_minus_process_cpu_ns": 1111649000,
+            "process_minus_thread_cpu_ns": 15625000,
+            "thread_cpu_over_wall": 0.9182158350796211,
+            "process_cpu_over_wall": 0.9193494348760157,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          },
+          "2": {
+            "epochs": 200,
+            "wall_ns": 14162342100,
+            "process_cpu_ns": 13218750000,
+            "thread_cpu_ns": 13218750000,
+            "wall_minus_thread_cpu_ns": 943592100,
+            "wall_minus_process_cpu_ns": 943592100,
+            "process_minus_thread_cpu_ns": 0,
+            "thread_cpu_over_wall": 0.9333731600792217,
+            "process_cpu_over_wall": 0.9333731600792217,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          }
+        },
+        "clocks_sha256": "f66cbb9e2552d09fbe3aa73dcf978a4ce4be3c9e312cf99afb118a930d96f7bb",
+        "trajectory_sha256": "5b889c5706a1d9658174a32e954b460c4e9d4719ff0ae1de2d97650aae3d8ba4",
+        "all_trajectory_array_bits_equal": true,
+        "all_configs_and_input_equal": true
+      },
+      {
+        "case": {
+          "name": "r3_seed0_clocks_r1_A",
+          "label": "A",
+          "warm": false,
+          "round": 1
+        },
+        "summary": {
+          "all": {
+            "epochs": 400,
+            "wall_ns": 24687940900,
+            "process_cpu_ns": 22359375000,
+            "thread_cpu_ns": 22359375000,
+            "wall_minus_thread_cpu_ns": 2328565900,
+            "wall_minus_process_cpu_ns": 2328565900,
+            "process_minus_thread_cpu_ns": 0,
+            "thread_cpu_over_wall": 0.9056800277742078,
+            "process_cpu_over_wall": 0.9056800277742078,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          },
+          "1": {
+            "epochs": 200,
+            "wall_ns": 9598105200,
+            "process_cpu_ns": 8687500000,
+            "thread_cpu_ns": 8687500000,
+            "wall_minus_thread_cpu_ns": 910605200,
+            "wall_minus_process_cpu_ns": 910605200,
+            "process_minus_thread_cpu_ns": 0,
+            "thread_cpu_over_wall": 0.9051265660226354,
+            "process_cpu_over_wall": 0.9051265660226354,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          },
+          "2": {
+            "epochs": 200,
+            "wall_ns": 15089835700,
+            "process_cpu_ns": 13671875000,
+            "thread_cpu_ns": 13671875000,
+            "wall_minus_thread_cpu_ns": 1417960700,
+            "wall_minus_process_cpu_ns": 1417960700,
+            "process_minus_thread_cpu_ns": 0,
+            "thread_cpu_over_wall": 0.9060320650144653,
+            "process_cpu_over_wall": 0.9060320650144653,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          }
+        },
+        "clocks_sha256": "67b5541fd565b8d23d023e459260d8e2167efdd92fe452690d263b7c4ce39ccd",
+        "trajectory_sha256": "5b889c5706a1d9658174a32e954b460c4e9d4719ff0ae1de2d97650aae3d8ba4",
+        "all_trajectory_array_bits_equal": true,
+        "all_configs_and_input_equal": true
+      },
+      {
+        "case": {
+          "name": "r3_seed0_clocks_r2_A",
+          "label": "A",
+          "warm": false,
+          "round": 2
+        },
+        "summary": {
+          "all": {
+            "epochs": 400,
+            "wall_ns": 24979490300,
+            "process_cpu_ns": 22468750000,
+            "thread_cpu_ns": 22468750000,
+            "wall_minus_thread_cpu_ns": 2510740300,
+            "wall_minus_process_cpu_ns": 2510740300,
+            "process_minus_thread_cpu_ns": 0,
+            "thread_cpu_over_wall": 0.8994879291031811,
+            "process_cpu_over_wall": 0.8994879291031811,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          },
+          "1": {
+            "epochs": 200,
+            "wall_ns": 9832587300,
+            "process_cpu_ns": 8921875000,
+            "thread_cpu_ns": 8921875000,
+            "wall_minus_thread_cpu_ns": 910712300,
+            "wall_minus_process_cpu_ns": 910712300,
+            "process_minus_thread_cpu_ns": 0,
+            "thread_cpu_over_wall": 0.9073781628158033,
+            "process_cpu_over_wall": 0.9073781628158033,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          },
+          "2": {
+            "epochs": 200,
+            "wall_ns": 15146903000,
+            "process_cpu_ns": 13546875000,
+            "thread_cpu_ns": 13546875000,
+            "wall_minus_thread_cpu_ns": 1600028000,
+            "wall_minus_process_cpu_ns": 1600028000,
+            "process_minus_thread_cpu_ns": 0,
+            "thread_cpu_over_wall": 0.8943659967981573,
+            "process_cpu_over_wall": 0.8943659967981573,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          }
+        },
+        "clocks_sha256": "0f42eb449f954432c33c19ad1feecac7525f4bca855af99fcf92348a78d97179",
+        "trajectory_sha256": "5b889c5706a1d9658174a32e954b460c4e9d4719ff0ae1de2d97650aae3d8ba4",
+        "all_trajectory_array_bits_equal": true,
+        "all_configs_and_input_equal": true
+      },
+      {
+        "case": {
+          "name": "r3_seed0_clocks_r2_AA",
+          "label": "AA",
+          "warm": false,
+          "round": 2
+        },
+        "summary": {
+          "all": {
+            "epochs": 400,
+            "wall_ns": 21381609300,
+            "process_cpu_ns": 20312500000,
+            "thread_cpu_ns": 20312500000,
+            "wall_minus_thread_cpu_ns": 1069109300,
+            "wall_minus_process_cpu_ns": 1069109300,
+            "process_minus_thread_cpu_ns": 0,
+            "thread_cpu_over_wall": 0.9499986514111451,
+            "process_cpu_over_wall": 0.9499986514111451,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          },
+          "1": {
+            "epochs": 200,
+            "wall_ns": 8014324400,
+            "process_cpu_ns": 7640625000,
+            "thread_cpu_ns": 7640625000,
+            "wall_minus_thread_cpu_ns": 373699400,
+            "wall_minus_process_cpu_ns": 373699400,
+            "process_minus_thread_cpu_ns": 0,
+            "thread_cpu_over_wall": 0.9533710664369912,
+            "process_cpu_over_wall": 0.9533710664369912,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          },
+          "2": {
+            "epochs": 200,
+            "wall_ns": 13367284900,
+            "process_cpu_ns": 12671875000,
+            "thread_cpu_ns": 12671875000,
+            "wall_minus_thread_cpu_ns": 695409900,
+            "wall_minus_process_cpu_ns": 695409900,
+            "process_minus_thread_cpu_ns": 0,
+            "thread_cpu_over_wall": 0.947976727869397,
+            "process_cpu_over_wall": 0.947976727869397,
+            "observed_positive_CPU_delta_gcd_ns": {
+              "process_cpu_ns": 15625000,
+              "thread_cpu_ns": 15625000
+            },
+            "zero_CPU_epochs": {
+              "process_cpu_ns": 0,
+              "thread_cpu_ns": 0
+            }
+          }
+        },
+        "clocks_sha256": "68ed175fa96e28b3fd5516c4a29852705967a9c89dd18d1bd72255dce15ed3c4",
+        "trajectory_sha256": "5b889c5706a1d9658174a32e954b460c4e9d4719ff0ae1de2d97650aae3d8ba4",
+        "all_trajectory_array_bits_equal": true,
+        "all_configs_and_input_equal": true
+      }
+    ],
+    "AA_comparison": {
+      "all": {
+        "metrics": {
+          "wall_ns": {
+            "rounds": [
+              {
+                "round": 0,
+                "A_ns": 22596481900,
+                "AA_ns": 28021355200,
+                "relative_difference_percent": -24.00760137798265
+              },
+              {
+                "round": 1,
+                "A_ns": 24687940900,
+                "AA_ns": 27945866100,
+                "relative_difference_percent": -13.196423359876075
+              },
+              {
+                "round": 2,
+                "A_ns": 24979490300,
+                "AA_ns": 21381609300,
+                "relative_difference_percent": 14.403340327564651
+              }
+            ],
+            "paired_difference_median_percent": -13.196423359876075
+          },
+          "process_cpu_ns": {
+            "rounds": [
+              {
+                "round": 0,
+                "A_ns": 20328125000,
+                "AA_ns": 25515625000,
+                "relative_difference_percent": -25.518831667947733
+              },
+              {
+                "round": 1,
+                "A_ns": 22359375000,
+                "AA_ns": 25890625000,
+                "relative_difference_percent": -15.793151642208244
+              },
+              {
+                "round": 2,
+                "A_ns": 22468750000,
+                "AA_ns": 20312500000,
+                "relative_difference_percent": 9.596662030598054
+              }
+            ],
+            "paired_difference_median_percent": -15.793151642208244
+          },
+          "thread_cpu_ns": {
+            "rounds": [
+              {
+                "round": 0,
+                "A_ns": 20328125000,
+                "AA_ns": 25500000000,
+                "relative_difference_percent": -25.441967717140663
+              },
+              {
+                "round": 1,
+                "A_ns": 22359375000,
+                "AA_ns": 25875000000,
+                "relative_difference_percent": -15.723270440251572
+              },
+              {
+                "round": 2,
+                "A_ns": 22468750000,
+                "AA_ns": 20312500000,
+                "relative_difference_percent": 9.596662030598054
+              }
+            ],
+            "paired_difference_median_percent": -15.723270440251572
+          }
+        },
+        "instrumented_thread_CPU_over_wall_range": [
+          0.8994879291031811,
+          0.9499986514111451
+        ]
+      },
+      "1": {
+        "metrics": {
+          "wall_ns": {
+            "rounds": [
+              {
+                "round": 0,
+                "A_ns": 7846951800,
+                "AA_ns": 10543254600,
+                "relative_difference_percent": -34.361149000558406
+              },
+              {
+                "round": 1,
+                "A_ns": 9598105200,
+                "AA_ns": 13783524000,
+                "relative_difference_percent": -43.60671937623689
+              },
+              {
+                "round": 2,
+                "A_ns": 9832587300,
+                "AA_ns": 8014324400,
+                "relative_difference_percent": 18.492212115930055
+              }
+            ],
+            "paired_difference_median_percent": -34.361149000558406
+          },
+          "process_cpu_ns": {
+            "rounds": [
+              {
+                "round": 0,
+                "A_ns": 7281250000,
+                "AA_ns": 9484375000,
+                "relative_difference_percent": -30.257510729613735
+              },
+              {
+                "round": 1,
+                "A_ns": 8687500000,
+                "AA_ns": 12671875000,
+                "relative_difference_percent": -45.86330935251798
+              },
+              {
+                "round": 2,
+                "A_ns": 8921875000,
+                "AA_ns": 7640625000,
+                "relative_difference_percent": 14.36077057793345
+              }
+            ],
+            "paired_difference_median_percent": -30.257510729613735
+          },
+          "thread_cpu_ns": {
+            "rounds": [
+              {
+                "round": 0,
+                "A_ns": 7281250000,
+                "AA_ns": 9468750000,
+                "relative_difference_percent": -30.042918454935624
+              },
+              {
+                "round": 1,
+                "A_ns": 8687500000,
+                "AA_ns": 12656250000,
+                "relative_difference_percent": -45.68345323741007
+              },
+              {
+                "round": 2,
+                "A_ns": 8921875000,
+                "AA_ns": 7640625000,
+                "relative_difference_percent": 14.36077057793345
+              }
+            ],
+            "paired_difference_median_percent": -30.042918454935624
+          }
+        },
+        "instrumented_thread_CPU_over_wall_range": [
+          0.8980860615848165,
+          0.9533710664369912
+        ]
+      },
+      "2": {
+        "metrics": {
+          "wall_ns": {
+            "rounds": [
+              {
+                "round": 0,
+                "A_ns": 14749530100,
+                "AA_ns": 17478100600,
+                "relative_difference_percent": -18.49937239695521
+              },
+              {
+                "round": 1,
+                "A_ns": 15089835700,
+                "AA_ns": 14162342100,
+                "relative_difference_percent": 6.146479116402838
+              },
+              {
+                "round": 2,
+                "A_ns": 15146903000,
+                "AA_ns": 13367284900,
+                "relative_difference_percent": 11.749055896112887
+              }
+            ],
+            "paired_difference_median_percent": 6.146479116402838
+          },
+          "process_cpu_ns": {
+            "rounds": [
+              {
+                "round": 0,
+                "A_ns": 13046875000,
+                "AA_ns": 16031250000,
+                "relative_difference_percent": -22.874251497005986
+              },
+              {
+                "round": 1,
+                "A_ns": 13671875000,
+                "AA_ns": 13218750000,
+                "relative_difference_percent": 3.314285714285714
+              },
+              {
+                "round": 2,
+                "A_ns": 13546875000,
+                "AA_ns": 12671875000,
+                "relative_difference_percent": 6.459054209919262
+              }
+            ],
+            "paired_difference_median_percent": 3.314285714285714
+          },
+          "thread_cpu_ns": {
+            "rounds": [
+              {
+                "round": 0,
+                "A_ns": 13046875000,
+                "AA_ns": 16031250000,
+                "relative_difference_percent": -22.874251497005986
+              },
+              {
+                "round": 1,
+                "A_ns": 13671875000,
+                "AA_ns": 13218750000,
+                "relative_difference_percent": 3.314285714285714
+              },
+              {
+                "round": 2,
+                "A_ns": 13546875000,
+                "AA_ns": 12671875000,
+                "relative_difference_percent": 6.459054209919262
+              }
+            ],
+            "paired_difference_median_percent": 3.314285714285714
+          }
+        },
+        "instrumented_thread_CPU_over_wall_range": [
+          0.8845620783539402,
+          0.947976727869397
+        ]
+      }
+    },
+    "complete_RTK_prefixes": 8,
+    "complete_RTK_epochs": 3200,
+    "PF_calls": 1600,
+    "all_trajectory_array_bits_equal": true,
+    "all_configs_and_inputs_equal": true,
+    "all_source_external_and_binary_hashes_equal": true,
+    "legacy_analysis": {
+      "audit_sha256": "27673b7ba2012da49f20fa8a6232bf620121fadce2caf9f07b018adbbf8a82b3",
+      "gate_still_failed": true,
+      "all18_raw_runs": [
+        {
+          "case": {
+            "name": "r3_seed0_route_warm_reference",
+            "mode": "native_cpu",
+            "cluster_relin": 0,
+            "variant": "reference",
+            "warm": true,
+            "round": -1,
+            "accuracy_reference": "dist/rbpf_feedback_mass_field_20261016/r3_seed0_feedback_cpu_c0"
+          },
+          "all400_ns": 44287424800,
+          "phase1_ns": 29456707800,
+          "phase2_ns": 14830717000,
+          "first2_ns": 21512477600,
+          "blocks50_ns": [
+            23250849100,
+            2060879400,
+            2103761500,
+            2041217800,
+            4662157700,
+            3564102600,
+            2938336800,
+            3666119900
+          ],
+          "phase2_median_epoch_ns": 62852800.0,
+          "performance_sha256": "c39c7bca34698d7ce3742acb26d64739789bfda3ad06b09f7687972408bd8b8d"
+        },
+        {
+          "case": {
+            "name": "r3_seed0_route_warm_batch",
+            "mode": "native_cpu",
+            "cluster_relin": 0,
+            "variant": "batch",
+            "warm": true,
+            "round": -1,
+            "accuracy_reference": "dist/rbpf_feedback_mass_field_20261016/r3_seed0_feedback_cpu_c0"
+          },
+          "all400_ns": 21520452800,
+          "phase1_ns": 8880261400,
+          "phase2_ns": 12640191400,
+          "first2_ns": 3360193700,
+          "blocks50_ns": [
+            4864140800,
+            1361549800,
+            1364155500,
+            1290415300,
+            2691211400,
+            3089159500,
+            3085270100,
+            3774550400
+          ],
+          "phase2_median_epoch_ns": 57888600.0,
+          "performance_sha256": "7e2dcebc6b3914f99b9477e5c75b4e68580237b78922e52ce3ec3df94994775a"
+        },
+        {
+          "case": {
+            "name": "r3_seed0_route_warm_AA",
+            "mode": "native_cpu",
+            "cluster_relin": 0,
+            "variant": "AA",
+            "warm": true,
+            "round": -1,
+            "accuracy_reference": "dist/rbpf_feedback_mass_field_20261016/r3_seed0_feedback_cpu_c0"
+          },
+          "all400_ns": 30556507800,
+          "phase1_ns": 11896246700,
+          "phase2_ns": 18660261100,
+          "first2_ns": 1642483100,
+          "blocks50_ns": [
+            4078129700,
+            2633795200,
+            2529678900,
+            2654642900,
+            5185334500,
+            4903412200,
+            4635673300,
+            3935841100
+          ],
+          "phase2_median_epoch_ns": 88185000.0,
+          "performance_sha256": "6efe5c47b985a3473fce487b1469a54db4670eecbe8ccb2e2f58822e838631ed"
+        },
+        {
+          "case": {
+            "name": "r3_seed0_route_r0_reference",
+            "mode": "native_cpu",
+            "cluster_relin": 0,
+            "variant": "reference",
+            "warm": false,
+            "round": 0,
+            "accuracy_reference": "dist/rbpf_feedback_mass_field_20261016/r3_seed0_feedback_cpu_c0"
+          },
+          "all400_ns": 31176738600,
+          "phase1_ns": 13014531100,
+          "phase2_ns": 18162207500,
+          "first2_ns": 1913608000,
+          "blocks50_ns": [
+            4898903300,
+            2945033300,
+            2492952000,
+            2677642500,
+            5200670900,
+            4892095500,
+            4093451300,
+            3975989800
+          ],
+          "phase2_median_epoch_ns": 85689450.0,
+          "performance_sha256": "96a8a6b999420699a53af5fd986574a0e7d108ca7b9e8ae6473a51688eefe49c"
+        },
+        {
+          "case": {
+            "name": "r3_seed0_route_r0_batch",
+            "mode": "native_cpu",
+            "cluster_relin": 0,
+            "variant": "batch",
+            "warm": false,
+            "round": 0,
+            "accuracy_reference": "dist/rbpf_feedback_mass_field_20261016/r3_seed0_feedback_cpu_c0"
+          },
+          "all400_ns": 20338835200,
+          "phase1_ns": 7650252300,
+          "phase2_ns": 12688582900,
+          "first2_ns": 1334765700,
+          "blocks50_ns": [
+            2730736400,
+            1953485600,
+            1545672800,
+            1420357500,
+            3010181700,
+            3257186000,
+            3193252300,
+            3227962900
+          ],
+          "phase2_median_epoch_ns": 60255100.0,
+          "performance_sha256": "801f7bb2660d81c3da36c2906858370e4d84916bf90ce05e00648e47aaba019c"
+        },
+        {
+          "case": {
+            "name": "r3_seed0_route_r0_AA",
+            "mode": "native_cpu",
+            "cluster_relin": 0,
+            "variant": "AA",
+            "warm": false,
+            "round": 0,
+            "accuracy_reference": "dist/rbpf_feedback_mass_field_20261016/r3_seed0_feedback_cpu_c0"
+          },
+          "all400_ns": 20908002000,
+          "phase1_ns": 8316377200,
+          "phase2_ns": 12591624800,
+          "first2_ns": 1299713400,
+          "blocks50_ns": [
+            3049084100,
+            1650198200,
+            1894515600,
+            1722579300,
+            3263077300,
+            3170069400,
+            2945160700,
+            3213317400
+          ],
+          "phase2_median_epoch_ns": 57598150.0,
+          "performance_sha256": "98597055f92b29c275f13fdba0a41e21171981bc047422301a2edf9e40761828"
+        },
+        {
+          "case": {
+            "name": "r3_seed0_route_r1_batch",
+            "mode": "native_cpu",
+            "cluster_relin": 0,
+            "variant": "batch",
+            "warm": false,
+            "round": 1,
+            "accuracy_reference": "dist/rbpf_feedback_mass_field_20261016/r3_seed0_feedback_cpu_c0"
+          },
+          "all400_ns": 15664817300,
+          "phase1_ns": 6467358600,
+          "phase2_ns": 9197458700,
+          "first2_ns": 1068570400,
+          "blocks50_ns": [
+            2417582900,
+            1147207200,
+            1254513900,
+            1648054600,
+            2376197500,
+            2532964800,
+            2074269700,
+            2214026700
+          ],
+          "phase2_median_epoch_ns": 43029900.0,
+          "performance_sha256": "8bac168403f1ab5d29b4b3bc0e502d50219f57d271e154880cbafd6618200eba"
+        },
+        {
+          "case": {
+            "name": "r3_seed0_route_r1_AA",
+            "mode": "native_cpu",
+            "cluster_relin": 0,
+            "variant": "AA",
+            "warm": false,
+            "round": 1,
+            "accuracy_reference": "dist/rbpf_feedback_mass_field_20261016/r3_seed0_feedback_cpu_c0"
+          },
+          "all400_ns": 24180236600,
+          "phase1_ns": 7853198400,
+          "phase2_ns": 16327038200,
+          "first2_ns": 1027489200,
+          "blocks50_ns": [
+            2551454300,
+            1638099100,
+            1644333800,
+            2019311200,
+            4794269000,
+            4337582100,
+            3780289600,
+            3414897500
+          ],
+          "phase2_median_epoch_ns": 80680050.0,
+          "performance_sha256": "79dcf994b540786e35f561742dffbb451779e43d5da7d343eb6ed6f505409ce4"
+        },
+        {
+          "case": {
+            "name": "r3_seed0_route_r1_reference",
+            "mode": "native_cpu",
+            "cluster_relin": 0,
+            "variant": "reference",
+            "warm": false,
+            "round": 1,
+            "accuracy_reference": "dist/rbpf_feedback_mass_field_20261016/r3_seed0_feedback_cpu_c0"
+          },
+          "all400_ns": 29841830000,
+          "phase1_ns": 11242647100,
+          "phase2_ns": 18599182900,
+          "first2_ns": 1474419200,
+          "blocks50_ns": [
+            4093643300,
+            2204209300,
+            2594126400,
+            2350668100,
+            4044002600,
+            4795031900,
+            4822435800,
+            4937712600
+          ],
+          "phase2_median_epoch_ns": 91389700.0,
+          "performance_sha256": "00eacafac19b9ab4b4ab446fba4f64fa7d5b5e8ff5f8c8ca985d5789f5560539"
+        },
+        {
+          "case": {
+            "name": "r3_seed0_route_r2_AA",
+            "mode": "native_cpu",
+            "cluster_relin": 0,
+            "variant": "AA",
+            "warm": false,
+            "round": 2,
+            "accuracy_reference": "dist/rbpf_feedback_mass_field_20261016/r3_seed0_feedback_cpu_c0"
+          },
+          "all400_ns": 26354642800,
+          "phase1_ns": 9186066900,
+          "phase2_ns": 17168575900,
+          "first2_ns": 1227977600,
+          "blocks50_ns": [
+            3191126400,
+            1990080200,
+            1979268100,
+            2025592200,
+            3682421800,
+            4760689000,
+            4039862600,
+            4685602500
+          ],
+          "phase2_median_epoch_ns": 78766800.0,
+          "performance_sha256": "34c08dcab8e8cc7ad7a97a8024f9a3c992d5c5fbb9ffe445893167eb9e449757"
+        },
+        {
+          "case": {
+            "name": "r3_seed0_route_r2_reference",
+            "mode": "native_cpu",
+            "cluster_relin": 0,
+            "variant": "reference",
+            "warm": false,
+            "round": 2,
+            "accuracy_reference": "dist/rbpf_feedback_mass_field_20261016/r3_seed0_feedback_cpu_c0"
+          },
+          "all400_ns": 28360688600,
+          "phase1_ns": 10706236000,
+          "phase2_ns": 17654452600,
+          "first2_ns": 1412137800,
+          "blocks50_ns": [
+            4421814800,
+            2124894400,
+            1986443800,
+            2173083000,
+            5096535200,
+            4997663400,
+            3670939000,
+            3889315000
+          ],
+          "phase2_median_epoch_ns": 87822450.0,
+          "performance_sha256": "61bd42b5f14094ebd9e2d1b7e9c052f96c70a992f19b26f1036348d66db2ecd9"
+        },
+        {
+          "case": {
+            "name": "r3_seed0_route_r2_batch",
+            "mode": "native_cpu",
+            "cluster_relin": 0,
+            "variant": "batch",
+            "warm": false,
+            "round": 2,
+            "accuracy_reference": "dist/rbpf_feedback_mass_field_20261016/r3_seed0_feedback_cpu_c0"
+          },
+          "all400_ns": 22552846700,
+          "phase1_ns": 8146375200,
+          "phase2_ns": 14406471500,
+          "first2_ns": 1361444700,
+          "blocks50_ns": [
+            3185195400,
+            1470279500,
+            1954166800,
+            1536733500,
+            3627154500,
+            4296702300,
+            3384951000,
+            3097663700
+          ],
+          "phase2_median_epoch_ns": 66410250.0,
+          "performance_sha256": "719a1d500fadc7363651b20fb8f1869368c9db0ee54293ab3e65caf8c92346e8"
+        },
+        {
+          "case": {
+            "name": "r3_seed0_route_r3_reference",
+            "mode": "native_cpu",
+            "cluster_relin": 0,
+            "variant": "reference",
+            "warm": false,
+            "round": 3,
+            "accuracy_reference": "dist/rbpf_feedback_mass_field_20261016/r3_seed0_feedback_cpu_c0"
+          },
+          "all400_ns": 28819828200,
+          "phase1_ns": 11378666100,
+          "phase2_ns": 17441162100,
+          "first2_ns": 1468739300,
+          "blocks50_ns": [
+            3828441700,
+            2516908000,
+            2508128400,
+            2525188000,
+            4084715600,
+            4913830200,
+            4106460300,
+            4336156000
+          ],
+          "phase2_median_epoch_ns": 81605800.0,
+          "performance_sha256": "987511f4e84316d2abbaf8ad915202c4d8d3e6bd87f28a35370420abe80ccf51"
+        },
+        {
+          "case": {
+            "name": "r3_seed0_route_r3_batch",
+            "mode": "native_cpu",
+            "cluster_relin": 0,
+            "variant": "batch",
+            "warm": false,
+            "round": 3,
+            "accuracy_reference": "dist/rbpf_feedback_mass_field_20261016/r3_seed0_feedback_cpu_c0"
+          },
+          "all400_ns": 26787738100,
+          "phase1_ns": 9895962200,
+          "phase2_ns": 16891775900,
+          "first2_ns": 1403881700,
+          "blocks50_ns": [
+            3452970500,
+            2214990500,
+            2178305200,
+            2049696000,
+            4864994300,
+            4210439100,
+            3862004700,
+            3954337800
+          ],
+          "phase2_median_epoch_ns": 80601600.0,
+          "performance_sha256": "3830647b3b6287312492f7dcaed5e3e99594dd696fc1b23807b7ab8bb7d50462"
+        },
+        {
+          "case": {
+            "name": "r3_seed0_route_r3_AA",
+            "mode": "native_cpu",
+            "cluster_relin": 0,
+            "variant": "AA",
+            "warm": false,
+            "round": 3,
+            "accuracy_reference": "dist/rbpf_feedback_mass_field_20261016/r3_seed0_feedback_cpu_c0"
+          },
+          "all400_ns": 31051943100,
+          "phase1_ns": 11626887100,
+          "phase2_ns": 19425056000,
+          "first2_ns": 1668811900,
+          "blocks50_ns": [
+            4076857800,
+            2933813600,
+            2351320400,
+            2264895300,
+            4772317200,
+            4990660100,
+            5209886600,
+            4452192100
+          ],
+          "phase2_median_epoch_ns": 90192000.0,
+          "performance_sha256": "6275960c9d9c51b31c21cd7cca837887048a272b232bad3d533defcec081395d"
+        },
+        {
+          "case": {
+            "name": "r3_seed0_route_r4_batch",
+            "mode": "native_cpu",
+            "cluster_relin": 0,
+            "variant": "batch",
+            "warm": false,
+            "round": 4,
+            "accuracy_reference": "dist/rbpf_feedback_mass_field_20261016/r3_seed0_feedback_cpu_c0"
+          },
+          "all400_ns": 28540882100,
+          "phase1_ns": 11772279300,
+          "phase2_ns": 16768602800,
+          "first2_ns": 1749898200,
+          "blocks50_ns": [
+            4101640000,
+            2934811100,
+            2419573100,
+            2316255100,
+            4114340100,
+            3805016600,
+            3427066900,
+            5422179200
+          ],
+          "phase2_median_epoch_ns": 78541750.0,
+          "performance_sha256": "ab0ae766b3bdfa6631b0e82f21748ea645c943f3b394210fef54b990b1e2b949"
+        },
+        {
+          "case": {
+            "name": "r3_seed0_route_r4_AA",
+            "mode": "native_cpu",
+            "cluster_relin": 0,
+            "variant": "AA",
+            "warm": false,
+            "round": 4,
+            "accuracy_reference": "dist/rbpf_feedback_mass_field_20261016/r3_seed0_feedback_cpu_c0"
+          },
+          "all400_ns": 31360477000,
+          "phase1_ns": 12232503700,
+          "phase2_ns": 19127973300,
+          "first2_ns": 2260408100,
+          "blocks50_ns": [
+            4919289400,
+            2262441300,
+            2716560100,
+            2334212900,
+            4907641200,
+            4324541900,
+            5299457700,
+            4596332500
+          ],
+          "phase2_median_epoch_ns": 92419700.0,
+          "performance_sha256": "b6defdf14fc2404d45421af3baa8204182e3d0459d1d83182001b7ef543995d2"
+        },
+        {
+          "case": {
+            "name": "r3_seed0_route_r4_reference",
+            "mode": "native_cpu",
+            "cluster_relin": 0,
+            "variant": "reference",
+            "warm": false,
+            "round": 4,
+            "accuracy_reference": "dist/rbpf_feedback_mass_field_20261016/r3_seed0_feedback_cpu_c0"
+          },
+          "all400_ns": 34798342800,
+          "phase1_ns": 11633701800,
+          "phase2_ns": 23164641000,
+          "first2_ns": 1854635900,
+          "blocks50_ns": [
+            4217408100,
+            2733357400,
+            2217720000,
+            2465216300,
+            5487279100,
+            6715027800,
+            5526453500,
+            5435880600
+          ],
+          "phase2_median_epoch_ns": 111039750.0,
+          "performance_sha256": "258a454daf3de0530dc9a9cab61e61ac949a015f984394997c9ed6e9c9fb3a66"
+        }
+      ],
+      "control_rounds": [
+        {
+          "round": 0,
+          "all400_difference_ns": 10268736600,
+          "first2_difference_ns": 613894600,
+          "phase2_difference_ns": 5570582700,
+          "phase2_blocks50_difference_ns": [
+            1937593600,
+            1722026100,
+            1148290600,
+            762672400
+          ]
+        },
+        {
+          "round": 1,
+          "all400_difference_ns": 5661593400,
+          "first2_difference_ns": 446930000,
+          "phase2_difference_ns": 2272144700,
+          "phase2_blocks50_difference_ns": [
+            -750266400,
+            457449800,
+            1042146200,
+            1522815100
+          ]
+        },
+        {
+          "round": 2,
+          "all400_difference_ns": 2006045800,
+          "first2_difference_ns": 184160200,
+          "phase2_difference_ns": 485876700,
+          "phase2_blocks50_difference_ns": [
+            1414113400,
+            236974400,
+            -368923600,
+            -796287500
+          ]
+        },
+        {
+          "round": 3,
+          "all400_difference_ns": -2232114900,
+          "first2_difference_ns": -200072600,
+          "phase2_difference_ns": -1983893900,
+          "phase2_blocks50_difference_ns": [
+            -687601600,
+            -76829900,
+            -1103426300,
+            -116036100
+          ]
+        },
+        {
+          "round": 4,
+          "all400_difference_ns": 3437865800,
+          "first2_difference_ns": -405772200,
+          "phase2_difference_ns": 4036667700,
+          "phase2_blocks50_difference_ns": [
+            579637900,
+            2390485900,
+            226995800,
+            839548100
+          ]
+        }
+      ],
+      "control_phase2_seconds_range": [
+        12.5916248,
+        23.164641000000003
+      ],
+      "no_epoch_exclusions": true,
+      "no_completed_legacy_candidate_retiming": true,
+      "legacy_speed_gate_reinterpreted": false
+    },
+    "no_candidate_or_speed_acceptance": true,
+    "no_new_GPU_rate": true,
+    "instrumentation_overhead_calibrated": false,
+    "limitations": "A/A diagnostics only;one nativeCPU route/seed/cluster0 prefix,3pairs. CPU clocks are quantized and their per-epoch differences may be zero;aggregate first,keep signed differences and raw values. The observed gcd is descriptive,not a proven clock precision/error bound. Wall minus CPU does not identify preemption,blocking,frequency,GC,JIT or other process causes. Other-thread CPU may appear in process CPU. Instrumentation overhead uncalibrated;not uninstrumented bottleneck shares. No claim that these new clocks explain historical D269 samples;no new saved-PF-state audit,fullroute,multiseed or GPU measurement."
+  },
+  "tests_passed": 18,
+  "first_test_execution_passed": true,
+  "complete_RTK_prefixes": 8,
+  "complete_RTK_epochs": 3200,
+  "PF_calls": 1600,
+  "all_trajectory_array_bits_equal": true,
+  "all_configs_and_inputs_equal": true,
+  "new_saved_PF_state_audit": false,
+  "original_process_function_forwarded_once": true,
+  "numerical_estimator_source_changed": false,
+  "all_400_epochs_retained": true,
+  "no_optimization_candidate": true,
+  "no_speed_acceptance": true,
+  "legacy_gate_still_failed": true,
+  "legacy_gate_reinterpreted": false,
+  "no_completed_candidate_retiming": true,
+  "CPU_clock_ticks_aggregated_before_ratio": true,
+  "instrumentation_overhead_calibrated": false,
+  "GPU_measurement": false,
+  "GPU_utilization_established": false,
+  "production_changes": [],
+  "product_adoption": false,
+  "default_changed": false,
+  "scope": "Three instrumented A/A pairs plus two warm prefixes,one nativeCPU route/seed/cluster0. Diagnostic only. No uninstrumented CPU share,causal scheduling attribution,fullroute/multiseed/GPU or speedup claim. Saved-PF-state accuracy is not newly audited;full trajectory arrays/config/input/source/PE/DLL are checked. Numerical helper/model/threshold/particle/candidate/prior/RNG/FIX/feedback unchanged."
+}

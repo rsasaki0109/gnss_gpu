@@ -1,0 +1,33 @@
+{
+  "timestamp_utc": "2026-10-17T03:35:31.491138+00:00",
+  "verified": true,
+  "report_sha256": "985ca812be105737659c1aa5338b294b53764fbcc041bf00a3d758d4013372f5",
+  "tests_passed": 23,
+  "timed_calls": 7200,
+  "warm_calls": 480,
+  "actual_saved_PF_states": 400,
+  "actual_boundary_traces": 400,
+  "all_saved_state_trajectory_cfg_prior_metadata_equal": true,
+  "diagnostic_only": true,
+  "optimization_adoptions": 0,
+  "new_CXX_or_CUDA_binary": false,
+  "new_CUDA_sanitizer_runs": [],
+  "product_adoption": false,
+  "default_changed": false,
+  "production_changes": [],
+  "no_completed_timing_retry": true,
+  "measured_sources_frozen": true,
+  "Ruff_compile_EOL_diff_checks_passed": true,
+  "source_EOL_exception": {
+    "path": "benchmarks/rbpf_pf_boundaries.py",
+    "format": "LF",
+    "reason": "Preserve tested source bytes after preparatory formatter normalized line endings;no post-execution source edits.",
+    "sha256": "18639bdb5669666bd417a86a4daf06feb4221221b100b9a082291cd0bd1c9ba5"
+  },
+  "public_text_files_checked": 3307,
+  "public_device_product_names_absent": true,
+  "artifact_policy": {
+    "referenced": 641,
+    "unreferenced": 0
+  }
+}

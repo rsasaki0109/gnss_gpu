@@ -1,0 +1,37 @@
+--- a/python/gnss_gpu/raytrace.py
++++ b/python/gnss_gpu/raytrace.py
+@@ -280,9 +280,12 @@
+ 
+             return u >= -bary_tol and v >= -bary_tol and (u + v) <= 1.0 + bary_tol
+ 
+-        def _segment_intersects_triangle(start, end, triangle, triangle_id):
+-            direction = end - start
+-            seg_len = float(np.linalg.norm(direction))
++        def _segment_intersects_triangle(start, end, triangle, triangle_id, segment):
++            if segment is None:
++                direction = end - start
++                seg_len = float(np.linalg.norm(direction))
++            else:
++                direction, seg_len = segment
+             if seg_len <= intersect_eps:
+                 return False
+ 
+@@ -319,10 +322,17 @@
+             return endpoint_tol < t < 1.0 - endpoint_tol
+ 
+         def _segment_blocked(start, end, excluded_triangle_id):
++            segment = None
+             for obstacle_id, obstacle in enumerate(tri):
+                 if obstacle_id == excluded_triangle_id:
+                     continue
+-                if _segment_intersects_triangle(start, end, obstacle, obstacle_id):
++                # The bounded FP64 path cannot warn or raise here. Evaluate the
++                # original subtraction/norm only at the first actual obstacle;
++                # keep strict/unsafe cases in their original per-triangle order.
++                if segment_cross is _cross3_float64 and segment is None:
++                    direction = end - start
++                    segment = (direction, float(np.linalg.norm(direction)))
++                if _segment_intersects_triangle(start, end, obstacle, obstacle_id, segment):
+                     return True
+             return False
+ 
