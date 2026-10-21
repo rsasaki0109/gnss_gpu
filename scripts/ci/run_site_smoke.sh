@@ -8,4 +8,5 @@ export PYTHONPATH="python:.${PYTHONPATH:+:$PYTHONPATH}"
 
 python3 experiments/build_paper_assets.py
 python3 experiments/build_githubio_summary.py
+npm run site:simulation:model
 npm run site:smoke
