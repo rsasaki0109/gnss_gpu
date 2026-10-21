@@ -7,8 +7,8 @@
   <meta name="description" content="Trace GNSS signals through actual PLATEAU buildings and bridges in Tokyo Odaiba, with UrbanNav reference poses and real GPS broadcast ephemerides.">
   <title>PLATEAU Signal Lab · gnss_gpu</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230c141c'/%3E%3Cpath d='M8 23V13h6V7h5v10h5v6' fill='none' stroke='%2385e4bc' stroke-width='2'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="assets/simulation/style.css?v=compare-1">
-  <script type="module" src="assets/simulation/app.mjs?v=compare-1"></script>
+  <link rel="stylesheet" href="assets/simulation/style.css?v=sky-1">
+  <script type="module" src="assets/simulation/app.mjs?v=sky-1"></script>
 </head>
 <body>
   <div class="shell">
@@ -98,6 +98,7 @@
         <section class="panel signals">
           <div class="section-title"><h2>Satellite visibility</h2><span class="section-index">02</span></div>
           <div class="metrics"><div><strong id="los-count" class="los-color">—</strong><span>Direct LOS</span></div><div><strong id="nlos-count" class="nlos-color">—</strong><span>Reflected only</span></div><div><strong id="blocked-count" class="blocked-color">—</strong><span>No path¹</span></div></div>
+          <details id="sky-panel" class="sky-panel" open><summary>Sky plot <span>North up · East right</span></summary><div id="sky-plot" class="sky-plot"></div><button type="button" id="sky-pause" hidden disabled>Pause to inspect sky</button><p class="small-note sky-note">Center 90° · edge 0°. Shaded rim: below mask. NLOS points show satellite directions, not reflected arrival angles. Select a point or use the list.</p></details>
           <div class="satellite-heading"><span>GPS satellite</span><span>Elevation / path</span></div><div id="satellites" class="satellites" aria-label="Select a satellite"></div>
         </section>
         <section class="panel inspector">
@@ -127,6 +128,7 @@
         <p><strong>Scene links:</strong> Share this scene pauses playback and waits for the selected pose to finish tracing. Links preserve its original epoch, virtual height offset, elevation mask, selected satellite, view mode, camera orientation/zoom and display toggles. Values are serialized at full JavaScript Number precision. The link checks the mesh and scene asset checksums before restoring inputs; incompatible data or invalid settings show a visible message and the default scene. An unavailable satellite or surface is reported explicitly. Results are recomputed with the currently published numerical model. The link state stays in the URL fragment. Clipboard restrictions leave a selectable link for manual copying.</p>
         <p><a href="assets/plateau/manifest.json">Source hashes &amp; asset checksums ↗</a> · <a href="assets/plateau/ATTRIBUTION.txt">Data attribution ↗</a> · <a href="https://github.com/rsasaki0109/gnss_gpu/blob/main/tools/build_plateau_browser_scene.py">Reproducible exporter ↗</a>.</p>
         <p><strong>Receiver comparison:</strong> Pin a completed result, then vary the virtual height or elevation mask. The comparison uses completed traces at the same original epoch and GPS time; a different pose or pending trace hides all differences. Return to pinned pose preserves the current receiver controls. The tables show current minus pinned counts and ideal-range horizontal geometric bias, plus each satellite's path class and earliest excess range. LOS excess is zero even when additional reflections exist; blocked and masked paths have no usable excess. Unavailable position solutions remain unavailable and have no numeric difference. Highlighted rows indicate a path-class or mask change, not a measured accuracy improvement. Pinning, clearing and viewing the comparison do not launch new traces. The pinned result stays in the current tab until cleared or reloaded; its scene link preserves the inputs and view captured at pinning.</p>
+        <p><strong>Sky plot:</strong> The plot reuses the completed trace's geometric satellite azimuths and elevations, with geodetic north up and east right. Distance from the center is proportional to zenith angle; the center is 90° elevation and the outer circle is the 0° horizon. The shaded rim is the completed elevation mask, not a building skyline. Only GPS satellites above that mask are shown. Colors use the same direct, reflected-only or blocked classification as the full-mesh trace. NLOS points show the satellite's geometric direction, not a reflected arrival direction. Marker positions stay exact while labels can move to reduce overlap. Point selection pauses playback and selects the same signal in the list and 3D view, without launching a trace. Pending results retain the previous completed plot with its own time/mask label and disable point selection. Pause to inspect waits for the selected pose to finish.</p>
       </details>
     </section>
     <footer><span>gnss_gpu <span class="footer-separator">/</span> PLATEAU Signal Lab</span><a href="index.html">Back to the results snapshot ↗</a></footer>

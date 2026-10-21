@@ -88,6 +88,36 @@
 }
 
 .trace-status.error { color:var(--red) }
+.sky-panel { margin:17px 0 6px; border-top:1px solid var(--line); border-bottom:1px solid var(--line); padding:11px 0 }
+.sky-panel summary { color:var(--mint); cursor:pointer; font-size:10px }
+.sky-panel summary span { float:right; color:var(--dim); font-size:8px }
+.sky-plot svg { display:block; width:100%; height:auto; max-width:330px; margin:4px auto 0; overflow:visible }
+.sky-horizon { fill:#292e32; stroke:#5c7181; stroke-width:1 }
+.sky-mask { fill:#152731; stroke:var(--amber); stroke-dasharray:3 3; stroke-width:.8 }
+.sky-ring-grid,.sky-axes { fill:none; stroke:#3c5260; stroke-width:.6; stroke-dasharray:2 3 }
+.sky-cardinal { fill:var(--muted); font:11px ui-monospace,monospace; text-anchor:middle }
+.sky-elevation { fill:#91a2ad; font:8px ui-monospace,monospace; text-anchor:middle }
+.sky-zenith { fill:var(--muted) }
+.sky-point,.sky-labels [data-path] { color:var(--muted) }
+.sky-point[data-path=LOS],.sky-labels [data-path=LOS] { color:var(--mint) }
+.sky-point[data-path=NLOS],.sky-labels [data-path=NLOS] { color:var(--amber) }
+.sky-point[data-path=BLOCKED],.sky-labels [data-path=BLOCKED] { color:var(--red) }
+.sky-point { cursor:pointer; outline:none }
+.sky-hit { fill:transparent; pointer-events:all }
+.sky-dot { fill:currentColor; stroke:#0c141c; stroke-width:1.5 }
+.sky-selection-ring { fill:none; stroke:transparent; stroke-width:1.4 }
+.sky-point[aria-pressed=true] .sky-selection-ring,.sky-point:focus-visible .sky-selection-ring { stroke:var(--ink) }
+.sky-point:focus-visible .sky-selection-ring { stroke-dasharray:2 2; stroke-width:2 }
+.sky-point[aria-disabled=true],.sky-point[aria-disabled=true] .sky-hit { pointer-events:none }
+.sky-plot[data-state=pending] .sky-dot,.sky-plot[data-state=unavailable] .sky-points { opacity:.6 }
+.sky-labels { pointer-events:none; font:10px ui-monospace,monospace; text-anchor:middle; fill:currentColor }
+.sky-labels [data-selected=true] text { font-weight:700; text-decoration:underline }
+.sky-leader { stroke:#627b8a; stroke-width:.6; opacity:.8 }
+.sky-source,.sky-selection { margin:3px 0; font:9px/1.7 ui-monospace,monospace; color:var(--muted); overflow-wrap:anywhere }
+.sky-plot[data-state=pending] .sky-source,.sky-plot[data-state=unavailable] .sky-source { color:var(--amber) }
+.sky-selection { color:var(--ink) }
+.sky-panel .sky-note { font-size:9px; margin-top:6px }
+#sky-pause { min-height:36px; margin:7px 0 0; padding:7px 10px; border:1px solid #3a5060; border-radius:5px; background:#1a2b38; font-size:10px }
 .scene-link-notice { display:flex; align-items:center; gap:12px; padding:10px 18px; border-bottom:1px solid #345247; background:#172c28; color:var(--mint); font-size:10px; line-height:1.6 }
 .scene-link-notice[hidden] { display:none }
 .scene-link-notice[data-warning=true] { color:var(--amber); background:#302a22; border-color:#5c4a32 }

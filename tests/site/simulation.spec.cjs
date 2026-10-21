@@ -106,6 +106,8 @@ test("a mismatched asset fails visibly without substituting synthetic geometry",
   await expect(page.locator("#toast")).toContainText("Data integrity check failed");
   await expect(page.locator("#play")).toBeDisabled();
   await expect(page.locator("#scene")).not.toHaveAttribute("data-ready", "true");
+  await expect(page.locator("#sky-plot")).toHaveAttribute("data-state","unavailable");
+  await expect(page.locator(".sky-point")).toHaveCount(0);
 });
 
 test("OSM is georeferenced, visibly credited and independent of the signal calculation", async ({page}) => {
@@ -531,4 +533,79 @@ test("comparison hides pending and different-pose results, returns without chang
   await expect(page.locator("#reference-info")).toBeHidden();
   await expect(page.locator("#reference-link")).not.toHaveAttribute("href");
   await expect(page.locator("#clear-reference")).toBeDisabled();
+});
+
+test("sky plot preserves real directions and selects the same signal without recomputing geometry",async({page},testInfo)=>{
+  const errors=[];page.on("pageerror",error=>errors.push(error.message));
+  await page.goto("simulation.html");
+  const canvas=page.locator("#scene"),plot=page.locator("#sky-plot"),g12=page.locator('[data-sky-satellite="G12"]');
+  await expect(plot).toHaveAttribute("data-state","ready",{timeout:45000});
+  await expect(plot).toHaveAttribute("data-epoch","8000");await expect(plot).toHaveAttribute("data-mask","10");
+  await expect(page.locator(".sky-point")).toHaveCount(8);
+  await expect(page.locator(".sky-source")).toHaveText("Completed · 8 GPS · 10° mask · 04:09:35.100 GPST");
+  await expect(g12).toHaveAttribute("aria-pressed","true");
+  const azimuth=Number(await g12.getAttribute("data-azimuth")),elevation=Number(await g12.getAttribute("data-elevation"));
+  // Transcendental functions can differ in their final bits across JS engines.
+  expect(Math.abs(azimuth-164.84832473851634)).toBeLessThan(1e-12);
+  expect(Math.abs(elevation-14.665448266301897)).toBeLessThan(1e-12);
+  const x=Number(await g12.locator(".sky-dot").getAttribute("cx")),y=Number(await g12.locator(".sky-dot").getAttribute("cy"));
+  const radius=110*(1-elevation/90),angle=(90-azimuth)*Math.PI/180;
+  expect(Math.abs(x-(150+radius*Math.cos(angle)))).toBeLessThan(1e-10);expect(Math.abs(y-(150-radius*Math.sin(angle)))).toBeLessThan(1e-10);
+  await expect(page.locator(".sky-selection")).toHaveText("G12 · az 164.8° · el 14.7° · NLOS");
+  await page.locator("#sky-panel").screenshot({path:testInfo.outputPath("sky-plot-panel.png")});
+  await page.screenshot({path:testInfo.outputPath("sky-plot-page.png"),fullPage:true});
+  const trace=await canvas.getAttribute("data-trace-id"),receiver=await canvas.getAttribute("data-receiver");
+  await page.locator('[data-sky-satellite="G05"]').click();
+  await expect(page.locator("#selected-id")).toHaveText("G05");
+  await expect(page.locator('[data-satellite="G05"]')).toHaveAttribute("aria-pressed","true");
+  await page.locator('[data-satellite="G12"]').click();
+  await expect(g12).toHaveAttribute("aria-pressed","true");
+  await page.locator("#focus-reflection").click();
+  await expect(canvas).toHaveAttribute("data-view","reflection");
+  await page.locator('[data-sky-satellite="G10"]').press("Space");
+  await expect(page.locator("#selected-id")).toHaveText("G10");
+  await expect(canvas).toHaveAttribute("data-view","receiver");
+  await g12.press("Enter");
+  await expect(page.locator("#selected-id")).toHaveText("G12");
+  await page.locator("#overview").click();
+  await expect(canvas).toHaveAttribute("data-view","overview");
+  await expect(g12.locator(".sky-dot")).toHaveAttribute("cx",String(x));
+  await expect(g12.locator(".sky-dot")).toHaveAttribute("cy",String(y));
+  await expect(canvas).toHaveAttribute("data-trace-id",trace);await expect(canvas).toHaveAttribute("data-receiver",receiver);
+  await expect(page.locator(".metrics strong")).toHaveText(["4","1","3"]);await expect(page.locator("#spp-all")).toHaveText("65.74 m");
+  await expect(page.locator("#excess-value")).toHaveText("+23.038 m");
+  expect(errors).toEqual([]);
+});
+
+test("pending sky keeps its completed mask, blocks stale selection and can pause live playback",async({page})=>{
+  await page.route("**/simulation/city-worker.mjs",async route=>{
+    const response=await route.fetch(),source=await response.text();
+    await route.fulfill({response,body:`const deliver=self.postMessage.bind(self);self.postMessage=(message,...args)=>message.type==="result"?setTimeout(()=>deliver(message,...args),900):deliver(message,...args);\n${source}`});
+  });
+  await page.goto("simulation.html");
+  const plot=page.locator("#sky-plot"),canvas=page.locator("#scene");
+  await expect(plot).toHaveAttribute("data-state","ready",{timeout:45000});
+  await page.locator("#mask").press("End");
+  await expect(plot).toHaveAttribute("data-state","pending");
+  await expect(plot).toHaveAttribute("data-mask","10");
+  await expect(page.locator(".sky-source")).toContainText("Previous trace · updating · 8 GPS · 10° mask");
+  const old=page.locator('[data-sky-satellite="G05"]');
+  await expect(old).toHaveAttribute("aria-disabled","true");await old.press("Enter");
+  await expect(page.locator("#selected-id")).toHaveText("G12");
+  await expect(plot).toHaveAttribute("data-state","ready");await expect(plot).toHaveAttribute("data-mask","30");
+  await expect(page.locator(".sky-point")).toHaveCount(5);await expect(page.locator('[data-sky-satellite="G12"]')).toHaveCount(0);
+  expect(Math.abs(Number(await page.locator(".sky-mask").getAttribute("r"))-110*2/3)).toBeLessThan(1e-12);
+  await page.locator("#play").click();await expect(page.locator("#sky-pause")).toBeVisible();
+  await page.locator("#sky-pause").click();
+  await expect(page.locator("#play")).toHaveAttribute("aria-pressed","false");await expect(plot).toHaveAttribute("data-state","ready");
+  await expect(page.locator("#sky-pause")).toBeHidden();
+  expect(await plot.getAttribute("data-epoch")).toBe(await canvas.getAttribute("data-epoch"));
+  expect(await plot.getAttribute("data-epoch")).toBe(await page.locator("#progress").inputValue());
+  await page.locator("#sky-panel > summary").click();await page.locator("#play").click();
+  await expect(page.locator("#play")).toHaveAttribute("aria-pressed","true");
+  await page.locator("#sky-panel > summary").click();
+  await expect(page.locator("#play")).toHaveAttribute("aria-pressed","false");await expect(plot).toHaveAttribute("data-state","ready");
+  const point=page.locator(".sky-point").first(),id=await point.getAttribute("data-sky-satellite"),trace=await canvas.getAttribute("data-trace-id");
+  await point.press("Enter");await expect(page.locator("#selected-id")).toHaveText(id);await expect(canvas).toHaveAttribute("data-trace-id",trace);
+  const layout=await page.evaluate(()=>({client:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth}));expect(layout.scroll).toBeLessThanOrEqual(layout.client+2);
 });
