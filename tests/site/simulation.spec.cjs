@@ -351,7 +351,7 @@ test("scene links restore exact focused views, copy their URL and reuse a comple
 
 test("sharing waits for the selected trace, preserves receiver/display settings and pauses playback", async ({page}) => {
   // Delay only delivery of actual worker results, so pending-state assertions do not depend on CPU speed.
-  await page.route("**/simulation/city-worker.mjs",async route=>{
+  await page.route("**/simulation/city-worker.mjs*",async route=>{
     const response=await route.fetch(),source=await response.text();
     await route.fulfill({response,body:`const deliver=self.postMessage.bind(self);self.postMessage=(message,...args)=>message.type==="result"?setTimeout(()=>deliver(message,...args),900):deliver(message,...args);\n${source}`});
   });
@@ -496,7 +496,7 @@ test("receiver comparison keeps an exact pinned reference and distinguishes chan
 });
 
 test("comparison hides pending and different-pose results, returns without changing controls and supports repin/clear",async({page})=>{
-  await page.route("**/simulation/city-worker.mjs",async route=>{
+  await page.route("**/simulation/city-worker.mjs*",async route=>{
     const response=await route.fetch(),source=await response.text();
     await route.fulfill({response,body:`const deliver=self.postMessage.bind(self);self.postMessage=(message,...args)=>message.type==="result"?setTimeout(()=>deliver(message,...args),900):deliver(message,...args);\n${source}`});
   });
@@ -588,7 +588,7 @@ test("sky plot preserves real directions and selects the same signal without rec
 });
 
 test("pending sky keeps its completed mask, blocks stale selection and can pause live playback",async({page})=>{
-  await page.route("**/simulation/city-worker.mjs",async route=>{
+  await page.route("**/simulation/city-worker.mjs*",async route=>{
     const response=await route.fetch(),source=await response.text();
     await route.fulfill({response,body:`const deliver=self.postMessage.bind(self);self.postMessage=(message,...args)=>message.type==="result"?setTimeout(()=>deliver(message,...args),900):deliver(message,...args);\n${source}`});
   });
@@ -729,7 +729,7 @@ test("reflection geometry exposes actual segments, normal angles and the selecte
 });
 
 test("reflection details hide pending values, pause playback on opening and follow the completed mask",async({page})=>{
-  await page.route("**/simulation/city-worker.mjs",async route=>{
+  await page.route("**/simulation/city-worker.mjs*",async route=>{
     const response=await route.fetch(),source=await response.text();
     await route.fulfill({response,body:`const deliver=self.postMessage.bind(self);self.postMessage=(message,...args)=>message.type==="result"?setTimeout(()=>deliver(message,...args),900):deliver(message,...args);\n${source}`});
   });
@@ -790,7 +790,7 @@ test("range fit reads the existing solution and selects real paths without retra
 });
 
 test("range fit clears pending and failed values and keeps unavailable solutions distinct from zero",async({page})=>{
-  await page.route("**/simulation/city-worker.mjs",async route=>{
+  await page.route("**/simulation/city-worker.mjs*",async route=>{
     const response=await route.fetch(),source=await response.text();
     await route.fulfill({response,body:`const deliver=self.postMessage.bind(self);self.postMessage=(message,...args)=>message.type==="result"?setTimeout(()=>deliver(message,...args),900):deliver(message,...args);\n${source}`});
   });
@@ -864,7 +864,7 @@ test("stored fit follows the 3D camera without changing paths or positioning res
 });
 
 test("fit marker clears immediately for pending, unavailable and failed results",async({page})=>{
-  await page.route("**/simulation/city-worker.mjs",async route=>{
+  await page.route("**/simulation/city-worker.mjs*",async route=>{
     const response=await route.fetch(),source=await response.text();
     await route.fulfill({response,body:'const deliver=self.postMessage.bind(self);self.postMessage=(message,...args)=>message.type==="result"?setTimeout(()=>deliver(message,...args),900):deliver(message,...args);\n'+source});
   });
@@ -918,7 +918,7 @@ test("pinned fit comparison uses each receiver's own position and follows the ca
 });
 
 test("pinned fit clears pending, focused, different-pose, missing and failed comparisons",async({page})=>{
-  await page.route("**/simulation/city-worker.mjs",async route=>{
+  await page.route("**/simulation/city-worker.mjs*",async route=>{
     const response=await route.fetch(),source=await response.text();
     await route.fulfill({response,body:'const deliver=self.postMessage.bind(self);self.postMessage=(message,...args)=>message.type==="result"?setTimeout(()=>deliver(message,...args),900):deliver(message,...args);\n'+source});
   });
