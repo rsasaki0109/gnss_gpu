@@ -820,3 +820,65 @@ test("range fit clears pending and failed values and keeps unavailable solutions
   await expect(panel).toHaveAttribute("data-state","unavailable");await expect(results).toBeHidden();
   await expect(page.locator("#range-signals tr")).toHaveCount(0);await expect(page.locator("#range-excess")).not.toHaveAttribute("data-value");
 });
+
+test("stored fit follows the 3D camera without changing paths or positioning results",async({page},testInfo)=>{
+  const errors=[];page.on("pageerror",error=>errors.push(error.message));
+  await page.goto("simulation.html");
+  const fit=page.locator("#position-fit"),canvas=page.locator("#scene"),line=page.locator("#fit-displacement"),marker=page.locator("#fit-marker");
+  await expect(fit).toHaveAttribute("data-state","ready",{timeout:45000});await expect(fit).toBeVisible();await expect(page.locator("#fit-legend")).toBeVisible();
+  const trace=await canvas.getAttribute("data-trace-id"),world=await fit.getAttribute("data-position"),reference=await canvas.getAttribute("data-receiver");
+  const expected=[-955.3187130610248,-1280.7911607311346,96.12858487844296];
+  world.split(",").map(Number).forEach((value,i)=>expect(Math.abs(value-expected[i])).toBeLessThan(1e-6));
+  expect(Math.abs(Number(await fit.getAttribute("data-horizontal"))-65.7406968442433)).toBeLessThan(1e-6);
+  expect(Math.abs(Number(await fit.getAttribute("data-spatial"))-116.37532039628215)).toBeLessThan(1e-6);
+  await expect(fit).toHaveAttribute("data-reference",reference);await expect(line).toHaveAttribute("visibility","visible");
+  const checkProjection=async()=>{
+    const error=await page.evaluate(()=>{
+      const root=document.getElementById("position-fit"),line=document.getElementById("fit-displacement"),frame=root.viewBox.baseVal;
+      const numbers=name=>root.dataset[name].split(",").map(Number),target=numbers("viewTarget"),right=numbers("viewRight"),up=numbers("viewUp"),scale=Number(root.dataset.viewScale);
+      const project=point=>{const d=point.map((value,i)=>value-target[i]);return [frame.width/2+scale*(d[0]*right[0]+d[1]*right[1]+d[2]*right[2]),frame.height*.56-scale*(d[0]*up[0]+d[1]*up[1]+d[2]*up[2])];};
+      const wanted=[...project(numbers("reference")),...project(numbers("position"))],actual=["x1","y1","x2","y2"].map(name=>Number(line.getAttribute(name)));
+      const svg=root.getBoundingClientRect(),canvas=document.getElementById("scene").getBoundingClientRect();
+      return Math.max(...wanted.map((value,i)=>Math.abs(value-actual[i])),Math.abs(svg.width-canvas.width),Math.abs(svg.height-canvas.height),Math.abs(svg.x-canvas.x),Math.abs(svg.y-canvas.y));
+    });expect(error).toBeLessThan(1e-9);
+  };
+  await checkProjection();await page.locator(".stage").screenshot({path:testInfo.outputPath("position-fit-stage.png")});
+  const initialX=await line.getAttribute("x2");await canvas.press("ArrowRight");await expect(line).not.toHaveAttribute("x2",initialX);await checkProjection();
+  await page.locator("#overview").click();await expect(canvas).toHaveAttribute("data-view","overview");await checkProjection();
+  await page.locator("#reset-view").click();await expect(canvas).toHaveAttribute("data-view","receiver");
+  await page.locator("#focus-reflection").click();await expect(fit).toHaveAttribute("data-state","surface");await expect(fit).toBeHidden();await expect(fit).not.toHaveAttribute("data-position");
+  await page.locator("#focus-exit").click();await expect(fit).toHaveAttribute("data-state","ready");await checkProjection();
+  await page.locator('[data-satellite="G05"]').click();await expect(fit).toHaveAttribute("data-position",world);
+  for(let i=0;i<9;i++)await page.locator("#zoom-in").click();
+  await expect(fit).toHaveAttribute("data-state","offscreen");await expect(marker).toHaveAttribute("visibility","hidden");await expect(page.locator("#fit-legend")).toHaveText("Fit² ↗");
+  const box=(await fit.getAttribute("viewBox")).split(" ").map(Number),x=Number(await line.getAttribute("x2")),y=Number(await line.getAttribute("y2"));
+  expect(x<0||x>box[2]||y<0||y>box[3]).toBe(true);await checkProjection();
+  await page.locator("#reset-view").click();await expect(fit).toHaveAttribute("data-state","ready");
+  await expect(canvas).toHaveAttribute("data-trace-id",trace);await expect(canvas).toHaveAttribute("data-receiver",reference);
+  await expect(page.locator("#spp-all")).toHaveText("65.74 m");await expect(page.locator(".metrics strong")).toHaveText(["4","1","3"]);
+  await page.locator("#antenna").press("End");await expect(fit).toHaveAttribute("data-state","coincident");await expect(fit).toBeVisible();
+  await expect(line).toHaveAttribute("visibility","hidden");await expect(marker).toHaveAttribute("visibility","visible");
+  await expect(fit).toHaveAttribute("data-horizontal","0");await expect(fit).toHaveAttribute("data-spatial","0");
+  expect(await fit.getAttribute("data-position")).toBe(await canvas.getAttribute("data-receiver"));await checkProjection();
+  const layout=await page.evaluate(()=>({client:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth}));expect(layout.scroll).toBeLessThanOrEqual(layout.client+2);expect(errors).toEqual([]);
+});
+
+test("fit marker clears immediately for pending, unavailable and failed results",async({page})=>{
+  await page.route("**/simulation/city-worker.mjs",async route=>{
+    const response=await route.fetch(),source=await response.text();
+    await route.fulfill({response,body:'const deliver=self.postMessage.bind(self);self.postMessage=(message,...args)=>message.type==="result"?setTimeout(()=>deliver(message,...args),900):deliver(message,...args);\n'+source});
+  });
+  await page.goto("simulation.html");
+  const fit=page.locator("#position-fit"),line=page.locator("#fit-displacement"),marker=page.locator("#fit-marker"),legend=page.locator("#fit-legend");
+  const cleared=async()=>{
+    await expect(fit).toBeHidden();await expect(legend).toBeHidden();
+    for(const name of ["data-position","data-reference","data-horizontal","data-spatial","data-up","viewBox"])await expect(fit).not.toHaveAttribute(name);
+    for(const name of ["x1","y1","x2","y2"])await expect(line).not.toHaveAttribute(name);
+    await expect(marker).not.toHaveAttribute("points");
+  };
+  await expect(fit).toHaveAttribute("data-state","ready",{timeout:45000});
+  await page.locator("#mask").press("End");await expect(fit).toHaveAttribute("data-state","pending");await cleared();
+  await expect(fit).toHaveAttribute("data-state","no-solution");await cleared();await expect(page.locator("#spp-all")).toHaveText("Unavailable");
+  await page.locator("#reset").click();await expect(fit).toHaveAttribute("data-state","ready");await expect(fit).toBeVisible();
+  await page.locator("#scene").dispatchEvent("webglcontextlost");await expect(fit).toHaveAttribute("data-state","unavailable");await cleared();
+});
