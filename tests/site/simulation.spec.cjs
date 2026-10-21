@@ -5,6 +5,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const SCENE = JSON.parse(gunzipSync(fs.readFileSync(path.join(__dirname, "../../docs/assets/plateau/odaiba-scene.json.gz"))));
 const POSITIONS = SCENE.track.map(row => SCENE.rotation.map(axis => axis.reduce((sum, value, i) => sum + value * (row[i + 1] - SCENE.origin[i]), 0)));
+const MANIFEST = JSON.parse(fs.readFileSync(path.join(__dirname, "../../docs/assets/plateau/manifest.json"), "utf8"));
+function sceneHash(overrides = {}) {
+  return "#" + new URLSearchParams({scene:"1",epoch:"8000",height:"0",mask:"10",sat:"G12",view:"receiver",yaw:"-0.63",pitch:"0.82",zoom:"1",map:"1",reflections:"1",mesh:MANIFEST.mesh.sha256,data:MANIFEST.scene.sha256,...overrides});
+}
 
 // A generated one-pixel test tile. Headless tests never contact OSM servers.
 function tileFixture() {
@@ -295,4 +299,143 @@ test("surface focus restores the previous view and cannot retain stale surfaces 
   await expect(canvas).toHaveAttribute("data-focus-triangle","");
   const layout=await page.evaluate(()=>({client:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth}));
   expect(layout.scroll).toBeLessThanOrEqual(layout.client+2);
+});
+
+test("scene links restore exact focused views, copy their URL and reuse a completed trace for view-only changes", async ({page,context}) => {
+  const errors=[]; page.on("pageerror",error=>errors.push(error.message));
+  await context.grantPermissions(["clipboard-read","clipboard-write"]);
+  const yaw="-2.1645136613971703",pitch="0.4000000000000001",zoom="1.2345678901234567";
+  await page.goto("simulation.html"+sceneHash({view:"reflection",yaw,pitch,zoom}));
+  const canvas=page.locator("#scene");
+  await expect(canvas).toHaveAttribute("data-view","reflection",{timeout:45000});
+  await expect(canvas).toHaveAttribute("data-focus-triangle","46016");
+  await expect(page.locator("#selected-id")).toHaveText("G12");
+  await expect(page.locator(".metrics strong")).toHaveText(["4","1","3"]);
+  await expect(page.locator("#excess-value")).toHaveText("+23.038 m");
+  await expect(page.locator("#spp-all")).toHaveText("65.74 m");
+  await expect(page.locator("#scene-link-notice-text")).toHaveText("Scene link restored. Playback is paused.");
+  const trace=await canvas.getAttribute("data-trace-id"),receiver=await canvas.getAttribute("data-receiver");
+  await page.locator("#share-panel > summary").click();
+  await expect(page.locator("#scene-link")).toHaveValue(/^https?:\/\/.*#scene=1&/);
+  const link=await page.locator("#scene-link").inputValue(),fields=new URLSearchParams(new URL(link).hash.slice(1));
+  expect(fields.get("yaw")).toBe(yaw);expect(fields.get("pitch")).toBe(pitch);expect(fields.get("zoom")).toBe(zoom);
+  expect(new URL(link).pathname).toBe("/gnss_gpu/simulation.html");
+  await expect(page.locator("#open-scene-link")).toHaveAttribute("href",link);
+  await page.locator("#copy-scene-link").click();
+  await expect(page.locator("#share-status")).toHaveText("Link copied.");
+  expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe(link);
+  await page.goto("simulation.html"+sceneHash({view:"blockage",yaw,pitch:"-1.3",zoom}));
+  await expect(canvas).toHaveAttribute("data-view","blockage");
+  await expect(canvas).toHaveAttribute("data-focus-triangle","53306");
+  await expect(canvas).toHaveAttribute("data-focus-side","below");
+  await expect(canvas).toHaveAttribute("data-trace-id",trace);
+  await expect(canvas).toHaveAttribute("data-receiver",receiver);
+  await page.reload();
+  await expect(canvas).toHaveAttribute("data-view","blockage",{timeout:45000});
+  await expect(canvas).toHaveAttribute("data-trace-id","1");
+  await expect(canvas).toHaveAttribute("data-focus-triangle","53306");
+  await expect(canvas).toHaveAttribute("data-receiver",receiver);
+  await expect(page.locator("#excess-value")).toHaveText("+23.038 m");
+  expect(errors).toEqual([]);
+});
+
+test("sharing waits for the selected trace, preserves receiver/display settings and pauses playback", async ({page}) => {
+  // Delay only delivery of actual worker results, so pending-state assertions do not depend on CPU speed.
+  await page.route("**/simulation/city-worker.mjs",async route=>{
+    const response=await route.fetch(),source=await response.text();
+    await route.fulfill({response,body:`const deliver=self.postMessage.bind(self);self.postMessage=(message,...args)=>message.type==="result"?setTimeout(()=>deliver(message,...args),900):deliver(message,...args);\n${source}`});
+  });
+  await page.goto("simulation.html");
+  const canvas=page.locator("#scene"),copy=page.locator("#copy-scene-link");
+  await expect(canvas).toHaveAttribute("data-ready","true",{timeout:45000});
+  await page.locator("#share-panel > summary").click();
+  await expect(copy).toBeEnabled();
+  await page.locator("#progress").press("End");
+  await expect(copy).toBeDisabled();
+  await expect(page.locator("#scene-link")).toHaveValue("");
+  await expect(page.locator("#open-scene-link")).not.toHaveAttribute("href");
+  await expect(page.locator("#share-status")).toContainText("Waiting for the selected pose");
+  await page.locator("#antenna").press("End");
+  await page.locator("#mask").press("End");
+  await expect(canvas).toHaveAttribute("data-epoch","12409");
+  await expect(canvas).toHaveAttribute("data-antenna","20");
+  await expect(canvas).toHaveAttribute("data-mask","30");
+  await page.locator("#basemap").uncheck();
+  await page.locator("#reflections").uncheck();
+  await page.locator("#overview").click();
+  await expect(canvas).toHaveAttribute("data-view","overview");
+  await expect(copy).toBeEnabled();
+  const selected=await page.locator("#selected-id").textContent();
+  const link=await page.locator("#scene-link").inputValue(),fields=new URLSearchParams(new URL(link).hash.slice(1));
+  for(const [key,value] of Object.entries({epoch:"12409",height:"20",mask:"30",sat:selected,view:"overview",map:"0",reflections:"0",mesh:MANIFEST.mesh.sha256,data:MANIFEST.scene.sha256}))expect(fields.get(key)).toBe(value);
+  const receiver=await canvas.getAttribute("data-receiver"),counts=await page.locator(".metrics strong").allTextContents(),bias=await page.locator("#spp-all").textContent();
+  await page.goto(link);await page.reload();
+  await expect(canvas).toHaveAttribute("data-ready","true",{timeout:45000});
+  await expect(canvas).toHaveAttribute("data-epoch","12409");
+  await expect(canvas).toHaveAttribute("data-antenna","20");
+  await expect(canvas).toHaveAttribute("data-mask","30");
+  await expect(canvas).toHaveAttribute("data-view","overview");
+  await expect(canvas).toHaveAttribute("data-receiver",receiver);
+  await expect(page.locator(".metrics strong")).toHaveText(counts);
+  await expect(page.locator("#spp-all")).toHaveText(bias);
+  await expect(page.locator("#selected-id")).toHaveText(selected);
+  await expect(page.locator("#antenna")).toHaveValue("20");
+  await expect(page.locator("#mask")).toHaveValue("30");
+  await expect(page.locator("#basemap")).not.toBeChecked();
+  await expect(page.locator("#reflections")).not.toBeChecked();
+  await page.locator("#preset").selectOption("0");
+  await expect(canvas).toHaveAttribute("data-epoch","0");
+  await page.locator("#play").click();
+  await expect.poll(async()=>Number(await page.locator("#progress").inputValue())).toBeGreaterThan(0);
+  await page.locator("#share-panel > summary").click();
+  await expect(page.locator("#play")).toHaveAttribute("aria-pressed","false");
+  await expect(copy).toBeEnabled();
+  const paused=new URLSearchParams(new URL(await page.locator("#scene-link").inputValue()).hash.slice(1));
+  expect(paused.get("epoch")).toBe(await page.locator("#progress").inputValue());
+  expect(paused.get("epoch")).toBe(await canvas.getAttribute("data-epoch"));
+  await page.goto("simulation.html"+sceneHash({view:"reflection"}));
+  await expect(page.locator("#reflections")).toBeChecked();
+  await page.locator("#reflections").uncheck();
+  await expect(copy).toBeEnabled();
+  await expect(canvas).toHaveAttribute("data-view","receiver");
+  const changed=new URLSearchParams(new URL(await page.locator("#scene-link").inputValue()).hash.slice(1));
+  expect(changed.get("view")).toBe("receiver");expect(changed.get("reflections")).toBe("0");
+  const layout=await page.evaluate(()=>({client:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth}));
+  expect(layout.scroll).toBeLessThanOrEqual(layout.client+2);
+});
+
+test("incompatible links and unavailable signals or surfaces show explicit messages", async ({page}) => {
+  await page.goto("simulation.html"+sceneHash({epoch:"0",height:"20",data:"0".repeat(64)}));
+  const canvas=page.locator("#scene");
+  await expect(canvas).toHaveAttribute("data-ready","true",{timeout:45000});
+  await expect(canvas).toHaveAttribute("data-epoch","8000");
+  await expect(canvas).toHaveAttribute("data-antenna","0");
+  await expect(page.locator("#scene-link-notice-text")).toHaveText("Scene link uses a different dataset. Showing the default scene.");
+  await expect(page.locator("#scene-link-notice")).toHaveAttribute("data-warning","true");
+  await expect(page.locator(".metrics strong")).toHaveText(["4","1","3"]);
+  await page.goto("simulation.html"+sceneHash({sat:"G01"}));
+  await expect(page.locator("#scene-link-notice-text")).toHaveText("G01 is unavailable at this epoch and mask. Showing G12.");
+  await expect(page.locator("#selected-id")).toHaveText("G12");
+  await expect(canvas).toHaveAttribute("data-view","receiver");
+  await page.goto("simulation.html"+sceneHash({sat:"G05",view:"reflection"}));
+  await expect(page.locator("#scene-link-notice-text")).toHaveText("G05 has no reflecting surface here. Showing the receiver view.");
+  await expect(page.locator("#selected-id")).toHaveText("G05");
+  await expect(canvas).toHaveAttribute("data-view","receiver");
+  await expect(canvas).toHaveAttribute("data-focus-triangle","");
+  await expect(page.locator("#focus-reflection")).toBeDisabled();
+  await page.locator("#dismiss-scene-notice").click();
+  await expect(page.locator("#scene-link-notice")).toBeHidden();
+});
+
+test("clipboard denial leaves a fully selected manual link without an application error", async ({page}) => {
+  const errors=[];page.on("pageerror",error=>errors.push(error.message));
+  await page.addInitScript(()=>Object.defineProperty(navigator,"clipboard",{value:{writeText:()=>Promise.reject(new Error("Clipboard denied in test"))}}));
+  await page.goto("simulation.html");
+  await expect(page.locator("#scene")).toHaveAttribute("data-ready","true",{timeout:45000});
+  await page.locator("#share-panel > summary").click();
+  await page.locator("#copy-scene-link").click();
+  await expect(page.locator("#share-status")).toHaveText("Clipboard unavailable. Select and copy the link manually.");
+  const selection=await page.locator("#scene-link").evaluate(el=>({length:el.value.length,start:el.selectionStart,end:el.selectionEnd,focused:document.activeElement===el}));
+  expect(selection.length).toBeGreaterThan(250);expect(selection.start).toBe(0);expect(selection.end).toBe(selection.length);expect(selection.focused).toBe(true);
+  expect(errors).toEqual([]);
 });
