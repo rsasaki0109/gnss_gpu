@@ -316,6 +316,7 @@ test("scene links restore exact focused views, copy their URL and reuse a comple
   await expect(page.locator("#scene-link-notice-text")).toHaveText("Scene link restored. Playback is paused.");
   const trace=await canvas.getAttribute("data-trace-id"),receiver=await canvas.getAttribute("data-receiver");
   await page.locator("#share-panel > summary").click();
+  await expect(page.locator("#scene-link")).toHaveValue(/^https?:\/\/.*#scene=1&/);
   const link=await page.locator("#scene-link").inputValue(),fields=new URLSearchParams(new URL(link).hash.slice(1));
   expect(fields.get("yaw")).toBe(yaw);expect(fields.get("pitch")).toBe(pitch);expect(fields.get("zoom")).toBe(zoom);
   expect(new URL(link).pathname).toBe("/gnss_gpu/simulation.html");
