@@ -5,7 +5,7 @@ const { defineConfig, devices } = require("@playwright/test");
 module.exports = defineConfig({
   testDir: __dirname,
   testMatch: /(?:site|simulation)\.spec\.cjs$/,
-  timeout: 30_000,
+  timeout: 90_000,
   expect: {
     timeout: 10_000,
   },

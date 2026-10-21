@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#0c141c">
-  <meta name="description" content="Explore GNSS signal visibility in an interactive 3D city. Move the receiver, change the skyline, and inspect direct and reflected paths in your browser.">
-  <title>Urban Signal Lab · gnss_gpu</title>
+  <meta name="description" content="Trace GNSS signals through actual PLATEAU buildings and bridges in Tokyo Odaiba, with UrbanNav reference poses and real GPS broadcast ephemerides.">
+  <title>PLATEAU Signal Lab · gnss_gpu</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230c141c'/%3E%3Cpath d='M8 23V13h6V7h5v10h5v6' fill='none' stroke='%2385e4bc' stroke-width='2'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="assets/simulation/style.css">
   <script type="module" src="assets/simulation/app.mjs"></script>
@@ -14,67 +14,71 @@
   <div class="shell">
     <nav class="topbar" aria-label="Main navigation">
       <a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">⌁</span> gnss_gpu <span class="brand-divider">/</span> <span class="brand-section">Simulation</span></a>
-      <div class="nav-links"><a href="urban_canyon_playground.html">2D playground <span aria-hidden="true">↗</span></a><a href="https://github.com/rsasaki0109/gnss_gpu">GitHub <span aria-hidden="true">↗</span></a></div>
+      <div class="nav-links"><a href="assets/media/los-nlos/los_nlos_deckgl.html">Native replay ↗</a><a href="https://github.com/rsasaki0109/gnss_gpu">GitHub ↗</a></div>
     </nav>
-
     <header class="intro">
-      <div><p class="eyebrow"><span class="live-dot"></span> Urban Signal Lab</p><h1>Trace signals through a city.</h1><p class="intro-copy">Move a receiver through the streets. See which satellite paths are clear, reflected, or blocked.</p></div>
-      <div class="intro-tag"><span class="tag-icon" aria-hidden="true">◎</span><div>Interactive 3D<span>Runs in your browser</span></div></div>
+      <div><p class="eyebrow"><span class="live-dot"></span> PLATEAU Signal Lab · Tokyo</p><h1>Real city. Real satellite geometry.</h1><p class="intro-copy">Follow a recorded drive through Odaiba. Trace GPS signals against actual buildings and bridges.</p></div>
+      <div class="intro-tag"><span class="tag-icon" aria-hidden="true">◎</span><div>320,932 triangles<span>Full mesh · live ray tracing</span></div></div>
     </header>
-
     <main class="workspace">
-      <section class="viewer" aria-label="3D simulation">
+      <section class="viewer" aria-label="PLATEAU simulation">
         <div class="viewer-toolbar">
-          <label class="scene-select">Scene<select id="preset"><option value="canyon">Street canyon</option><option value="plaza">Open plaza</option><option value="lowrise">Low-rise district</option></select></label>
+          <label class="scene-select">Epoch<select id="preset" disabled data-load-control><option value="8000">13:20 · Urban segment</option><option value="0">00:00 · Route start</option><option value="2000">03:20 · Urban segment</option><option value="6000">10:00 · Open segment</option><option value="12409">20:40 · Route end</option></select></label>
           <span class="trace-status" id="trace-status" role="status"><span class="live-dot"></span><span id="status-text">Preparing scene…</span></span>
         </div>
         <div class="stage" id="stage">
-          <canvas id="scene" tabindex="0" role="img" aria-label="Interactive 3D city with satellite signal paths and a movable receiver" aria-describedby="stage-help"></canvas>
-          <div class="stage-caption"><span class="caption-label">LOCAL SCENE</span><strong id="scene-name">Street canyon</strong><span id="scene-description">Tall blocks, narrow streets</span></div>
-          <div class="view-tools" aria-label="Camera controls"><button type="button" id="zoom-in" aria-label="Zoom in">+</button><button type="button" id="zoom-out" aria-label="Zoom out">−</button><button type="button" id="reset-view" aria-label="Reset camera view">⌖</button></div>
-          <div class="stage-note" id="stage-help">Drag to orbit <span>·</span> Click a street to place the receiver <span>·</span> Scroll to zoom</div>
+          <canvas id="scene" tabindex="0" role="img" aria-label="Actual 3D PLATEAU city mesh with traced GPS signal paths and a recorded receiver position" aria-describedby="stage-help"></canvas>
+          <canvas id="annotations" aria-hidden="true"></canvas>
+          <div class="stage-caption"><span class="caption-label">PLATEAU / 2022</span><strong id="scene-name">Tokyo · Odaiba</strong><span id="scene-description">Loading the full CityGML mesh</span></div>
+          <div class="view-tools" aria-label="Camera controls"><button type="button" id="overview" aria-label="Toggle city overview" aria-pressed="false">◫</button><button type="button" id="zoom-in" aria-label="Zoom in">+</button><button type="button" id="zoom-out" aria-label="Zoom out">−</button><button type="button" id="reset-view" aria-label="Reset camera view">⌖</button></div>
+          <div class="stage-note" id="stage-help">Drag to orbit <span>·</span> Scroll to zoom <span>·</span> Timeline follows the recorded route</div>
           <div class="toast" id="toast" role="status" hidden></div>
         </div>
-        <div class="legend" aria-label="Path legend"><span><i class="legend-line los"></i> Direct LOS</span><span><i class="legend-line nlos"></i> Reflected</span><span><i class="legend-line blocked"></i> Blocked direct</span><span class="receiver-key"><i></i> Receiver</span></div>
+        <div class="legend" aria-label="Path legend"><span><i class="legend-line los"></i> Direct LOS</span><span><i class="legend-line nlos"></i> Single reflection</span><span><i class="legend-line blocked"></i> Blocked direct</span><span class="receiver-key"><i></i> Receiver</span></div>
         <div class="playback">
-          <button type="button" id="play" class="play-button" aria-pressed="false" disabled><span id="play-icon" aria-hidden="true">▶</span><span id="play-label">Play route</span></button>
-          <div class="timeline"><label for="progress">Receiver route <output id="progress-out">35%</output></label><input id="progress" type="range" min="0" max="100" step="0.1" value="35"></div>
-          <button type="button" id="reset" class="text-button">Reset</button>
+          <button type="button" id="play" class="play-button" aria-pressed="false" disabled data-load-control><span id="play-icon" aria-hidden="true">▶</span><span id="play-label">Play · 10×</span></button>
+          <div class="timeline"><label for="progress">2018-12-19 <output id="progress-out">Loading…</output></label><input id="progress" type="range" min="0" max="12409" step="1" value="8000" disabled data-load-control></div>
+          <button type="button" id="reset" class="text-button" disabled data-load-control>Reset</button>
         </div>
+        <div class="data-strip"><span id="epoch-readout">12,410 reference poses · 10 Hz</span><span id="gps-readout">Broadcast GPS ephemerides</span></div>
       </section>
-
-      <aside class="sidebar" aria-label="Simulation controls and signals">
+      <aside class="sidebar" aria-label="Receiver controls and signals">
         <section class="panel environment">
-          <div class="section-title"><h2>Shape the environment</h2><span class="section-index">01</span></div>
-          <label class="slider-label" for="height">Building height<output id="height-out">1.00×</output></label>
-          <input id="height" type="range" min="0.5" max="2" step="0.05" value="1">
-          <div class="range-endpoints"><span>Lower skyline</span><span>Taller canyon</span></div>
-          <label class="slider-label second-slider" for="rotation">Sky rotation<output id="rotation-out">0°</output></label>
-          <input id="rotation" type="range" min="0" max="360" step="1" value="0">
+          <div class="section-title"><h2>Receiver &amp; sky mask</h2><span class="section-index">01</span></div>
+          <label class="slider-label" for="antenna">Virtual height offset<output id="antenna-out">+0.0 m</output></label><input id="antenna" type="range" min="0" max="20" step="0.5" value="0" disabled data-load-control>
+          <div class="range-endpoints"><span>Recorded ECEF pose</span><span>+20 m local up</span></div>
+          <label class="slider-label second-slider" for="mask">Elevation mask<output id="mask-out">10°</output></label><input id="mask" type="range" min="5" max="30" step="1" value="10" disabled data-load-control>
           <label class="check-row"><input id="reflections" type="checkbox" checked><span>Show reflected paths</span></label>
         </section>
-
         <section class="panel signals">
           <div class="section-title"><h2>Satellite visibility</h2><span class="section-index">02</span></div>
           <div class="metrics"><div><strong id="los-count" class="los-color">—</strong><span>Direct LOS</span></div><div><strong id="nlos-count" class="nlos-color">—</strong><span>Reflected only</span></div><div><strong id="blocked-count" class="blocked-color">—</strong><span>No path¹</span></div></div>
-          <div class="satellite-heading"><span>Satellite</span><span>Elevation / path</span></div>
-          <div id="satellites" class="satellites" aria-label="Select a satellite"></div>
+          <div class="satellite-heading"><span>GPS satellite</span><span>Elevation / path</span></div><div id="satellites" class="satellites" aria-label="Select a satellite"></div>
         </section>
-
         <section class="panel inspector">
-          <div class="section-title"><h2>Inspect a signal</h2><span id="selected-id" class="selected-id">—</span></div>
-          <p id="channel-status" class="channel-status">Choose a satellite to inspect its paths.</p>
-          <dl class="channel-values"><div><dt>Direct path</dt><dd id="direct-value">—</dd></div><div><dt>Single-bounce paths</dt><dd id="path-count">—</dd></div><div><dt>Shortest reflection excess</dt><dd id="excess-value">—</dd></div><div><dt>Extra propagation delay</dt><dd id="delay-value">—</dd></div></dl>
+          <div class="section-title"><h2>Inspect a signal</h2><span id="selected-id" class="selected-id">—</span></div><p id="channel-status" class="channel-status">Choose a satellite to inspect its paths.</p>
+          <dl class="channel-values"><div><dt>Direct path</dt><dd id="direct-value">—</dd></div><div><dt>Single-bounce paths</dt><dd id="path-count">—</dd></div><div><dt>Shortest reflection excess</dt><dd id="excess-value">—</dd></div><div><dt>Extra propagation delay</dt><dd id="delay-value">—</dd></div></dl><p id="feature-id" class="feature-id">Source CityGML feature</p>
+        </section>
+        <section class="panel bias-panel">
+          <div class="section-title"><h2>Geometric position bias²</h2><span class="section-index">03</span></div><dl class="channel-values"><div><dt>Earliest modeled paths</dt><dd id="spp-all">—</dd></div><div><dt>LOS paths only</dt><dd id="spp-los">—</dd></div></dl><p class="small-note" id="spp-count">Horizontal displacement in an ideal range experiment.</p>
         </section>
       </aside>
     </main>
-
     <section class="model-note">
-      <div><span class="model-icon" aria-hidden="true">◈</span><p><strong>A small city. A clear model.</strong> Synthetic buildings and a static sky, with direct visibility and one specular reflection.</p></div>
-      <details><summary>About the model</summary><p>Geometry is computed locally in a Web Worker using opaque rectangular buildings. Reflection paths use the image method and are checked for obstruction on both legs. ¹ “No path” means no direct or unobstructed single-bounce path in this model. RF power, diffraction, multiple bounces and position estimation are outside this demo.</p><p>Satellite IDs and sky directions are illustrative. Sources are placed 20,200 km from the receiver in local coordinates; rays are shortened for display. The scene uses no real orbit, map, camera or location data. Use the arrow keys to orbit the focused city view, or Space to play and pause the route.</p><p>This browser model is separate from the native CUDA simulator and its positioning benchmarks. For captured GPU results on PLATEAU building geometry, open the <a href="assets/media/los-nlos/los_nlos_deckgl.html">native simulation viewer ↗</a>.</p></details>
+      <div><span class="model-icon" aria-hidden="true">◈</span><p><strong>Actual geometry, traceable inputs.</strong> <span id="mesh-readout">320,932 triangles · 28 CityGML tiles</span>. All 12,410 reference poses retained.</p></div>
+      <details><summary>Data sources, method &amp; limits</summary>
+        <p id="geometry-readout">Building and bridge components, with original interior rings.</p>
+        <p><strong>City:</strong> <a href="https://www.geospatial.jp/ckan/dataset/plateau-tokyo23ku-2022">PLATEAU Tokyo 23 wards, 2022 (CC BY 4.0)</a>, Odaiba building and bridge CityGML. The highest available LoD is selected per component. T.P. heights are converted to ellipsoidal heights with bilinear <a href="https://web1.gsi.go.jp/buturisokuchi/grageo_reference.html">GSI GSIGEO2011 ver.2.1</a> corrections at every vertex. The geoid grid is used offline and is not redistributed.</p>
+        <p><strong>Trajectory &amp; sky:</strong> <a href="https://github.com/IPNL-POLYU/UrbanNavDataset">UrbanNav Tokyo Odaiba, 2018-12-19</a>, Applanix POS LV620 reference ECEF coordinates and DLR/TUM CONGO/MGEX broadcast navigation data. GPS positions use healthy, already-transmitted ephemerides within their fit interval, Kepler propagation, harmonic corrections, iterative signal travel time and Earth rotation. Times are GPST. <a href="assets/plateau/UrbanNav-LICENSE.txt">UrbanNav MIT attribution ↗</a>.</p>
+        <p><strong>Tracing:</strong> All triangles participate in Float64 BVH visibility tests. Single-bounce specular candidates are tested against each triangle, then both legs are checked for obstruction. Reflections use quasi-static satellite geometry per epoch. ¹ No path means no unobstructed direct or single-bounce ray inside the loaded mesh. Display rays are shortened; display buffers alone use Float32.</p>
+        <p id="repair-readout">Source topology repair is recorded in the scene manifest.</p>
+        <p><strong>² Controlled range experiment:</strong> Horizontal displacement from iterative least squares using the earliest modeled path per usable satellite. It starts at the reference position, with ideal clock and atmospheric corrections, zero noise and no power threshold. LOS-only displacement is zero by construction when geometry permits a solution. This is geometric bias, not measured positioning accuracy, a receiver simulator, or a native PF/FGO benchmark.</p>
+        <p><strong>Reconstruction limits:</strong> A 2018 drive is combined with a 2022 city model, so this does not reproduce the exact historical scene. Moving objects, vegetation, RF power/materials, diffraction, multiple bounces, atmosphere and receiver tracking are not modeled. Occlusion is limited to the 28 loaded tiles. Playback shows the latest completed epoch; it does not compute every intermediate epoch in real time. The timeline evaluates any recorded pose exactly.</p>
+        <p><a href="assets/plateau/manifest.json">Source hashes &amp; asset checksums ↗</a> · <a href="assets/plateau/ATTRIBUTION.txt">Data attribution ↗</a> · <a href="https://github.com/rsasaki0109/gnss_gpu/blob/main/tools/build_plateau_browser_scene.py">Reproducible exporter ↗</a>. Arrow keys orbit; Space plays and pauses.</p>
+      </details>
     </section>
-    <footer><span>gnss_gpu <span class="footer-separator">/</span> Urban Signal Lab</span><a href="index.html">Back to the results snapshot <span aria-hidden="true">↗</span></a></footer>
-    <noscript><p class="no-script">JavaScript is required for the interactive simulation. You can still browse the <a href="index.html">results snapshot</a>.</p></noscript>
+    <footer><span>gnss_gpu <span class="footer-separator">/</span> PLATEAU Signal Lab</span><a href="index.html">Back to the results snapshot ↗</a></footer>
+    <noscript><p class="no-script">JavaScript and WebGL 2 are required. Browse the <a href="index.html">results snapshot</a>.</p></noscript>
   </div>
 </body>
 </html>

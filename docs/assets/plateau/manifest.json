@@ -1,0 +1,216 @@
+{
+  "version": 1,
+  "mesh": {
+    "file": "odaiba-mesh.bin.gz",
+    "bytes": 4714580,
+    "sha256": "ab934e273f68901f9a60ae3c35b2e2c16c1dd03f6d54e6d0ee4e92144ce80ddd",
+    "raw_sha256": "4bc8c250e1e40857f81311a42b63d61c1bcfaf10ef016264dbd10ed0915a55a3"
+  },
+  "scene": {
+    "file": "odaiba-scene.json.gz",
+    "bytes": 210867,
+    "sha256": "60c301f8c4bcaebd295a76bd6676af01fdfd48c387f412691c5055ade1225ed0",
+    "raw_sha256": "e07a2ab456ba007b063d0c6f4518d6474277bcd7e4d1180aca071aae0615cc4b"
+  },
+  "stats": {
+    "polygons": 107119,
+    "holes": 59,
+    "degenerate_faces": 0,
+    "topology_repaired_faces": 1,
+    "inserted_boundary_vertices": 2,
+    "vertices": 163433,
+    "triangles": 320932,
+    "buildings": 1954,
+    "bridges": 132,
+    "epochs": 12410
+  },
+  "provenance": {
+    "city_model": "PLATEAU Tokyo 23 wards 2022, EPSG:6697, highest available LoD per component",
+    "city_url": "https://www.geospatial.jp/ckan/dataset/plateau-tokyo23ku-2022",
+    "city_license": "CC BY 4.0",
+    "files": [
+      {
+        "file": "53393630_bldg_6697_2_op.gml",
+        "bytes": 2150495,
+        "sha256": "105f52f856604312415542c7a43e15ba9e12dd1c4b66c66cddd70fbfce67e32e",
+        "faces": 2632
+      },
+      {
+        "file": "53393632_bldg_6697_2_op.gml",
+        "bytes": 2335458,
+        "sha256": "d7f3d9dc185c22e3683ba633b01bfba14191aa204369bcdc2ce7ab9442d3ebd9",
+        "faces": 1669
+      },
+      {
+        "file": "53393633_bldg_6697_2_op.gml",
+        "bytes": 354771,
+        "sha256": "695bb70f9e2a029c1d635c40a149d433cbc7334ecbfe219d97986d41ee42ae65",
+        "faces": 391
+      },
+      {
+        "file": "53393640_bldg_6697_2_op.gml",
+        "bytes": 1999088,
+        "sha256": "92a4f11fdad75ec1560c3be4966d4b3b5a1a91697ddefbcd7cf36432758990b4",
+        "faces": 2354
+      },
+      {
+        "file": "53393641_bldg_6697_2_op.gml",
+        "bytes": 2205300,
+        "sha256": "a5de3eabc586c5374638c17bd1f11e28a0aa4d23eaf55d145a95f397b8a901e5",
+        "faces": 1707
+      },
+      {
+        "file": "53393641_brid_6697_op.gml",
+        "bytes": 1512314,
+        "sha256": "e053310bfca7ebc0ba24fd719d429097c9345dcb489ccd9c5d838107dc14096a",
+        "faces": 1730
+      },
+      {
+        "file": "53393642_bldg_6697_2_op.gml",
+        "bytes": 7683403,
+        "sha256": "f48ca464177ad398da3e7d7570c431139d8d46b4c158f87441fd6094b7a0b3d2",
+        "faces": 5605
+      },
+      {
+        "file": "53393642_brid_6697_op.gml",
+        "bytes": 2561766,
+        "sha256": "28422404547c07ce59769efbbd2804909f4d7807aa63de3aa3ec855703a6a722",
+        "faces": 2901
+      },
+      {
+        "file": "53393643_bldg_6697_2_op.gml",
+        "bytes": 478904,
+        "sha256": "434e2b4622a3f9e609cb6c9a311b688715a45d90b04f4176fd5521e9f50423f5",
+        "faces": 516
+      },
+      {
+        "file": "53393644_bldg_6697_2_op.gml",
+        "bytes": 19490,
+        "sha256": "d3d4d447c02eaa2545451fa03dbf11da53e4323a6dda58af3245b8119087857a",
+        "faces": 18
+      },
+      {
+        "file": "53393650_bldg_6697_2_op.gml",
+        "bytes": 1501609,
+        "sha256": "921c51c14af614c737344e62c2d6a08038aa1ab86c8565477078a5c8700d5365",
+        "faces": 1748
+      },
+      {
+        "file": "53393651_bldg_6697_2_op.gml",
+        "bytes": 7595670,
+        "sha256": "434dce91024eff1cb691fe5cfcd5f6641e3bff4932e337c41f2f4de3e1e09540",
+        "faces": 5729
+      },
+      {
+        "file": "53393651_brid_6697_op.gml",
+        "bytes": 1551722,
+        "sha256": "ca6aee5eb2de4312078e7427170b41b09720992f9124aa727fade9cd219bda21",
+        "faces": 1747
+      },
+      {
+        "file": "53393652_bldg_6697_2_op.gml",
+        "bytes": 20287690,
+        "sha256": "88b363621684ce2cf3f47e6279e88efda9a1aaf95ac2ac85ee2eea28c3542438",
+        "faces": 14804
+      },
+      {
+        "file": "53393652_brid_6697_op.gml",
+        "bytes": 8307360,
+        "sha256": "f13f0cad6c658283c9789a2cf5b6206e46ec79c7917507dd802b225212f6df22",
+        "faces": 9248
+      },
+      {
+        "file": "53393653_bldg_6697_2_op.gml",
+        "bytes": 17260944,
+        "sha256": "b22442a103972e23dc993f4e036d2a245896730ed7a3daba8010dd72e11291a1",
+        "faces": 12848
+      },
+      {
+        "file": "53393653_brid_6697_op.gml",
+        "bytes": 2969648,
+        "sha256": "6c1af6d43e488bbbdcf3c994fb926bbe6f17e4b7eb79c33fa045095ea2ac1684",
+        "faces": 3365
+      },
+      {
+        "file": "53393654_bldg_6697_2_op.gml",
+        "bytes": 54440,
+        "sha256": "593801e25a5903820c02da8eae19c3c2b513260fd6d7dd69815b89a3b9329581",
+        "faces": 56
+      },
+      {
+        "file": "53393660_bldg_6697_2_op.gml",
+        "bytes": 1750069,
+        "sha256": "69348f7ffc76e3dda51efae95ffd30f5f7c362d6de29e63743db1f1ad769cf2d",
+        "faces": 2084
+      },
+      {
+        "file": "53393660_brid_6697_op.gml",
+        "bytes": 3219897,
+        "sha256": "d4b08430878671e040368336c3fa2baa1b497947474612814bfb4268b4e48e66",
+        "faces": 3875
+      },
+      {
+        "file": "53393661_bldg_6697_2_op.gml",
+        "bytes": 7902,
+        "sha256": "9fc33b3106a82777398125a9614a34acc3683d83c1f113a7438dd8054c489dc1",
+        "faces": 6
+      },
+      {
+        "file": "53393661_brid_6697_op.gml",
+        "bytes": 5069600,
+        "sha256": "944c8add08310cf116c62458f59b916177402d789d6f17761efa07a3e32eb2f5",
+        "faces": 5856
+      },
+      {
+        "file": "53393662_bldg_6697_2_op.gml",
+        "bytes": 11635814,
+        "sha256": "b723e3e4953e09c3d6be26104b9964f7b4d13109981d7968cfe3dbc894fb6704",
+        "faces": 8266
+      },
+      {
+        "file": "53393662_brid_6697_op.gml",
+        "bytes": 2120235,
+        "sha256": "05e600237e1cf0abffd697d2b0ef1c1354f0e4010eb2d61022131032bde684c7",
+        "faces": 2452
+      },
+      {
+        "file": "53393663_bldg_6697_2_op.gml",
+        "bytes": 14313031,
+        "sha256": "57cdd78955e5bb6e4b887c0ccf64f7e5a7ab73a39b95914c317fae3a418b343b",
+        "faces": 10059
+      },
+      {
+        "file": "53393663_brid_6697_op.gml",
+        "bytes": 3238603,
+        "sha256": "6c4975b7a248073030732162840c75959b21ab33a8d7ee94b664971c63271172",
+        "faces": 3679
+      },
+      {
+        "file": "53393664_bldg_6697_2_op.gml",
+        "bytes": 1918764,
+        "sha256": "d71fb8671c7b1fc2fb53a348842b043b183fed94d99f074ddb418ead8e5f7170",
+        "faces": 1657
+      },
+      {
+        "file": "53393664_brid_6697_op.gml",
+        "bytes": 101363,
+        "sha256": "e2868a4b9ee28520668a2292e6169f6d448c3ccd71a8af7e85ae5ba96e29a3f3",
+        "faces": 117
+      }
+    ],
+    "track_source": "UrbanNav-TK-20181219 / Odaiba, Applanix POS LV620 reference.csv (all epochs)",
+    "navigation_source": "UrbanNav base.nav, DLR/TUM CONGO/MGEX merged RINEX 3.03 GPS broadcast ephemerides",
+    "urbannav_url": "https://github.com/IPNL-POLYU/UrbanNavDataset",
+    "reference_sha256": "fbf3f0054df8e68d7552d1e930221a80bfba45ea37703b64c7abf148750c301d",
+    "navigation_sha256": "c58bd7ecaf7c7a0766fa9bc23ba7b0666172c28c95a13c35ac973f88b2645b35",
+    "geoid": {
+      "name": "GSIGEO2011 ver.2.1, bilinear, 1 arc-minute × 1.5 arc-minute",
+      "source": "https://web1.gsi.go.jp/common/000275010.zip",
+      "sha256": "0d3681ae15459433cf07fb4a65b128b1f74b2bf5a9e377c566d45952b96019c8",
+      "min_m": 36.10553436622479,
+      "max_m": 36.46364826517974
+    },
+    "geometry": "Float64 ENU; highest LoD per component; constrained triangulation preserving holes. Self-touching source rings use GEOS make_valid(linework); any new boundary intersections interpolate original 3D edges. Repair counts are reported. No decimation or quantization.",
+    "epochs": "2018 navigation/trajectory and 2022 city model are a cross-year reconstruction; dynamic objects are not represented."
+  }
+}
