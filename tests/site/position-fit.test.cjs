@@ -75,3 +75,50 @@ test("full-mesh fits preserve the original bias, coincidence and unavailable sol
     assert.deepEqual(snapshot,before);
   }
 });
+
+
+test("pinned projection preserves its own stored position and receiver under the current camera",async()=>{
+  const [{pinnedPositionFit,positionFit},{captureReference}]=await Promise.all([modulePromise,import("../../docs/assets/simulation/comparison.mjs")]);
+  const low={...fixture(),epoch:8000,week:2032,tow:274175.1,antenna:0,mask:10,counts:{LOS:4,NLOS:1,BLOCKED:3},satellites:[]};
+  const high=structuredClone(low);high.antenna=20;high.receiver=[10.001,20.002,-10];high.spp.all={position:[...high.receiver],offset:[0,0,0],horizontal:0,spatial:0};
+  const pin=captureReference(freeze(low)),before=structuredClone(high);
+  for(const frame of [view(-.63,.82,800,565,high.receiver),view(2.1,-.5,378,385,[50,-70,90]),view(0,0,800,565,high.receiver,1000)]){
+    const result=pinnedPositionFit(pin,freeze(high),frame,{enabled:true});assert.deepEqual(result,positionFit(low,frame));
+    assert.deepEqual(result.receiver,low.receiver);assert.notDeepEqual(result.receiver,high.receiver);assert.deepEqual(result.position,low.spp.all.position);
+  }
+  assert.deepEqual(high,before);
+  const offscreen=pinnedPositionFit(pin,high,view(0,0,800,565,high.receiver,1000),{enabled:true});assert.equal(offscreen.state,"offscreen");assert.ok(offscreen.fitPoint[0]>800);
+});
+
+test("pinned comparisons require completed matching times, distinct settings and both real solutions",async()=>{
+  const {pinnedPositionFit}=await modulePromise;
+  const current={...fixture(),epoch:8000,week:2032,tow:274175.1,antenna:20,mask:10};
+  const pin={epoch:8000,week:2032,tow:274175.1,antenna:0,mask:10,receiver:[1,2,3],fit:fixture().spp.all};
+  const state=(reference=pin,snapshot=current,options={})=>pinnedPositionFit(reference,snapshot,null,{enabled:true,...options});
+  assert.deepEqual(state(pin,current,{enabled:false}),{state:"closed"});assert.deepEqual(state(null),{state:"empty"});
+  assert.deepEqual(state(pin,null),{state:"loading"});assert.deepEqual(state(pin,current,{ready:false}),{state:"pending"});
+  assert.deepEqual(state(pin,current,{error:true}),{state:"unavailable"});assert.deepEqual(state(pin,current,{focused:true}),{state:"surface"});
+  for(const patch of [{epoch:8001},{week:2033},{tow:current.tow+.1},{tow:NaN}])assert.deepEqual(state(pin,{...current,...patch}),{state:"different-pose"});
+  assert.deepEqual(state(pin,{...current,antenna:0}),{state:"same-settings"});
+  assert.deepEqual(state(pin,{...current,spp:{all:null}}),{state:"no-current-solution"});
+  assert.deepEqual(state({...pin,fit:null}),{state:"no-solution"});
+  assert.deepEqual(pinnedPositionFit({...pin,receiver:null},current,view(),{enabled:true}),{state:"unavailable"});
+});
+
+test("real height comparisons project the exact pinned full-mesh fit without rebasing its bias",async()=>{
+  const [{pinnedPositionFit,positionFit},{captureReference},{CitySimulation},{decodeMesh}]=await Promise.all([modulePromise,import("../../docs/assets/simulation/comparison.mjs"),import("../../docs/assets/simulation/city.mjs"),import("../../docs/assets/simulation/mesh.mjs")]);
+  const folder=path.join(__dirname,"../../docs/assets/plateau"),scene=JSON.parse(gunzipSync(fs.readFileSync(path.join(folder,"odaiba-scene.json.gz")))),bytes=gunzipSync(fs.readFileSync(path.join(folder,"odaiba-mesh.bin.gz")));
+  const simulation=new CitySimulation(scene,decodeMesh(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength)));
+  const low=freeze(simulation.compute({epoch:8000})),high=freeze(simulation.compute({epoch:8000,antenna:20})),masked=freeze(simulation.compute({epoch:8000,mask:30}));
+  const before=[low,high,masked].map(value=>structuredClone(value));
+  for(const [previous,current] of [[low,high],[high,low]]){
+    const pin=captureReference(previous),frame=view(-.63,.82,800,565,current.receiver),result=pinnedPositionFit(pin,current,frame,{enabled:true});
+    assert.deepEqual(result,positionFit(previous,frame));assert.deepEqual(result.position,previous.spp.all.position);assert.deepEqual(result.receiver,previous.receiver);
+    assert.equal(result.horizontal,previous.spp.all.horizontal);assert.equal(result.spatial,previous.spp.all.spatial);
+    assert.notDeepEqual(result.referencePoint,positionFit(current,frame).referencePoint);
+  }
+  assert.equal(pinnedPositionFit(captureReference(low),high,view(0,0,800,565,high.receiver),{enabled:true}).horizontal,65.7406968442433);
+  assert.deepEqual(pinnedPositionFit(captureReference(masked),low,view(),{enabled:true}),{state:"no-solution"});
+  assert.deepEqual(pinnedPositionFit(captureReference(low),masked,view(),{enabled:true}),{state:"no-current-solution"});
+  [low,high,masked].forEach((value,i)=>assert.deepEqual(value,before[i]));
+});

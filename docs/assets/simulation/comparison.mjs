@@ -1,4 +1,11 @@
 // Summaries of completed Float64 results only: no tracing, interpolation or rounding.
+const vector = value => value?.length === 3 && Array.from(value).every(Number.isFinite);
+const copyVector = value => vector(value) ? Object.freeze(Array.from(value)) : null;
+function captureFit(fit) {
+  if (!vector(fit?.position) || !vector(fit.offset) || !Number.isFinite(fit.horizontal) || fit.horizontal < 0 || !Number.isFinite(fit.spatial) || fit.spatial < 0) return null;
+  return Object.freeze({position:copyVector(fit.position),offset:copyVector(fit.offset),horizontal:fit.horizontal,spatial:fit.spatial});
+}
+
 export function captureReference(snapshot) {
   const satellites = snapshot.satellites.map(signal => Object.freeze({
     id: signal.id, status: signal.status,
@@ -7,6 +14,7 @@ export function captureReference(snapshot) {
   return Object.freeze({ epoch: snapshot.epoch, week: snapshot.week, tow: snapshot.tow,
     antenna: snapshot.antenna, mask: snapshot.mask, counts: Object.freeze({ ...snapshot.counts }),
     bias: Number.isFinite(snapshot.spp.all?.horizontal) ? snapshot.spp.all.horizontal : null,
+    receiver: copyVector(snapshot.receiver), fit: captureFit(snapshot.spp.all),
     satellites: Object.freeze(satellites) });
 }
 

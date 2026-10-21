@@ -52,3 +52,25 @@ test("comparisons require the exact original epoch and GPS time and do not expos
   assert.deepEqual(compareReceiver(null,snapshot),{state:"empty"});assert.deepEqual(compareReceiver(reference,null),{state:"empty"});
   for(const patch of [{epoch:8001},{tow:snapshot.tow+.1},{week:snapshot.week+1}])assert.deepEqual(compareReceiver(reference,{...snapshot,...patch}),{state:"different-pose"});
 });
+
+
+test("a pinned fit keeps detached immutable world coordinates and both displacement metrics",async()=>{
+  const [{captureReference}]=await modules,[original]=await cases(),source=structuredClone(original),reference=captureReference(source);
+  assert.deepEqual(reference.receiver,original.receiver);assert.deepEqual(reference.fit.position,original.spp.all.position);assert.deepEqual(reference.fit.offset,original.spp.all.offset);
+  assert.equal(reference.fit.horizontal,65.7406968442433);assert.equal(reference.fit.spatial,116.37532039628215);
+  assert.notStrictEqual(reference.receiver,source.receiver);assert.notStrictEqual(reference.fit.position,source.spp.all.position);assert.notStrictEqual(reference.fit.offset,source.spp.all.offset);
+  source.receiver[0]+=100;source.spp.all.position[0]+=200;source.spp.all.offset[2]-=300;source.spp.all.spatial=999;
+  assert.deepEqual(reference.receiver,original.receiver);assert.deepEqual(reference.fit.position,original.spp.all.position);assert.deepEqual(reference.fit.offset,original.spp.all.offset);
+  assert.equal(reference.fit.spatial,original.spp.all.spatial);
+  for(const value of [reference.receiver,reference.fit,reference.fit.position,reference.fit.offset])assert.ok(Object.isFrozen(value));
+});
+
+test("missing or invalid pinned geometry cannot invent a position while existing table metrics stay intact",async()=>{
+  const [{captureReference}]=await modules,[original,,masked]=await cases();
+  const missing=captureReference(masked);assert.equal(missing.fit,null);assert.deepEqual(missing.receiver,masked.receiver);assert.equal(missing.bias,null);
+  for(const change of [s=>s.spp.all.position[0]=Infinity,s=>s.spp.all.offset[2]=NaN,s=>s.spp.all.spatial=null]){
+    const source=structuredClone(original);change(source);const reference=captureReference(source);
+    assert.equal(reference.fit,null);assert.equal(reference.bias,original.spp.all.horizontal);assert.deepEqual(reference.counts,original.counts);
+  }
+  const source=structuredClone(original);source.receiver[0]=NaN;assert.equal(captureReference(source).receiver,null);
+});

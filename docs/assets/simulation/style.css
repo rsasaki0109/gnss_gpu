@@ -14,7 +14,7 @@
   font-synthesis:none
 }
 
-#annotations, #position-fit {
+#annotations, .position-fit-overlay {
   position:absolute;
   inset:0;
   width:100%;
@@ -22,12 +22,18 @@
   pointer-events:none
 }
 
-#position-fit { overflow:hidden }
-#position-fit[hidden], .legend>span[hidden] { display:none }
-#fit-displacement { stroke:#d7b4ff; stroke-width:1.5; stroke-dasharray:5 5; opacity:.85 }
-#fit-marker { fill:#121e28; stroke:#d7b4ff; stroke-width:2 }
-#fit-label { fill:#e1c8ff; font:600 12px Inter,"Segoe UI",sans-serif; stroke:#0c141c; stroke-width:3; paint-order:stroke }
-#fit-legend i { width:7px; height:7px; border:1.5px solid #d7b4ff; transform:rotate(45deg) }
+.position-fit-overlay { overflow:hidden }
+.position-fit-overlay[hidden], .legend>span[hidden] { display:none }
+#fit-displacement, #pinned-fit-displacement { stroke:#d7b4ff; stroke-width:1.5; stroke-dasharray:5 5; opacity:.85 }
+#fit-marker, #pinned-fit-marker { fill:#121e28; stroke:#d7b4ff; stroke-width:2 }
+#fit-label, #pinned-fit-label { fill:#e1c8ff; font:600 12px Inter,"Segoe UI",sans-serif; stroke:#0c141c; stroke-width:3; paint-order:stroke }
+#fit-legend i, #pinned-fit-legend i { width:7px; height:7px; border:1.5px solid #d7b4ff; transform:rotate(45deg) }
+
+#pinned-fit-displacement { stroke:var(--blue); stroke-dasharray:3 5 }
+#pinned-fit-marker { stroke:var(--blue); fill:none }
+#pinned-fit-label { fill:#aacdf2 }
+#pinned-fit-origin { fill:none; stroke:var(--blue); stroke-width:1.5; stroke-dasharray:2 2 }
+#pinned-fit-legend i { border-color:var(--blue) }
 
 .data-strip {
   display:flex;
