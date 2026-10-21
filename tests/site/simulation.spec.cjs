@@ -1,5 +1,10 @@
 const { test, expect } = require("@playwright/test");
 const { deflateSync } = require("node:zlib");
+const { gunzipSync } = require("node:zlib");
+const fs = require("node:fs");
+const path = require("node:path");
+const SCENE = JSON.parse(gunzipSync(fs.readFileSync(path.join(__dirname, "../../docs/assets/plateau/odaiba-scene.json.gz"))));
+const POSITIONS = SCENE.track.map(row => SCENE.rotation.map(axis => axis.reduce((sum, value, i) => sum + value * (row[i + 1] - SCENE.origin[i]), 0)));
 
 // A generated one-pixel test tile. Headless tests never contact OSM servers.
 function tileFixture() {
@@ -141,4 +146,76 @@ test("a tile service outage leaves PLATEAU tracing operational", async ({page}) 
   await expect(canvas).toHaveAttribute("data-epoch","0");
   await expect(page.locator(".metrics strong")).toHaveText(["5","0","2"]);
   expect(errors).toEqual([]);
+});
+
+test("route keyboard and step buttons evaluate exact source poses, pause playback and respect endpoints", async ({page}) => {
+  const errors=[]; page.on("pageerror", error => errors.push(error.message));
+  await page.goto("simulation.html");
+  const canvas=page.locator("#scene"), route=page.getByRole("slider", {name:"Recorded route position"});
+  await expect(route).toHaveAttribute("data-state", "ready", {timeout:45000});
+  await expect(route).toHaveAttribute("data-pose-count", "12410");
+  await expect(route).toHaveAttribute("aria-valuenow", "8001");
+  await route.press("ArrowRight");
+  await expect(canvas).toHaveAttribute("data-epoch", "8001");
+  const receiver=(await canvas.getAttribute("data-receiver")).split(",").map(Number);
+  expect(Math.hypot(...receiver.map((v,i)=>v-POSITIONS[8001][i]))).toBeLessThan(1e-7);
+  await expect(page.locator("#preset")).toHaveValue("");
+  await expect(route).toHaveAttribute("aria-valuetext", /Pose 8,002 of 12,410/);
+  await route.press("Shift+ArrowRight");
+  await expect(canvas).toHaveAttribute("data-epoch", "8011");
+  await page.getByRole("button", {name:"Back 1 second", exact:true}).click();
+  await page.getByRole("button", {name:"Previous recorded pose, 0.1 seconds", exact:true}).click();
+  await expect(canvas).toHaveAttribute("data-epoch", "8000");
+  await expect(page.locator(".metrics strong")).toHaveText(["4","1","3"]);
+  await expect(page.locator("#spp-all")).toHaveText("65.74 m");
+  await route.press("Home");
+  await expect(canvas).toHaveAttribute("data-epoch", "0");
+  await expect(page.getByRole("button", {name:"Back 1 second", exact:true})).toBeDisabled();
+  await expect(page.getByRole("button", {name:"Previous recorded pose, 0.1 seconds", exact:true})).toBeDisabled();
+  await route.press("End");
+  await expect(canvas).toHaveAttribute("data-epoch", "12409");
+  await expect(page.getByRole("button", {name:"Forward 1 second", exact:true})).toBeDisabled();
+  await expect(page.getByRole("button", {name:"Next recorded pose, 0.1 seconds", exact:true})).toBeDisabled();
+  await route.press("Home");
+  await page.locator("#play").click();
+  await expect.poll(async()=>Number(await canvas.getAttribute("data-epoch"))).toBeGreaterThan(0);
+  await route.press("Home");
+  await expect(page.locator("#play")).toHaveAttribute("aria-pressed", "false");
+  await expect(canvas).toHaveAttribute("data-epoch", "0");
+  await expect(route).toHaveAttribute("data-state", "ready");
+  expect(errors).toEqual([]);
+});
+
+test("clicking or tapping the route seeks an original nearby pose while empty space and drags leave it intact", async ({page,isMobile}) => {
+  await page.goto("simulation.html");
+  const canvas=page.locator("#scene"), route=page.locator("#route");
+  await expect(route).toHaveAttribute("data-state", "ready", {timeout:45000});
+  await route.scrollIntoViewIfNeeded();
+  const box=await route.boundingBox();
+  const dimensions=await route.evaluate(el=>({width:el.clientWidth,height:el.clientHeight}));
+  // Independently project the requested original position into the north-up overview.
+  const low=[0,1].map(i=>Math.min(...POSITIONS.map(p=>p[i]))),high=[0,1].map(i=>Math.max(...POSITIONS.map(p=>p[i])));
+  const scale=Math.min((dimensions.width-44)/(high[0]-low[0]),(dimensions.height-44)/(high[1]-low[1]));
+  const target=POSITIONS[6000];
+  const x=dimensions.width/2+(target[0]-(low[0]+high[0])/2)*scale;
+  const y=dimensions.height/2-(target[1]-(low[1]+high[1])/2)*scale;
+  if(isMobile) await page.touchscreen.tap(box.x+x,box.y+y);
+  else await route.click({position:{x,y}});
+  await expect.poll(async()=>Number(await canvas.getAttribute("data-epoch"))).not.toBe(8000);
+  await expect(route).toHaveAttribute("data-state", "ready");
+  const epoch=Number(await canvas.getAttribute("data-epoch"));
+  // Screen rounding can select an adjacent source row; the receiver remains exactly that row.
+  const receiver=(await canvas.getAttribute("data-receiver")).split(",").map(Number);
+  expect(Math.hypot(...receiver.map((v,i)=>v-POSITIONS[epoch][i]))).toBeLessThan(1e-7);
+  expect(Math.hypot(POSITIONS[epoch][0]-target[0],POSITIONS[epoch][1]-target[1])*scale).toBeLessThan(1.5);
+  await expect(page.locator("#progress")).toHaveValue(String(epoch));
+  await expect(route).toHaveAttribute("aria-valuenow", String(epoch+1));
+  await route.click({position:{x:1,y:1}});
+  await expect(canvas).toHaveAttribute("data-epoch", String(epoch));
+  const fresh=await route.boundingBox();
+  await page.mouse.move(fresh.x+x,fresh.y+y); await page.mouse.down();
+  await page.mouse.move(fresh.x+x+30,fresh.y+y+20,{steps:4}); await page.mouse.up();
+  await expect(canvas).toHaveAttribute("data-epoch", String(epoch));
+  const layout=await page.evaluate(()=>({client:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth}));
+  expect(layout.scroll).toBeLessThanOrEqual(layout.client+2);
 });
