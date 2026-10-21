@@ -1,6 +1,7 @@
 // Float32 is used only for drawing. The worker retains the Float64 source mesh.
 import { localPoint, sub, mul, norm, add } from "./orbit.mjs";
 import { OSMBasemap } from "./osm-layer.mjs";
+import { viewAxes, surfaceOrientation, framePoints } from "./view-geometry.mjs";
 
 const COLORS = { LOS: [.52, .89, .74], NLOS: [.94, .74, .47], BLOCKED: [.92, .56, .57] };
 
@@ -10,7 +11,7 @@ export class CityRenderer {
     const gl = canvas.getContext("webgl2", { alpha: false, antialias: true });
     if (!gl) throw new Error("This view requires WebGL 2. Try a browser with hardware acceleration enabled.");
     this.gl = gl; this.scene = scene;
-    this.camera = { yaw: -.63, pitch: .82, zoom: 1, target: [0, 0, 0], overview: false };
+    this.camera = { yaw: -.63, pitch: .82, zoom: 1, target: [0, 0, 0], overview: false, span: 740 };
     const shader = (type, source) => {
       const result = gl.createShader(type);
       gl.shaderSource(result, source); gl.compileShader(result);
@@ -59,6 +60,7 @@ export class CityRenderer {
     for (let i = 1; i < track.length; i++) line(track[i - 1], track[i], [.30, .49, .65]);
     this.track = this.upload(new Float32Array(lines), gl.LINES);
     this.dynamic = this.upload(new Float32Array(), gl.LINES, true);
+    this.surface = this.upload(new Float32Array(), gl.TRIANGLES, true);
     this.basemap = new OSMBasemap(gl, scene, onMapChange); this.resize();
   }
 
@@ -78,10 +80,10 @@ export class CityRenderer {
   }
 
   basis() {
-    const { yaw, pitch } = this.camera, c = Math.cos(yaw), s = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
-    this.right = [c, -s, 0]; this.up = [-s * sp, -c * sp, cp]; this.depth = [s * cp, c * cp, sp];
+    const { yaw, pitch } = this.camera;
+    Object.assign(this, viewAxes(yaw, pitch));
     const [lo, hi] = this.scene.bounds;
-    const span = this.camera.overview ? Math.max(hi[0] - lo[0], hi[1] - lo[1]) * 1.3 : 740;
+    const span = this.camera.overview ? Math.max(hi[0] - lo[0], hi[1] - lo[1]) * 1.3 : this.camera.span;
     this.scale = Math.min(this.width, this.height * 1.3) / span * this.camera.zoom;
   }
 
@@ -90,10 +92,28 @@ export class CityRenderer {
     return [this.width / 2 + dot(this.right) * this.scale, this.height * .56 - dot(this.up) * this.scale];
   }
 
+  focusSurface(snapshot, signal, kind) {
+    const hit = kind === "reflection" ? signal?.reflection : signal?.directHit;
+    if (!hit) return false;
+    if (!this.focus) this.previousCamera = { ...this.camera, target: this.camera.target.slice() };
+    this.focus = { kind, satellite: signal.id, hit, points: [snapshot.receiver, hit.point, ...hit.vertices] };
+    Object.assign(this.camera, surfaceOrientation(snapshot.receiver, hit), { overview: false, zoom: 1 });
+    const color = COLORS[kind === "reflection" ? "NLOS" : "BLOCKED"].map(value => value * .8);
+    const data = new Float32Array(hit.vertices.flatMap(point => [...point, 0, 0, 0, ...color]));
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.surface.buffer); this.gl.bufferData(this.gl.ARRAY_BUFFER, data, this.gl.DYNAMIC_DRAW);
+    this.surface.count = 3; return true;
+  }
+
+  clearFocus() {
+    if (!this.focus) return;
+    Object.assign(this.camera, this.previousCamera); this.focus = null; this.previousCamera = null;
+  }
+
   draw(snapshot, selected, reflections) {
     if (!this.width || !this.height) return;
     const gl = this.gl, ctx = this.ctx;
-    if (!this.camera.overview && snapshot) this.camera.target = snapshot.receiver.slice();
+    if (this.focus) Object.assign(this.camera, framePoints(this.focus.points, this.camera.yaw, this.camera.pitch, this.width, this.height));
+    else if (!this.camera.overview && snapshot) this.camera.target = snapshot.receiver.slice();
     if (this.camera.overview) this.camera.target = this.scene.bounds[0].map((value, i) => (value + this.scene.bounds[1][i]) / 2);
     this.basis(); gl.clearColor(.055, .10, .135, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     const matrix = [];
@@ -105,23 +125,34 @@ export class CityRenderer {
     const draw = (item, lit) => { gl.uniform1f(this.uniforms.lit, lit); gl.bindVertexArray(item.vao); gl.drawArrays(item.mode, 0, item.count); };
     draw(this.city, 1); if (!mapped) draw(this.grid, 0); draw(this.track, 0); ctx.clearRect(0, 0, this.width, this.height);
     if (!snapshot) return;
+    if (this.focus) {
+      gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-1, -1); draw(this.surface, 0); gl.disable(gl.POLYGON_OFFSET_FILL);
+    }
+    Object.assign(this.canvas.dataset, { view: this.focus?.kind ?? (this.camera.overview ? "overview" : "receiver"), focusSatellite: this.focus?.satellite ?? "", focusTriangle: this.focus?.hit.triangle ?? "", focusSide: this.focus ? this.camera.pitch < 0 ? "below" : "above" : "" });
     const data = [], labels = [];
     const line = (points, color) => { for (let i = 1; i < points.length; i++) for (const point of [points[i - 1], points[i]]) data.push(...point, 0, 0, 0, ...color); };
-    const end = (point, direction) => add(point, mul(direction, 420 / this.camera.zoom));
+    const end = (point, direction) => add(point, mul(direction, (this.focus ? this.camera.span * .8 : 420) / this.camera.zoom));
     const ray = signal => {
-      const color = COLORS[signal.status], active = signal.id === selected, tint = active ? color : color.map(v => v * .58);
+      const color = COLORS[this.focus?.kind === "blockage" ? "BLOCKED" : signal.status], active = signal.id === selected, tint = active ? color : color.map(v => v * .58);
       const directEnd = signal.directHit?.point ?? end(snapshot.receiver, signal.direction);
-      line([snapshot.receiver, directEnd], tint);
-      if (active && signal.directHit) line([directEnd, end(directEnd, signal.direction)], [.34, .23, .26]);
-      if (reflections && signal.reflection) {
-        const q = signal.reflection.point, direction = sub(signal.source, q);
-        line([snapshot.receiver, q, end(q, mul(direction, 1 / norm(direction)))], COLORS.NLOS.map(v => v * (active ? 1 : .6)));
+      if (this.focus?.kind !== "reflection") {
+        line([snapshot.receiver, directEnd], tint);
+        if (active && signal.directHit) line([directEnd, end(directEnd, signal.direction)], [.34, .23, .26]);
       }
-      if (active) for (const hit of [signal.directHit, reflections ? signal.reflection : null]) if (hit) line([...hit.vertices, hit.vertices[0]], COLORS[hit === signal.reflection ? "NLOS" : "BLOCKED"]);
-      labels.push({ point: this.project(end(snapshot.receiver, signal.direction)), text: signal.id, color: tint });
+      let labelPoint = end(snapshot.receiver, signal.direction);
+      if (reflections && signal.reflection && this.focus?.kind !== "blockage") {
+        const q = signal.reflection.point, direction = sub(signal.source, q);
+        const sourceEnd = end(q, mul(direction, 1 / norm(direction)));
+        line([snapshot.receiver, q, sourceEnd], COLORS.NLOS.map(v => v * (active ? 1 : .6)));
+        if (this.focus) labelPoint = sourceEnd;
+      }
+      const hits = this.focus ? [this.focus.hit] : [signal.directHit, reflections ? signal.reflection : null];
+      if (active) for (const hit of hits) if (hit) line([...hit.vertices, hit.vertices[0]], COLORS[hit === signal.reflection ? "NLOS" : "BLOCKED"]);
+      labels.push({ point: this.project(labelPoint), text: signal.id, color: tint });
     };
-    for (const signal of snapshot.satellites) if (signal.id !== selected) ray(signal);
+    if (!this.focus) for (const signal of snapshot.satellites) if (signal.id !== selected) ray(signal);
     const active = snapshot.satellites.find(s => s.id === selected); if (active) ray(active);
+    this.canvas.dataset.displaySignals = labels.length;
     line([snapshot.receiver, add(snapshot.receiver, [0, 0, 9])], COLORS.LOS);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.dynamic.buffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.DYNAMIC_DRAW);
     this.dynamic.count = data.length / 9; draw(this.dynamic, 0);
@@ -136,6 +167,15 @@ export class CityRenderer {
     ctx.beginPath(); ctx.arc(x, y, 10, 0, 2 * Math.PI); ctx.fillStyle = "#85e4bc22"; ctx.fill();
     ctx.beginPath(); ctx.arc(x, y, 4, 0, 2 * Math.PI); ctx.fillStyle = "#85e4bc"; ctx.fill();
     ctx.strokeStyle = "#0c141c"; ctx.lineWidth = 2; ctx.stroke();
+    if (this.focus) {
+      const [hx, hy] = this.project(this.focus.hit.point), text = this.focus.kind === "reflection" ? "Reflection" : "Obstruction";
+      const color = this.focus.kind === "reflection" ? "#efbc79" : "#ec8f91";
+      ctx.beginPath(); ctx.arc(hx, hy, 5, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill(); ctx.stroke();
+      ctx.font = "10px ui-monospace, monospace"; ctx.textAlign = "left";
+      const textWidth = ctx.measureText(text).width, lx = Math.max(8, Math.min(this.width - textWidth - 18, hx + 10));
+      ctx.fillStyle = "#0c141ce8"; ctx.fillRect(lx - 5, hy - 12, textWidth + 10, 21);
+      ctx.fillStyle = color; ctx.fillText(text, lx, hy + 2);
+    }
     ctx.font = "10px ui-monospace, monospace"; ctx.fillStyle = "#b0c3cf"; ctx.textAlign = "left";
     const maximum = Math.min(120, this.width * .25) / this.scale;
     const power = 10 ** Math.floor(Math.log10(maximum));

@@ -40,7 +40,7 @@ test("map coordinates align with the recorded WGS84 ECEF origin and an analytic 
 
 test("inverse camera footprint projects to all four canvas corners", async () => {
   const { groundFootprint } = await geometry;
-  for (const yaw of [-1.2,0,.8]) for (const pitch of [.15,.82,1.48]) {
+  for (const yaw of [-1.2,0,.8]) for (const pitch of [-1.48,-.82,-.15,.15,.82,1.48]) {
     const camera = {yaw,pitch,target:[-400,500,12]}, width=940,height=565,scale=1.23;
     const corners = groundFootprint(camera,width,height,scale,-8);
     for (let i=0;i<4;i++) {
@@ -54,7 +54,7 @@ test("inverse camera footprint projects to all four canvas corners", async () =>
 
 test("visible map tile planning covers the viewport and stays bounded at oblique and overview scales", async () => {
   const { groundFootprint,visibleTiles,localToLonLat,lonLatToTile } = await geometry;
-  for (const scale of [.08,.5,1,5]) for (const pitch of [.15,.82,1.48]) {
+  for (const scale of [.08,.5,1,5]) for (const pitch of [-1.48,-.82,-.15,.15,.82,1.48]) {
     const footprint = groundFootprint({yaw:-.63,pitch,target:[-1000,-1250,0]},940,565,scale,-8);
     const tiles = visibleTiles(footprint,scene,scale);
     assert.ok(tiles.length>=1 && tiles.length<=32);

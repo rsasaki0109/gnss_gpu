@@ -1,7 +1,8 @@
 import { C } from "./orbit.mjs";
 import { decodeMesh } from "./mesh.mjs";
-import { CityRenderer } from "./renderer.mjs?v=osm-1";
+import { CityRenderer } from "./renderer.mjs?v=surface-1";
 import { RouteNavigator, stepEpoch } from "./route-navigation.mjs?v=route-1";
+import { clampViewPitch } from "./view-geometry.mjs";
 
 const $ = id => document.getElementById(id);
 const canvas = $("scene"), settings = { epoch: 8000, antenna: 0, mask: 10 };
@@ -14,7 +15,7 @@ function status(message, error = false) {
   $("status-text").textContent = message; $("trace-status").classList.toggle("error", error);
 }
 function fail(error) {
-  controlsReady = false; canvas.dataset.error = "true"; setPlaying(false); status("Unable to simulate", true); syncRoute();
+  controlsReady = false; canvas.dataset.error = "true"; setPlaying(false); clearSurfaceFocus(); status("Unable to simulate", true); syncRoute(); syncFocusUI();
   $("toast").textContent = error.message; $("toast").hidden = false;
   for (const input of document.querySelectorAll("[data-load-control]")) input.disabled = true;
 }
@@ -32,7 +33,7 @@ function syncControls() {
 }
 function syncRoute() {
   if (!scene || !routeNavigator) return;
-  const ready = Boolean(controlsReady && snapshot?.epoch === settings.epoch && snapshot.antenna === settings.antenna && snapshot.mask === settings.mask);
+  const ready = currentTrace();
   const label = `Pose ${(settings.epoch + 1).toLocaleString("en-US")} of ${scene.track.length.toLocaleString("en-US")} · ${gpst(scene.track[settings.epoch][0])} GPST`;
   $("route-selection").textContent = label;
   $("route-trace").textContent = !controlsReady ? canvas.dataset.error ? "Simulation unavailable" : "Preparing full-mesh tracer…" : ready ? "Trace matches selected pose" : "Tracing selected pose…";
@@ -41,13 +42,16 @@ function syncRoute() {
     button.disabled = !controlsReady || stepEpoch(settings.epoch, Number(button.dataset.routeStep), scene.track.length) === settings.epoch;
   }
   routeNavigator.update(settings.epoch, ready, controlsReady, label);
+  syncFocusUI();
 }
+function currentTrace() { return Boolean(controlsReady && snapshot?.epoch === settings.epoch && snapshot.antenna === settings.antenna && snapshot.mask === settings.mask); }
 function seekEpoch(epoch) {
   if (!controlsReady) return;
   setPlaying(false); settings.epoch = stepEpoch(epoch, 0, scene.track.length);
   revision++; syncControls(); requestTrace();
 }
 function setPlaying(value) {
+  if (value) clearSurfaceFocus();
   playing = value; playbackEpoch = settings.epoch; $("play").setAttribute("aria-pressed", String(value));
   $("play-icon").textContent = value ? "Ⅱ" : "▶"; $("play-label").textContent = value ? "Pause" : "Play · 10×";
 }
@@ -61,6 +65,7 @@ function updateMap(stats) {
 }
 function requestTrace() {
   if (!worker) return;
+  clearSurfaceFocus();
   const item = { type: "trace", id: ++nextId, revision, settings: { ...settings } };
   status("Tracing full mesh…"); if (busy) pending = item; else send(item);
 }
@@ -80,7 +85,7 @@ function updateReadout(milliseconds) {
     const name = document.createElement("span"); name.className = "sat-id"; name.textContent = signal.id;
     const elevation = document.createElement("span"); elevation.className = "elevation"; elevation.textContent = `${signal.elevation.toFixed(1)}°`;
     const tag = document.createElement("span"); tag.className = "path-tag"; tag.textContent = signal.status === "NLOS" ? "REFLECTED" : signal.status;
-    button.append(name, elevation, tag); button.addEventListener("click", () => { selected = signal.id; inspect(); dirty = true; }); return button;
+    button.append(name, elevation, tag); button.addEventListener("click", () => { if (selected !== signal.id) clearSurfaceFocus(); selected = signal.id; inspect(); dirty = true; }); return button;
   });
   $("satellites").replaceChildren(...buttons);
   $("spp-all").textContent = snapshot.spp.all ? `${snapshot.spp.all.horizontal.toFixed(2)} m` : "Unavailable";
@@ -91,6 +96,7 @@ function updateReadout(milliseconds) {
 function inspect() {
   for (const button of document.querySelectorAll("[data-satellite]")) button.setAttribute("aria-pressed", String(button.dataset.satellite === selected));
   const signal = snapshot.satellites.find(s => s.id === selected); $("selected-id").textContent = signal?.id ?? "—";
+  syncFocusUI();
   if (!signal) { $("channel-status").textContent = "No GPS satellite above this mask."; return; }
   $("channel-status").textContent = signal.status === "LOS" ? "A direct path reaches the recorded receiver position." : signal.status === "NLOS" ? "Direct path blocked. A single reflection reaches the receiver." : "No unobstructed direct or single-bounce path in this mesh.";
   $("channel-status").style.color = colors[signal.status];
@@ -98,28 +104,60 @@ function inspect() {
   $("path-count").textContent = signal.reflectionCount;
   $("excess-value").textContent = signal.reflection ? `+${signal.reflection.extra.toFixed(3)} m` : "—";
   $("delay-value").textContent = signal.reflection ? `+${(signal.reflection.extra / C * 1e9).toFixed(2)} ns` : "—";
-  const hit = signal.reflection ?? signal.directHit, object = hit ? scene.objects[hit.object] : null;
+  const hit = renderer?.focus?.kind === "blockage" ? signal.directHit : signal.reflection ?? signal.directHit, object = hit ? scene.objects[hit.object] : null;
   $("feature-id").textContent = object ? `${object.id} · LoD ${object.lod} · triangle ${hit.triangle}` : "No intersected feature";
   $("feature-id").title = object?.source ?? "";
 }
+function syncFocusUI() {
+  const signal = snapshot?.satellites.find(s => s.id === selected), focus = renderer?.focus;
+  $("focus-reflection").disabled = !currentTrace() || !signal?.reflection;
+  $("focus-blockage").disabled = !currentTrace() || !signal?.directHit;
+  $("focus-reflection").setAttribute("aria-pressed", String(focus?.kind === "reflection"));
+  $("focus-blockage").setAttribute("aria-pressed", String(focus?.kind === "blockage"));
+  $("focus-exit").hidden = !focus;
+  $("scene-name").textContent = focus ? `${focus.satellite} · ${focus.kind === "reflection" ? "Reflecting surface" : "Obstructing surface"}` : "Tokyo · Odaiba";
+  $("overview").setAttribute("aria-pressed", String(Boolean(renderer?.camera.overview)));
+  updateViewCaption();
+}
+function updateViewCaption() {
+  const text = renderer?.focus ? `PLATEAU 2022 / ${renderer.camera.pitch < 0 ? "UNDERSIDE VIEW" : "SURFACE VIEW"}` : "PLATEAU / 2022";
+  if ($("view-caption").textContent !== text) $("view-caption").textContent = text;
+}
+function clearSurfaceFocus() {
+  if (!renderer?.focus) return;
+  renderer.clearFocus(); inspect(); dirty = true;
+}
+function focusSurface(kind) {
+  if (!currentTrace()) return;
+  if (renderer.focus?.kind === kind) { clearSurfaceFocus(); return; }
+  const signal = snapshot.satellites.find(s => s.id === selected);
+  setPlaying(false);
+  if (!renderer.focusSurface(snapshot, signal, kind)) return;
+  if (kind === "reflection") { showReflections = true; $("reflections").checked = true; }
+  inspect(); dirty = true; canvas.scrollIntoView({ block: "center" }); canvas.focus({ preventScroll: true });
+}
+$("focus-reflection").addEventListener("click", () => focusSurface("reflection"));
+$("focus-blockage").addEventListener("click", () => focusSurface("blockage"));
+$("focus-exit").addEventListener("click", () => { clearSurfaceFocus(); canvas.focus({ preventScroll: true }); });
 for (const id of ["antenna", "mask"]) $(id).addEventListener("input", event => { settings[id] = Number(event.target.value); revision++; syncControls(); requestTrace(); });
 $("progress").addEventListener("input", event => seekEpoch(Number(event.target.value)));
 $("preset").addEventListener("change", event => seekEpoch(Number(event.target.value)));
 for (const button of document.querySelectorAll("[data-route-step]")) button.addEventListener("click", () => seekEpoch(settings.epoch + Number(button.dataset.routeStep)));
 $("play").addEventListener("click", () => setPlaying(!playing));
-$("reflections").addEventListener("change", event => { showReflections = event.target.checked; dirty = true; });
+$("reflections").addEventListener("change", event => { showReflections = event.target.checked; if (!showReflections && renderer?.focus?.kind === "reflection") clearSurfaceFocus(); dirty = true; });
 $("basemap").addEventListener("change", event => { renderer?.basemap.setEnabled(event.target.checked); dirty = true; });
 $("reset").addEventListener("click", () => {
   setPlaying(false); Object.assign(settings, { epoch: 8000, antenna: 0, mask: 10 });
   $("antenna").value = 0; $("mask").value = 10; $("preset").value = "8000";
   resetCamera(); revision++; syncControls(); requestTrace();
 });
-function resetCamera() { if (renderer) Object.assign(renderer.camera, { yaw: -.63, pitch: .82, zoom: 1, overview: false }); $("overview").setAttribute("aria-pressed", "false"); dirty = true; }
+function resetCamera() { clearSurfaceFocus(); if (renderer) Object.assign(renderer.camera, { yaw: -.63, pitch: .82, zoom: 1, overview: false, span: 740 }); syncFocusUI(); dirty = true; }
 $("reset-view").addEventListener("click", resetCamera);
 $("zoom-in").addEventListener("click", () => { if (renderer) renderer.camera.zoom = Math.min(6, renderer.camera.zoom * 1.25); dirty = true; });
 $("zoom-out").addEventListener("click", () => { if (renderer) renderer.camera.zoom = Math.max(.3, renderer.camera.zoom / 1.25); dirty = true; });
 $("overview").addEventListener("click", () => {
-  if (!renderer) return; renderer.camera.overview = !renderer.camera.overview; renderer.camera.zoom = 1;
+  if (!renderer) return; const overview = renderer.focus ? true : !renderer.camera.overview;
+  clearSurfaceFocus(); renderer.camera.overview = overview; renderer.camera.zoom = 1;
   $("overview").setAttribute("aria-pressed", String(renderer.camera.overview)); dirty = true;
 });
 let drag;
@@ -129,7 +167,7 @@ canvas.addEventListener("pointerdown", event => {
 });
 canvas.addEventListener("pointermove", event => {
   if (!drag) return; renderer.camera.yaw = drag.yaw + (event.clientX - drag.x) * .006;
-  renderer.camera.pitch = Math.max(.15, Math.min(1.48, drag.pitch + (event.clientY - drag.y) * .005)); dirty = true;
+  renderer.camera.pitch = clampViewPitch(drag.pitch + (event.clientY - drag.y) * .005, Boolean(renderer.focus)); dirty = true;
 });
 for (const type of ["pointerup", "pointercancel"]) canvas.addEventListener(type, () => { drag = null; });
 canvas.addEventListener("wheel", event => {
@@ -141,7 +179,8 @@ canvas.addEventListener("keydown", event => {
   if (event.code === "Space") { event.preventDefault(); setPlaying(!playing); }
   if (event.key.startsWith("Arrow")) {
     event.preventDefault(); renderer.camera.yaw += event.key === "ArrowLeft" ? -.1 : event.key === "ArrowRight" ? .1 : 0;
-    renderer.camera.pitch = Math.max(.15, Math.min(1.48, renderer.camera.pitch + (event.key === "ArrowUp" ? .1 : event.key === "ArrowDown" ? -.1 : 0))); dirty = true;
+    const direction = event.key === "ArrowUp" ? .1 : event.key === "ArrowDown" ? -.1 : 0;
+    renderer.camera.pitch = clampViewPitch(renderer.camera.pitch + direction, Boolean(renderer.focus), direction); dirty = true;
   }
 });
 new ResizeObserver(() => { renderer?.resize(); dirty = true; }).observe(canvas);
@@ -179,7 +218,7 @@ async function initialize() {
     if (data.type === "error") { fail(new Error(data.error)); return; }
     if (data.type === "ready") { busy = false; controlsReady = true; for (const input of document.querySelectorAll("[data-load-control]")) input.disabled = false; syncRoute(); requestTrace(); return; }
     busy = false;
-    if (data.revision === revision) { snapshot = data.snapshot; updateReadout(data.milliseconds); }
+    if (data.revision === revision) { clearSurfaceFocus(); snapshot = data.snapshot; canvas.dataset.traceId = data.id; updateReadout(data.milliseconds); }
     if (pending) { const item = pending; pending = null; send(item); }
   };
   worker.postMessage({ type: "init", scene, buffer: meshBuffer }, [meshBuffer]); syncControls();
@@ -192,7 +231,7 @@ function frame(time) {
     if (epoch !== settings.epoch) { settings.epoch = epoch; syncControls(); requestTrace(); }
     if (epoch === scene.track.length - 1) setPlaying(false);
   }
-  if (dirty && renderer) { renderer.draw(snapshot, selected, showReflections); dirty = false; }
+  if (dirty && renderer) { renderer.draw(snapshot, selected, showReflections); updateViewCaption(); dirty = false; }
   requestAnimationFrame(frame);
 }
 syncControls(); requestAnimationFrame(frame); initialize().catch(fail);

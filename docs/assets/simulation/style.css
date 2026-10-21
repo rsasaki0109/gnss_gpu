@@ -88,6 +88,14 @@
 }
 
 .trace-status.error { color:var(--red) }
+.surface-actions { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-top:14px }
+.surface-actions button,.focus-exit { border:1px solid #4b6170; border-radius:5px; background:#1a2b38; min-height:36px; padding:7px 6px; font-size:10px }
+.surface-actions button[aria-pressed=true] { color:var(--amber); border-color:#a27e4e; background:#352d24 }
+#focus-blockage[aria-pressed=true] { color:var(--red); border-color:#9c6263; background:#35272b }
+.surface-actions button:disabled { opacity:.35; cursor:default }
+.focus-exit { position:absolute; top:110px; left:23px; background:#0c141cf2; min-height:32px; padding:7px 10px; color:var(--mint) }
+.focus-exit[hidden] { display:none }
+#stage { scroll-margin-top:12px }
 .model-note details a { text-decoration:underline; text-underline-offset:3px }
 .bias-panel dd { color:#c7adff }
 
