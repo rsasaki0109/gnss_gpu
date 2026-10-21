@@ -108,6 +108,8 @@ test("a mismatched asset fails visibly without substituting synthetic geometry",
   await expect(page.locator("#scene")).not.toHaveAttribute("data-ready", "true");
   await expect(page.locator("#sky-plot")).toHaveAttribute("data-state","unavailable");
   await expect(page.locator(".sky-point")).toHaveCount(0);
+  await expect(page.locator(".sky-arrival-readout")).toHaveAttribute("data-state","unavailable");
+  await expect(page.locator(".sky-arrival-marker")).toHaveAttribute("visibility","hidden");
 });
 
 test("OSM is georeferenced, visibly credited and independent of the signal calculation", async ({page}) => {
@@ -591,6 +593,9 @@ test("pending sky keeps its completed mask, blocks stale selection and can pause
   await expect(page.locator(".sky-source")).toContainText("Previous trace · updating · 8 GPS · 10° mask");
   const old=page.locator('[data-sky-satellite="G05"]');
   await expect(old).toHaveAttribute("aria-disabled","true");await old.press("Enter");
+  await expect(page.locator(".sky-arrival-readout")).toHaveAttribute("data-state","pending");
+  await expect(page.locator(".sky-arrival-readout")).not.toHaveAttribute("data-elevation");
+  await expect(page.locator(".sky-arrival-marker")).toHaveAttribute("visibility","hidden");
   await expect(page.locator("#selected-id")).toHaveText("G12");
   await expect(plot).toHaveAttribute("data-state","ready");await expect(plot).toHaveAttribute("data-mask","30");
   await expect(page.locator(".sky-point")).toHaveCount(5);await expect(page.locator('[data-sky-satellite="G12"]')).toHaveCount(0);
@@ -608,4 +613,62 @@ test("pending sky keeps its completed mask, blocks stale selection and can pause
   const point=page.locator(".sky-point").first(),id=await point.getAttribute("data-sky-satellite"),trace=await canvas.getAttribute("data-trace-id");
   await point.press("Enter");await expect(page.locator("#selected-id")).toHaveText(id);await expect(canvas).toHaveAttribute("data-trace-id",trace);
   const layout=await page.evaluate(()=>({client:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth}));expect(layout.scroll).toBeLessThanOrEqual(layout.client+2);
+});
+
+test("selected reflected arrival uses the real final leg and distinguishes direct, blocked and below-horizon paths",async({page},testInfo)=>{
+  const errors=[];page.on("pageerror",error=>errors.push(error.message));
+  await page.goto("simulation.html");
+  const canvas=page.locator("#scene"),arrival=page.locator(".sky-arrival-readout"),marker=page.locator(".sky-arrival-marker"),note=page.locator(".sky-arrival-note");
+  await expect(page.locator("#sky-plot")).toHaveAttribute("data-state","ready",{timeout:45000});
+  await expect(arrival).toHaveAttribute("data-state","reflection");await expect(arrival).toHaveAttribute("data-arrival-satellite","G12");
+  await expect(page.locator("[data-satellite]")).toHaveCount(8);
+  const az=Number(await arrival.getAttribute("data-azimuth")),el=Number(await arrival.getAttribute("data-elevation"));
+  expect(Math.abs(az-127.0923929127461)).toBeLessThan(1e-10);expect(Math.abs(el-14.65096153366911)).toBeLessThan(1e-10);
+  expect(Math.abs(Number(await arrival.getAttribute("data-separation"))-36.482981271152035)).toBeLessThan(1e-10);
+  await expect(arrival).toHaveText("◇ Reflected arrival · az 127.1° · el 14.7°");
+  await expect(note).toHaveText("Shortest single bounce · 36.5° from satellite · earliest modeled path.");
+  await expect(marker).toHaveAttribute("visibility","visible");await expect(marker).toHaveAttribute("aria-hidden","false");
+  const match=(await page.locator(".sky-arrival-diamond").getAttribute("transform")).match(/^translate\(([^ ]+) ([^)]+)\)$/);
+  expect(Math.abs(Number(match[1])-(150+110*(1-el/90)*Math.sin(az*Math.PI/180)))).toBeLessThan(1e-10);
+  expect(Math.abs(Number(match[2])-(150-110*(1-el/90)*Math.cos(az*Math.PI/180)))).toBeLessThan(1e-10);
+  await page.locator("#sky-panel").screenshot({path:testInfo.outputPath("arrival-directions-panel.png")});
+  const trace=await canvas.getAttribute("data-trace-id"),receiver=await canvas.getAttribute("data-receiver");
+  await page.locator('[data-sky-satellite="G05"]').click();
+  await expect(arrival).toHaveAttribute("data-state","direct");await expect(arrival).toHaveText("Direct arrival · same direction as satellite");
+  await expect(marker).toHaveAttribute("visibility","hidden");await expect(arrival).not.toHaveAttribute("data-elevation");
+  await page.locator('[data-sky-satellite="G10"]').press("Enter");
+  await expect(arrival).toHaveAttribute("data-state","blocked");await expect(arrival).toContainText("no direct or single-bounce path");
+  await expect(marker).toHaveAttribute("visibility","hidden");
+  await page.locator('[data-sky-satellite="G12"]').press("Space");
+  await expect(arrival).toHaveAttribute("data-state","reflection");await expect(marker).toHaveAttribute("visibility","visible");
+  await expect(canvas).toHaveAttribute("data-trace-id",trace);await expect(canvas).toHaveAttribute("data-receiver",receiver);
+  await expect(page.locator("#spp-all")).toHaveText("65.74 m");await expect(page.locator("#excess-value")).toHaveText("+23.038 m");
+  await page.locator("#antenna").press("End");await expect(canvas).toHaveAttribute("data-antenna","20");
+  await page.locator('[data-sky-satellite="G10"]').press("Enter");
+  await expect(arrival).toHaveAttribute("data-state","reflection");await expect(arrival).toHaveAttribute("data-plotted","false");
+  expect(Math.abs(Number(await arrival.getAttribute("data-elevation"))+12.143554110881492)).toBeLessThan(1e-10);
+  await expect(arrival).toContainText("el -12.1°");await expect(note).toContainText("direct arrives first. Below local horizon; not plotted.");
+  await expect(marker).toHaveAttribute("visibility","hidden");await expect(marker).toHaveAttribute("aria-hidden","true");
+  await expect(page.locator('[data-sky-satellite="G10"]')).toHaveAttribute("data-path","LOS");
+  await expect(page.locator("#spp-all")).toHaveText("0.00 m");
+  const layout=await page.evaluate(()=>({client:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth}));
+  expect(layout.scroll).toBeLessThanOrEqual(layout.client+2);expect(errors).toEqual([]);
+});
+
+test("a real reflected arrival below the satellite mask stays at its exact direction",async({page})=>{
+  await page.goto("simulation.html"+sceneHash({epoch:"3890",mask:"12"}));
+  const canvas=page.locator("#scene"),arrival=page.locator(".sky-arrival-readout"),satellite=page.locator('[data-sky-satellite="G12"]');
+  await expect(page.locator("#sky-plot")).toHaveAttribute("data-state","ready",{timeout:45000});
+  await expect(canvas).toHaveAttribute("data-epoch","3890");await expect(canvas).toHaveAttribute("data-mask","12");
+  await expect(arrival).toHaveAttribute("data-state","reflection");await expect(arrival).toHaveAttribute("data-plotted","true");
+  expect(Number(await satellite.getAttribute("data-elevation"))).toBeGreaterThan(12);
+  const elevation=Number(await arrival.getAttribute("data-elevation"));
+  expect(elevation).toBeLessThan(12);expect(Math.abs(elevation-11.95371689634098)).toBeLessThan(1e-10);
+  await expect(page.locator(".sky-arrival-note")).toContainText("Below satellite mask; retained.");
+  await expect(page.locator(".sky-arrival-marker")).toHaveAttribute("visibility","visible");
+  const link=page.locator(".sky-arrival-link"),x=Number(await link.getAttribute("x2")),y=Number(await link.getAttribute("y2"));
+  expect(Math.hypot(x-150,y-150)).toBeGreaterThan(Number(await page.locator(".sky-mask").getAttribute("r")));
+  const trace=await canvas.getAttribute("data-trace-id");
+  await page.locator("#focus-reflection").click();await expect(canvas).toHaveAttribute("data-view","reflection");
+  await expect(arrival).toHaveAttribute("data-elevation",String(elevation));await expect(canvas).toHaveAttribute("data-trace-id",trace);
 });
