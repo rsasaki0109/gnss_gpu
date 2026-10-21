@@ -32,7 +32,8 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Match the supported Playwright runner used by the CI site smoke job.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
