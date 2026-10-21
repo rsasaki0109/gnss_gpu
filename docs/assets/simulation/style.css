@@ -133,6 +133,9 @@
 .scene-share { border-top:1px solid var(--line); padding:13px 20px; background:#101b25 }
 .scene-share summary { cursor:pointer; font-size:11px; color:var(--mint); line-height:1.6 }
 .scene-share summary span { margin-left:12px; color:var(--dim); font-size:9px }
+.tool-help { margin:10px 0 0; font-size:10px; line-height:1.6; color:var(--muted) }
+.tool-help > summary { cursor:pointer; color:var(--dim); font-size:9px }
+.tool-help[open] > summary { margin-bottom:10px }
 .reflection-status { margin:12px 0 0; color:var(--muted); font-size:10px; line-height:1.6 }
 .reflection-panel[data-state=ready] .reflection-status { color:var(--amber) }
 .reflection-panel[data-state=pending] .reflection-status { color:var(--amber) }
@@ -388,7 +391,7 @@ button:hover {
   justify-content:space-between;
   align-items:center;
   gap:24px;
-  padding:34px 0 30px
+  padding:18px 0
 }
 
 .eyebrow {
@@ -414,7 +417,7 @@ button:hover {
 }
 
 h1 {
-  font-size:clamp(25px,3.25vw,43px);
+  font-size:clamp(25px,2.6vw,34px);
   letter-spacing:-1.5px;
   font-weight:540;
   line-height:1.16;
