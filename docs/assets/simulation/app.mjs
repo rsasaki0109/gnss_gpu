@@ -8,6 +8,7 @@ import { captureReference, compareReceiver } from "./comparison.mjs";
 import { SkyPlot } from "./sky-plot.mjs?v=arrival-1";
 import { ReflectionGeometry } from "./reflection-geometry.mjs";
 import { RangeFit } from "./range-fit.mjs";
+import { PositionFit } from "./position-fit.mjs";
 
 const $ = id => document.getElementById(id);
 const canvas = $("scene"), settings = { epoch: 8000, antenna: 0, mask: 10 };
@@ -20,6 +21,7 @@ let reference, referenceURL, comparisonReference, comparisonSnapshot;
 const skyPlot = new SkyPlot($("sky-plot"), id => { setPlaying(false); selectSatellite(id); });
 const reflectionPanel = new ReflectionGeometry($("reflection-panel"));
 const rangePanel = new RangeFit($("range-panel"), id => { setPlaying(false); selectSatellite(id); });
+const positionOverlay = new PositionFit($("position-fit"), $("fit-legend"));
 
 function status(message, error = false) {
   $("status-text").textContent = message; $("trace-status").classList.toggle("error", error);
@@ -128,6 +130,7 @@ function inspect() {
 }
 function syncFocusUI() {
   const signal = snapshot?.satellites.find(s => s.id === selected), focus = renderer?.focus;
+  if (!currentTrace() || canvas.dataset.error || focus) updatePositionFit(null);
   $("focus-reflection").disabled = !currentTrace() || !signal?.reflection;
   $("focus-blockage").disabled = !currentTrace() || !signal?.directHit;
   $("focus-reflection").setAttribute("aria-pressed", String(focus?.kind === "reflection"));
@@ -148,6 +151,9 @@ function updateReflectionGeometry() {
 $("reflection-panel").addEventListener("toggle", () => { if ($("reflection-panel").open && playing) setPlaying(false); });
 function updateRangeFit() {
   rangePanel.update(snapshot, selected, { ready: currentTrace(), error: Boolean(canvas.dataset.error) });
+}
+function updatePositionFit(view) {
+  positionOverlay.update(snapshot, view, {ready:currentTrace(),error:Boolean(canvas.dataset.error),focused:Boolean(renderer?.focus)});
 }
 $("range-panel").addEventListener("toggle", () => { if ($("range-panel").open && playing) setPlaying(false); });
 function updateSky() {
@@ -388,7 +394,11 @@ function frame(time) {
     if (epoch !== settings.epoch) { settings.epoch = epoch; syncControls(); requestTrace(); }
     if (epoch === scene.track.length - 1) setPlaying(false);
   }
-  if (dirty && renderer) { renderer.draw(snapshot, selected, showReflections); updateViewCaption(); updateShare(); dirty = false; }
+  if (dirty && renderer) {
+    renderer.draw(snapshot, selected, showReflections);
+    updatePositionFit({width:renderer.width,height:renderer.height,scale:renderer.scale,right:renderer.right,up:renderer.up,target:renderer.camera.target});
+    updateViewCaption(); updateShare(); dirty = false;
+  }
   requestAnimationFrame(frame);
 }
 syncControls(); requestAnimationFrame(frame); initialize().catch(fail);
