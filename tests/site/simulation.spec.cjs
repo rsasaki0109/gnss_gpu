@@ -882,3 +882,61 @@ test("fit marker clears immediately for pending, unavailable and failed results"
   await page.locator("#reset").click();await expect(fit).toHaveAttribute("data-state","ready");await expect(fit).toBeVisible();
   await page.locator("#scene").dispatchEvent("webglcontextlost");await expect(fit).toHaveAttribute("data-state","unavailable");await cleared();
 });
+
+
+test("pinned fit comparison uses each receiver's own position and follows the camera without retracing",async({page},testInfo)=>{
+  const errors=[];page.on("pageerror",error=>errors.push(error.message));await page.goto("simulation.html");
+  const current=page.locator("#position-fit"),pin=page.locator("#pinned-position-fit"),canvas=page.locator("#scene"),line=page.locator("#pinned-fit-displacement"),legend=page.locator("#pinned-fit-legend");
+  await expect(current).toHaveAttribute("data-state","ready",{timeout:45000});
+  const oldWorld=await current.getAttribute("data-position"),oldReceiver=await canvas.getAttribute("data-receiver"),oldTrace=await canvas.getAttribute("data-trace-id");
+  await expect(pin).toBeHidden();await page.locator("#compare-panel > summary").click();await page.locator("#pin-reference").click();
+  await expect(pin).toHaveAttribute("data-state","same-settings");await expect(pin).toBeHidden();await expect(canvas).toHaveAttribute("data-trace-id",oldTrace);
+  await page.locator("#antenna").press("End");await expect(current).toHaveAttribute("data-state","coincident");await expect(pin).toHaveAttribute("data-state","ready");await expect(pin).toBeVisible();await expect(legend).toHaveText("Pinned²");
+  await expect(pin).toHaveAttribute("data-position",oldWorld);await expect(pin).toHaveAttribute("data-reference",oldReceiver);await expect(pin).toHaveAttribute("data-antenna","0");
+  expect(await current.getAttribute("data-reference")).not.toBe(oldReceiver);await expect(current).toHaveAttribute("data-horizontal","0");
+  await expect(page.locator('[data-metric="bias"] td')).toHaveText(["65.74 m","0.00 m","-65.74 m"]);
+  const trace=await canvas.getAttribute("data-trace-id");
+  const projection=async()=>{
+    const errors=await pin.evaluate(root=>{
+      const data=root.dataset,vector=key=>data[key].split(",").map(Number),target=vector("viewTarget"),right=vector("viewRight"),up=vector("viewUp"),scale=Number(data.viewScale),box=root.viewBox.baseVal;
+      const project=point=>{const [x,y,z]=point.map((v,i)=>v-target[i]);return [box.width/2+scale*(x*right[0]+y*right[1]+z*right[2]),box.height*.56-scale*(x*up[0]+y*up[1]+z*up[2])];};
+      const wanted=[...project(vector("reference")),...project(vector("position"))],line=root.querySelector("line"),actual=["x1","y1","x2","y2"].map(name=>Number(line.getAttribute(name))),origin=root.querySelector("circle");
+      return [...wanted.map((value,i)=>Math.abs(value-actual[i])),Math.abs(Number(origin.getAttribute("cx"))-actual[0]),Math.abs(Number(origin.getAttribute("cy"))-actual[1])];
+    });expect(Math.max(...errors)).toBeLessThan(1e-9);
+  };
+  await projection();await page.locator(".stage").screenshot({path:testInfo.outputPath("pinned-fit-comparison.png")});
+  const x=await line.getAttribute("x2");await canvas.press("ArrowRight");await expect(line).not.toHaveAttribute("x2",x);await projection();
+  await page.locator("#overview").click();await expect(canvas).toHaveAttribute("data-view","overview");await projection();
+  await page.locator("#reset-view").click();await expect(canvas).toHaveAttribute("data-view","receiver");await projection();
+  await page.locator('[data-satellite="G05"]').click();await expect(pin).toHaveAttribute("data-position",oldWorld);
+  await page.locator("#compare-panel > summary").click();await expect(pin).toHaveAttribute("data-state","closed");await expect(pin).toBeHidden();await expect(pin).not.toHaveAttribute("data-position");await expect(current).toBeVisible();
+  await page.locator("#compare-panel > summary").click();await expect(pin).toHaveAttribute("data-state","ready");await expect(pin).toHaveAttribute("data-position",oldWorld);
+  await page.locator("#pin-reference").click();await expect(pin).toHaveAttribute("data-state","same-settings");await expect(pin).toBeHidden();
+  await page.locator("#clear-reference").click();await expect(pin).toHaveAttribute("data-state","empty");await expect(legend).toBeHidden();await expect(line).not.toHaveAttribute("x1");
+  await expect(canvas).toHaveAttribute("data-trace-id",trace);await expect(current).toHaveAttribute("data-state","coincident");
+  const layout=await page.evaluate(()=>({client:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth}));expect(layout.scroll).toBeLessThanOrEqual(layout.client+2);expect(errors).toEqual([]);
+});
+
+test("pinned fit clears pending, focused, different-pose, missing and failed comparisons",async({page})=>{
+  await page.route("**/simulation/city-worker.mjs",async route=>{
+    const response=await route.fetch(),source=await response.text();
+    await route.fulfill({response,body:'const deliver=self.postMessage.bind(self);self.postMessage=(message,...args)=>message.type==="result"?setTimeout(()=>deliver(message,...args),900):deliver(message,...args);\n'+source});
+  });
+  await page.goto("simulation.html");const pin=page.locator("#pinned-position-fit"),current=page.locator("#position-fit"),canvas=page.locator("#scene");
+  const cleared=async()=>{
+    await expect(pin).toBeHidden();await expect(page.locator("#pinned-fit-legend")).toBeHidden();
+    const stored=await pin.evaluate(root=>({keys:Object.keys(root.dataset),view:root.getAttribute("viewBox"),line:["x1","y1","x2","y2"].map(key=>root.querySelector("line").getAttribute(key)),points:root.querySelector("polygon").getAttribute("points"),origin:["cx","cy"].map(key=>root.querySelector("circle").getAttribute(key))}));
+    expect(stored).toEqual({keys:["state"],view:null,line:[null,null,null,null],points:null,origin:[null,null]});
+  };
+  await expect(current).toHaveAttribute("data-state","ready",{timeout:45000});await page.locator("#compare-panel > summary").click();await page.locator("#pin-reference").click();
+  await page.locator("#antenna").press("End");await expect(pin).toHaveAttribute("data-state","pending");await cleared();await expect(pin).toHaveAttribute("data-state","ready");
+  await page.locator('[data-satellite="G10"]').click();await page.locator("#focus-reflection").click();await expect(pin).toHaveAttribute("data-state","surface");await cleared();
+  await page.locator("#focus-exit").click();await expect(pin).toHaveAttribute("data-state","ready");
+  await page.locator('[data-route-step="1"]').click();await expect(canvas).toHaveAttribute("data-epoch","8001");await expect(pin).toHaveAttribute("data-state","different-pose");await cleared();
+  await page.locator("#return-reference").click();await expect(pin).toHaveAttribute("data-state","ready");await expect(canvas).toHaveAttribute("data-epoch","8000");
+  await page.locator("#antenna").press("Home");await expect(current).toHaveAttribute("data-antenna","0");await expect(pin).toHaveAttribute("data-state","same-settings");
+  await page.locator("#mask").press("End");await expect(pin).toHaveAttribute("data-state","pending");await cleared();await expect(pin).toHaveAttribute("data-state","no-current-solution");await cleared();
+  await page.locator("#pin-reference").click();await page.locator("#reset").click();await expect(current).toHaveAttribute("data-state","ready");await expect(pin).toHaveAttribute("data-state","no-solution");await cleared();
+  await page.locator("#pin-reference").click();await page.locator("#antenna").press("End");await expect(pin).toHaveAttribute("data-state","ready");
+  await canvas.dispatchEvent("webglcontextlost");await expect(pin).toHaveAttribute("data-state","unavailable");await cleared();
+});

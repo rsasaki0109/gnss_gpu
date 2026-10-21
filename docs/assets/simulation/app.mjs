@@ -4,11 +4,11 @@ import { CityRenderer } from "./renderer.mjs?v=surface-1";
 import { RouteNavigator, stepEpoch } from "./route-navigation.mjs?v=route-1";
 import { clampViewPitch } from "./view-geometry.mjs";
 import { DEFAULT_SCENE, readSceneLink, writeSceneLink } from "./scene-link.mjs";
-import { captureReference, compareReceiver } from "./comparison.mjs";
+import { captureReference, compareReceiver } from "./comparison.mjs?v=pinned-1";
 import { SkyPlot } from "./sky-plot.mjs?v=arrival-1";
 import { ReflectionGeometry } from "./reflection-geometry.mjs";
 import { RangeFit } from "./range-fit.mjs";
-import { PositionFit } from "./position-fit.mjs";
+import { PositionFit } from "./position-fit.mjs?v=pinned-1";
 
 const $ = id => document.getElementById(id);
 const canvas = $("scene"), settings = { epoch: 8000, antenna: 0, mask: 10 };
@@ -22,6 +22,7 @@ const skyPlot = new SkyPlot($("sky-plot"), id => { setPlaying(false); selectSate
 const reflectionPanel = new ReflectionGeometry($("reflection-panel"));
 const rangePanel = new RangeFit($("range-panel"), id => { setPlaying(false); selectSatellite(id); });
 const positionOverlay = new PositionFit($("position-fit"), $("fit-legend"));
+const pinnedOverlay = new PositionFit($("pinned-position-fit"), $("pinned-fit-legend"), {caption:"Pinned²",name:"Pinned geometric fit",radius:10,labelBelow:true});
 
 function status(message, error = false) {
   $("status-text").textContent = message; $("trace-status").classList.toggle("error", error);
@@ -152,8 +153,15 @@ $("reflection-panel").addEventListener("toggle", () => { if ($("reflection-panel
 function updateRangeFit() {
   rangePanel.update(snapshot, selected, { ready: currentTrace(), error: Boolean(canvas.dataset.error) });
 }
+function positionView() {
+  return renderer ? {width:renderer.width,height:renderer.height,scale:renderer.scale,right:renderer.right,up:renderer.up,target:renderer.camera.target} : null;
+}
+function updatePinnedPositionFit(view) {
+  pinnedOverlay.updatePinned(reference,snapshot,view,{enabled:$("compare-panel").open,ready:currentTrace(),error:Boolean(canvas.dataset.error),focused:Boolean(renderer?.focus)});
+}
 function updatePositionFit(view) {
   positionOverlay.update(snapshot, view, {ready:currentTrace(),error:Boolean(canvas.dataset.error),focused:Boolean(renderer?.focus)});
+  updatePinnedPositionFit(view);
 }
 $("range-panel").addEventListener("toggle", () => { if ($("range-panel").open && playing) setPlaying(false); });
 function updateSky() {
@@ -245,13 +253,13 @@ function updateComparison() {
     cell(row, signal.id, "th").scope = "row"; path(row, signal.before); path(row, signal.after); cell(row, excess(signal.beforeExcess)); cell(row, excess(signal.afterExcess)); return row;
   }));
 }
-$("compare-panel").addEventListener("toggle", () => { if ($("compare-panel").open) { setPlaying(false); updateComparison(); } });
+$("compare-panel").addEventListener("toggle", () => { if ($("compare-panel").open) { setPlaying(false); updateComparison(); } updatePinnedPositionFit(positionView()); });
 $("pin-reference").addEventListener("click", () => {
   if (!currentTrace()) return;
-  setPlaying(false); reference = captureReference(snapshot); referenceURL = sceneURL(); updateComparison();
+  setPlaying(false); reference = captureReference(snapshot); referenceURL = sceneURL(); updateComparison(); updatePinnedPositionFit(positionView());
 });
 $("clear-reference").addEventListener("click", () => {
-  reference = referenceURL = comparisonReference = comparisonSnapshot = null; $("reference-link").removeAttribute("href"); updateComparison();
+  reference = referenceURL = comparisonReference = comparisonSnapshot = null; $("reference-link").removeAttribute("href"); updateComparison(); updatePinnedPositionFit(positionView());
 });
 $("return-reference").addEventListener("click", () => { if (reference) seekEpoch(reference.epoch); });
 function restoreSceneLink(resetEmpty = false) {
@@ -396,7 +404,7 @@ function frame(time) {
   }
   if (dirty && renderer) {
     renderer.draw(snapshot, selected, showReflections);
-    updatePositionFit({width:renderer.width,height:renderer.height,scale:renderer.scale,right:renderer.right,up:renderer.up,target:renderer.camera.target});
+    updatePositionFit(positionView());
     updateViewCaption(); updateShare(); dirty = false;
   }
   requestAnimationFrame(frame);
