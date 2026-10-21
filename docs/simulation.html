@@ -7,8 +7,8 @@
   <meta name="description" content="Trace GNSS signals through actual PLATEAU buildings and bridges in Tokyo Odaiba, with UrbanNav reference poses and real GPS broadcast ephemerides.">
   <title>PLATEAU Signal Lab · gnss_gpu</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230c141c'/%3E%3Cpath d='M8 23V13h6V7h5v10h5v6' fill='none' stroke='%2385e4bc' stroke-width='2'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="assets/simulation/style.css?v=route-1">
-  <script type="module" src="assets/simulation/app.mjs?v=route-1"></script>
+  <link rel="stylesheet" href="assets/simulation/style.css?v=surface-1">
+  <script type="module" src="assets/simulation/app.mjs?v=surface-1"></script>
 </head>
 <body>
   <div class="shell">
@@ -29,7 +29,8 @@
         <div class="stage" id="stage">
           <canvas id="scene" tabindex="0" role="img" aria-label="Actual 3D PLATEAU city mesh with traced GPS signal paths and a recorded receiver position" aria-describedby="stage-help"></canvas>
           <canvas id="annotations" aria-hidden="true"></canvas>
-          <div class="stage-caption"><span class="caption-label">PLATEAU / 2022</span><strong id="scene-name">Tokyo · Odaiba</strong><span id="scene-description">Loading the full CityGML mesh</span></div>
+          <div class="stage-caption"><span class="caption-label" id="view-caption">PLATEAU / 2022</span><strong id="scene-name">Tokyo · Odaiba</strong><span id="scene-description">Loading the full CityGML mesh</span></div>
+          <button type="button" id="focus-exit" class="focus-exit" hidden>← Follow receiver</button>
           <div class="view-tools" aria-label="Camera controls"><button type="button" id="overview" aria-label="Toggle city overview" aria-pressed="false">◫</button><button type="button" id="zoom-in" aria-label="Zoom in">+</button><button type="button" id="zoom-out" aria-label="Zoom out">−</button><button type="button" id="reset-view" aria-label="Reset camera view">⌖</button></div>
           <div class="stage-note" id="stage-help">Drag to orbit <span>·</span> Scroll to zoom <span>·</span> Timeline follows the recorded route</div>
           <div id="map-credit" class="map-credit"><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a><a id="osm-location" href="https://www.openstreetmap.org/#map=17/35.618026/139.775924" target="_blank" rel="noopener">View this location ↗</a></div>
@@ -77,6 +78,8 @@
         <section class="panel inspector">
           <div class="section-title"><h2>Inspect a signal</h2><span id="selected-id" class="selected-id">—</span></div><p id="channel-status" class="channel-status">Choose a satellite to inspect its paths.</p>
           <dl class="channel-values"><div><dt>Direct path</dt><dd id="direct-value">—</dd></div><div><dt>Single-bounce paths</dt><dd id="path-count">—</dd></div><div><dt>Shortest reflection excess</dt><dd id="excess-value">—</dd></div><div><dt>Extra propagation delay</dt><dd id="delay-value">—</dd></div></dl><p id="feature-id" class="feature-id">Source CityGML feature</p>
+          <div class="surface-actions" role="group" aria-label="Inspect an intersected surface"><button type="button" id="focus-reflection" aria-pressed="false" disabled>Show reflector</button><button type="button" id="focus-blockage" aria-pressed="false" disabled>Show obstruction</button></div>
+          <p class="small-note">Focus a surface to isolate its path in the 3D view.</p>
         </section>
         <section class="panel bias-panel">
           <div class="section-title"><h2>Geometric position bias²</h2><span class="section-index">03</span></div><dl class="channel-values"><div><dt>Earliest modeled paths</dt><dd id="spp-all">—</dd></div><div><dt>LOS paths only</dt><dd id="spp-los">—</dd></div></dl><p class="small-note" id="spp-count">Horizontal displacement in an ideal range experiment.</p>
@@ -95,6 +98,7 @@
         <p><strong>² Controlled range experiment:</strong> Horizontal displacement from iterative least squares using the earliest modeled path per usable satellite. It starts at the reference position, with ideal clock and atmospheric corrections, zero noise and no power threshold. LOS-only displacement is zero by construction when geometry permits a solution. This is geometric bias, not measured positioning accuracy, a receiver simulator, or a native PF/FGO benchmark.</p>
         <p><strong>Reconstruction limits:</strong> A 2018 drive is combined with a 2022 city model, so this does not reproduce the exact historical scene. JGD2011 horizontal coordinates are nominally aligned with WGS84; no <a href="https://positions.gsi.go.jp/cdcs/">epoch-dependent crustal correction</a> or reference-to-antenna lever-arm calibration is applied. This is not survey-grade frame registration. Moving objects, vegetation, RF power/materials, diffraction, multiple bounces, atmosphere and receiver tracking are not modeled. Occlusion is limited to the 28 loaded tiles. Playback shows the latest completed epoch; it does not compute every intermediate epoch in real time. The timeline evaluates any recorded pose exactly.</p>
         <p><strong>Route navigation:</strong> The north-up route overview retains every recorded position. Click or tap near its line to select the closest recorded pose on screen; exact spatial ties prefer the current time, then the earlier source row. The highlighted segment spans up to five seconds on either side. Selection pauses playback. An amber marker indicates that the selected pose is still being traced; a green marker confirms that the displayed trace matches the selected pose and receiver controls. The route overview supports 0.1-second arrow steps, one-second Shift + arrow steps and Home / End. In the 3D view, arrow keys orbit and Space plays or pauses.</p>
+        <p><strong>Surface inspection:</strong> Show reflector frames the receiver and the shortest valid single-bounce reflection surface; Show obstruction frames the first triangle blocking the direct ray. These views isolate the chosen path and tint its original triangle while retaining the full city and normal depth occlusion. The camera faces the receiver side of the surface; a view from below is labeled Underside view. The caption identifies the satellite and interaction, and the CityGML feature below the inspector follows the focused surface. Follow receiver restores the preceding camera view. Changing satellite, epoch or receiver settings, resuming playback, or hiding a focused reflection leaves surface inspection. Camera and display controls use the completed trace without changing or rerunning its calculations.</p>
         <p><a href="assets/plateau/manifest.json">Source hashes &amp; asset checksums ↗</a> · <a href="assets/plateau/ATTRIBUTION.txt">Data attribution ↗</a> · <a href="https://github.com/rsasaki0109/gnss_gpu/blob/main/tools/build_plateau_browser_scene.py">Reproducible exporter ↗</a>.</p>
       </details>
     </section>
