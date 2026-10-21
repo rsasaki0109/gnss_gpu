@@ -3,6 +3,7 @@ import { decodeMesh } from "./mesh.mjs";
 import { CityRenderer } from "./renderer.mjs?v=surface-1";
 import { RouteNavigator, stepEpoch } from "./route-navigation.mjs?v=route-1";
 import { clampViewPitch } from "./view-geometry.mjs";
+import { DEFAULT_SCENE, readSceneLink, writeSceneLink } from "./scene-link.mjs";
 
 const $ = id => document.getElementById(id);
 const canvas = $("scene"), settings = { epoch: 8000, antenna: 0, mask: 10 };
@@ -10,6 +11,7 @@ const colors = { LOS: "#85e4bc", NLOS: "#efbc79", BLOCKED: "#ec8f91" };
 let scene, renderer, worker, snapshot, selected, busy = true, pending, revision = 0, nextId = 0;
 let playing = false, dirty = true, previousTime = 0, playbackEpoch = settings.epoch, showReflections = true;
 let routeNavigator, controlsReady = false;
+let linkAssets, pendingReplay;
 
 function status(message, error = false) {
   $("status-text").textContent = message; $("trace-status").classList.toggle("error", error);
@@ -18,6 +20,7 @@ function fail(error) {
   controlsReady = false; canvas.dataset.error = "true"; setPlaying(false); clearSurfaceFocus(); status("Unable to simulate", true); syncRoute(); syncFocusUI();
   $("toast").textContent = error.message; $("toast").hidden = false;
   for (const input of document.querySelectorAll("[data-load-control]")) input.disabled = true;
+  updateShare();
 }
 function gpst(tow) { return new Date((scene.week * 604800 + tow) * 1000 + Date.UTC(1980, 0, 6)).toISOString().slice(11, 23); }
 function syncControls() {
@@ -51,7 +54,7 @@ function seekEpoch(epoch) {
   revision++; syncControls(); requestTrace();
 }
 function setPlaying(value) {
-  if (value) clearSurfaceFocus();
+  if (value) { clearSurfaceFocus(); pendingReplay = null; $("share-panel").open = false; }
   playing = value; playbackEpoch = settings.epoch; $("play").setAttribute("aria-pressed", String(value));
   $("play-icon").textContent = value ? "Ⅱ" : "▶"; $("play-label").textContent = value ? "Pause" : "Play · 10×";
 }
@@ -63,8 +66,9 @@ function updateMap(stats) {
   if ($("map-status").textContent !== text) $("map-status").textContent = text;
   dirty = true;
 }
-function requestTrace() {
+function requestTrace(replay = false) {
   if (!worker) return;
+  if (!replay) pendingReplay = null;
   clearSurfaceFocus();
   const item = { type: "trace", id: ++nextId, revision, settings: { ...settings } };
   status("Tracing full mesh…"); if (busy) pending = item; else send(item);
@@ -85,7 +89,7 @@ function updateReadout(milliseconds) {
     const name = document.createElement("span"); name.className = "sat-id"; name.textContent = signal.id;
     const elevation = document.createElement("span"); elevation.className = "elevation"; elevation.textContent = `${signal.elevation.toFixed(1)}°`;
     const tag = document.createElement("span"); tag.className = "path-tag"; tag.textContent = signal.status === "NLOS" ? "REFLECTED" : signal.status;
-    button.append(name, elevation, tag); button.addEventListener("click", () => { if (selected !== signal.id) clearSurfaceFocus(); selected = signal.id; inspect(); dirty = true; }); return button;
+    button.append(name, elevation, tag); button.addEventListener("click", () => { pendingReplay = null; if (selected !== signal.id) clearSurfaceFocus(); selected = signal.id; inspect(); dirty = true; }); return button;
   });
   $("satellites").replaceChildren(...buttons);
   $("spp-all").textContent = snapshot.spp.all ? `${snapshot.spp.all.horizontal.toFixed(2)} m` : "Unavailable";
@@ -118,6 +122,7 @@ function syncFocusUI() {
   $("scene-name").textContent = focus ? `${focus.satellite} · ${focus.kind === "reflection" ? "Reflecting surface" : "Obstructing surface"}` : "Tokyo · Odaiba";
   $("overview").setAttribute("aria-pressed", String(Boolean(renderer?.camera.overview)));
   updateViewCaption();
+  updateShare();
 }
 function updateViewCaption() {
   const text = renderer?.focus ? `PLATEAU 2022 / ${renderer.camera.pitch < 0 ? "UNDERSIDE VIEW" : "SURFACE VIEW"}` : "PLATEAU / 2022";
@@ -129,6 +134,7 @@ function clearSurfaceFocus() {
 }
 function focusSurface(kind) {
   if (!currentTrace()) return;
+  pendingReplay = null;
   if (renderer.focus?.kind === kind) { clearSurfaceFocus(); return; }
   const signal = snapshot.satellites.find(s => s.id === selected);
   setPlaying(false);
@@ -139,30 +145,97 @@ function focusSurface(kind) {
 $("focus-reflection").addEventListener("click", () => focusSurface("reflection"));
 $("focus-blockage").addEventListener("click", () => focusSurface("blockage"));
 $("focus-exit").addEventListener("click", () => { clearSurfaceFocus(); canvas.focus({ preventScroll: true }); });
+function sceneNotice(message, warning = false) {
+  $("scene-link-notice").hidden = !message; $("scene-link-notice").dataset.warning = String(warning);
+  $("scene-link-notice-text").textContent = message;
+}
+function shareStatus(message) { if ($("share-status").textContent !== message) $("share-status").textContent = message; }
+function updateShare() {
+  const ready = currentTrace() && Boolean(linkAssets), input = $("scene-link"), open = $("open-scene-link");
+  $("copy-scene-link").disabled = !ready; input.disabled = !ready;
+  open.setAttribute("aria-disabled", String(!ready)); open.tabIndex = ready ? 0 : -1;
+  if (!ready) {
+    input.value = ""; open.removeAttribute("href");
+    shareStatus(canvas.dataset.error ? "Scene link unavailable." : "Waiting for the selected pose to finish tracing…"); return;
+  }
+  if (!$("share-panel").open) return;
+  const camera = renderer.camera;
+  const link = writeSceneLink(location.href, { epoch: snapshot.epoch, antenna: snapshot.antenna, mask: snapshot.mask, satellite: selected, view: renderer.focus?.kind ?? (camera.overview ? "overview" : "receiver"), yaw: camera.yaw, pitch: camera.pitch, zoom: camera.zoom, basemap: $("basemap").checked, reflections: showReflections }, linkAssets);
+  if (input.value !== link) {
+    input.value = link; open.href = link;
+    shareStatus(`Link ready · pose ${(snapshot.epoch + 1).toLocaleString("en-US")} · ${selected || "no satellite selected"}`);
+  }
+}
+function restoreSceneLink(resetEmpty = false) {
+  let state, warning = "";
+  try { state = readSceneLink(location.hash, linkAssets); }
+  catch (error) { state = { ...DEFAULT_SCENE }; warning = `${error.message} Showing the default scene.`; }
+  if (!state) { if (resetEmpty && !location.hash) state = { ...DEFAULT_SCENE }; else return false; }
+  setPlaying(false); resetCamera();
+  Object.assign(settings, { epoch: state.epoch, antenna: state.antenna, mask: state.mask });
+  $("antenna").value = state.antenna; $("mask").value = state.mask;
+  selected = state.satellite || undefined; showReflections = state.reflections;
+  $("reflections").checked = state.reflections; $("basemap").checked = state.basemap; renderer.basemap.setEnabled(state.basemap);
+  pendingReplay = { state, warning }; sceneNotice(warning, Boolean(warning)); syncControls();
+  if (currentTrace() && !busy && !pending) applySceneView();
+  else { revision++; requestTrace(true); }
+  return true;
+}
+function applySceneView() {
+  if (!pendingReplay || !currentTrace()) return;
+  const { state, warning: initialWarning } = pendingReplay; pendingReplay = null;
+  const signal = snapshot.satellites.find(s => s.id === state.satellite), focused = ["reflection", "blockage"].includes(state.view);
+  if (!snapshot.satellites.some(s => s.id === selected)) selected = (snapshot.satellites.find(s => s.status === "NLOS") ?? snapshot.satellites[0])?.id;
+  let warning = initialWarning;
+  if (state.satellite && !signal) warning = `${state.satellite} is unavailable at this epoch and mask. Showing ${selected || "the receiver"}.`;
+  else if (focused && !(state.view === "reflection" ? signal?.reflection : signal?.directHit)) warning = `${state.satellite} has no ${state.view === "reflection" ? "reflecting" : "obstructing"} surface here. Showing the receiver view.`;
+  if (!warning) {
+    if (focused) renderer.focusSurface(snapshot, signal, state.view);
+    Object.assign(renderer.camera, { yaw: state.yaw, pitch: state.pitch, zoom: state.zoom, overview: state.view === "overview" });
+  }
+  inspect(); syncControls(); dirty = true;
+  sceneNotice(warning || "Scene link restored. Playback is paused.", Boolean(warning));
+  if (!warning) canvas.scrollIntoView({ block: "center" });
+}
+$("share-panel").addEventListener("toggle", () => { if ($("share-panel").open) { setPlaying(false); updateShare(); } });
+$("scene-link").addEventListener("focus", event => event.target.select());
+$("copy-scene-link").addEventListener("click", async () => {
+  const input = $("scene-link"), link = input.value;
+  if (!currentTrace() || !link) return;
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+    await navigator.clipboard.writeText(link);
+    if (input.value === link) shareStatus("Link copied.");
+  } catch {
+    if (input.value === link) { input.focus(); input.select(); shareStatus("Clipboard unavailable. Select and copy the link manually."); }
+  }
+});
+$("dismiss-scene-notice").addEventListener("click", () => sceneNotice(""));
+window.addEventListener("hashchange", () => { if (controlsReady && linkAssets) restoreSceneLink(true); });
 for (const id of ["antenna", "mask"]) $(id).addEventListener("input", event => { settings[id] = Number(event.target.value); revision++; syncControls(); requestTrace(); });
 $("progress").addEventListener("input", event => seekEpoch(Number(event.target.value)));
 $("preset").addEventListener("change", event => seekEpoch(Number(event.target.value)));
 for (const button of document.querySelectorAll("[data-route-step]")) button.addEventListener("click", () => seekEpoch(settings.epoch + Number(button.dataset.routeStep)));
 $("play").addEventListener("click", () => setPlaying(!playing));
-$("reflections").addEventListener("change", event => { showReflections = event.target.checked; if (!showReflections && renderer?.focus?.kind === "reflection") clearSurfaceFocus(); dirty = true; });
-$("basemap").addEventListener("change", event => { renderer?.basemap.setEnabled(event.target.checked); dirty = true; });
+$("reflections").addEventListener("change", event => { pendingReplay = null; showReflections = event.target.checked; if (!showReflections && renderer?.focus?.kind === "reflection") clearSurfaceFocus(); dirty = true; });
+$("basemap").addEventListener("change", event => { pendingReplay = null; renderer?.basemap.setEnabled(event.target.checked); dirty = true; });
 $("reset").addEventListener("click", () => {
   setPlaying(false); Object.assign(settings, { epoch: 8000, antenna: 0, mask: 10 });
   $("antenna").value = 0; $("mask").value = 10; $("preset").value = "8000";
   resetCamera(); revision++; syncControls(); requestTrace();
 });
-function resetCamera() { clearSurfaceFocus(); if (renderer) Object.assign(renderer.camera, { yaw: -.63, pitch: .82, zoom: 1, overview: false, span: 740 }); syncFocusUI(); dirty = true; }
+function resetCamera() { pendingReplay = null; clearSurfaceFocus(); if (renderer) Object.assign(renderer.camera, { yaw: -.63, pitch: .82, zoom: 1, overview: false, span: 740 }); syncFocusUI(); dirty = true; }
 $("reset-view").addEventListener("click", resetCamera);
-$("zoom-in").addEventListener("click", () => { if (renderer) renderer.camera.zoom = Math.min(6, renderer.camera.zoom * 1.25); dirty = true; });
-$("zoom-out").addEventListener("click", () => { if (renderer) renderer.camera.zoom = Math.max(.3, renderer.camera.zoom / 1.25); dirty = true; });
+$("zoom-in").addEventListener("click", () => { pendingReplay = null; if (renderer) renderer.camera.zoom = Math.min(6, renderer.camera.zoom * 1.25); dirty = true; });
+$("zoom-out").addEventListener("click", () => { pendingReplay = null; if (renderer) renderer.camera.zoom = Math.max(.3, renderer.camera.zoom / 1.25); dirty = true; });
 $("overview").addEventListener("click", () => {
-  if (!renderer) return; const overview = renderer.focus ? true : !renderer.camera.overview;
+  if (!renderer) return; pendingReplay = null; const overview = renderer.focus ? true : !renderer.camera.overview;
   clearSurfaceFocus(); renderer.camera.overview = overview; renderer.camera.zoom = 1;
   $("overview").setAttribute("aria-pressed", String(renderer.camera.overview)); dirty = true;
 });
 let drag;
 canvas.addEventListener("pointerdown", event => {
-  if (!renderer) return; canvas.setPointerCapture(event.pointerId);
+  if (!renderer) return; pendingReplay = null; canvas.setPointerCapture(event.pointerId);
   drag = { x: event.clientX, y: event.clientY, yaw: renderer.camera.yaw, pitch: renderer.camera.pitch };
 });
 canvas.addEventListener("pointermove", event => {
@@ -171,11 +244,12 @@ canvas.addEventListener("pointermove", event => {
 });
 for (const type of ["pointerup", "pointercancel"]) canvas.addEventListener(type, () => { drag = null; });
 canvas.addEventListener("wheel", event => {
-  event.preventDefault(); if (!renderer) return;
+  event.preventDefault(); if (!renderer) return; pendingReplay = null;
   renderer.camera.zoom = Math.max(.3, Math.min(6, renderer.camera.zoom * Math.exp(-event.deltaY * .001))); dirty = true;
 }, { passive: false });
 canvas.addEventListener("keydown", event => {
   if (!renderer) return;
+  pendingReplay = null;
   if (event.code === "Space") { event.preventDefault(); setPlaying(!playing); }
   if (event.key.startsWith("Arrow")) {
     event.preventDefault(); renderer.camera.yaw += event.key === "ArrowLeft" ? -.1 : event.key === "ArrowRight" ? .1 : 0;
@@ -203,6 +277,7 @@ async function initialize() {
   const manifest = await response.json();
   const [meshBuffer, sceneBuffer] = await Promise.all([asset(manifest.mesh), asset(manifest.scene)]);
   scene = JSON.parse(new TextDecoder().decode(sceneBuffer));
+  linkAssets = { mesh: manifest.mesh.sha256, data: manifest.scene.sha256, epochs: scene.track.length, satellites: [...new Set(scene.navigation.map(record => record.id))] };
   renderer = new CityRenderer(canvas, $("annotations"), scene, decodeMesh(meshBuffer), updateMap);
   routeNavigator = new RouteNavigator($("route"), scene, seekEpoch, epoch => {
     $("route-preview").textContent = epoch === null ? "Click or tap the route to select a recorded pose." : `Preview · ${gpst(scene.track[epoch][0])} GPST · pose ${(epoch + 1).toLocaleString("en-US")}`;
@@ -216,9 +291,9 @@ async function initialize() {
   worker.onerror = event => fail(new Error(event.message || "The simulation worker stopped."));
   worker.onmessage = ({ data }) => {
     if (data.type === "error") { fail(new Error(data.error)); return; }
-    if (data.type === "ready") { busy = false; controlsReady = true; for (const input of document.querySelectorAll("[data-load-control]")) input.disabled = false; syncRoute(); requestTrace(); return; }
+    if (data.type === "ready") { busy = false; controlsReady = true; for (const input of document.querySelectorAll("[data-load-control]")) input.disabled = false; syncRoute(); if (!restoreSceneLink()) requestTrace(); return; }
     busy = false;
-    if (data.revision === revision) { clearSurfaceFocus(); snapshot = data.snapshot; canvas.dataset.traceId = data.id; updateReadout(data.milliseconds); }
+    if (data.revision === revision) { clearSurfaceFocus(); snapshot = data.snapshot; canvas.dataset.traceId = data.id; updateReadout(data.milliseconds); applySceneView(); }
     if (pending) { const item = pending; pending = null; send(item); }
   };
   worker.postMessage({ type: "init", scene, buffer: meshBuffer }, [meshBuffer]); syncControls();
@@ -231,7 +306,7 @@ function frame(time) {
     if (epoch !== settings.epoch) { settings.epoch = epoch; syncControls(); requestTrace(); }
     if (epoch === scene.track.length - 1) setPlaying(false);
   }
-  if (dirty && renderer) { renderer.draw(snapshot, selected, showReflections); updateViewCaption(); dirty = false; }
+  if (dirty && renderer) { renderer.draw(snapshot, selected, showReflections); updateViewCaption(); updateShare(); dirty = false; }
   requestAnimationFrame(frame);
 }
 syncControls(); requestAnimationFrame(frame); initialize().catch(fail);
