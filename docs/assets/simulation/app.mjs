@@ -1,6 +1,6 @@
 import { C } from "./orbit.mjs";
 import { decodeMesh } from "./mesh.mjs";
-import { CityRenderer } from "./renderer.mjs";
+import { CityRenderer } from "./renderer.mjs?v=osm-1";
 
 const $ = id => document.getElementById(id);
 const canvas = $("scene"), settings = { epoch: 8000, antenna: 0, mask: 10 };
@@ -31,6 +31,13 @@ function setPlaying(value) {
   $("play-icon").textContent = value ? "Ⅱ" : "▶"; $("play-label").textContent = value ? "Pause" : "Play · 10×";
 }
 function send(item) { busy = true; worker.postMessage(item); }
+function updateMap(stats) {
+  canvas.dataset.mapState = stats.state; canvas.dataset.mapTiles = stats.ready; canvas.dataset.mapTotal = stats.total;
+  $("map-credit").hidden = stats.state === "off";
+  const text = stats.state === "off" ? "Map off" : stats.state === "ready" ? "OpenStreetMap · live basemap" : stats.state === "partial" ? "Map partly unavailable · toggle to retry" : stats.state === "unavailable" ? "Map unavailable · simulation active" : "Loading OpenStreetMap…";
+  if ($("map-status").textContent !== text) $("map-status").textContent = text;
+  dirty = true;
+}
 function requestTrace() {
   if (!worker) return;
   const item = { type: "trace", id: ++nextId, revision, settings: { ...settings } };
@@ -39,6 +46,7 @@ function requestTrace() {
 function updateReadout(milliseconds) {
   for (const name of ["LOS", "NLOS", "BLOCKED"]) $(`${name.toLowerCase()}-count`).textContent = snapshot.counts[name];
   $("scene-description").textContent = `${snapshot.latitude.toFixed(6)}° N  ${snapshot.longitude.toFixed(6)}° E`;
+  $("osm-location").href = `https://www.openstreetmap.org/?mlat=${snapshot.latitude.toFixed(6)}&mlon=${snapshot.longitude.toFixed(6)}#map=17/${snapshot.latitude.toFixed(6)}/${snapshot.longitude.toFixed(6)}`;
   $("epoch-readout").textContent = `${snapshot.epoch + 1} / ${scene.track.length.toLocaleString("en-US")} · ${gpst(snapshot.tow)} GPST`;
   $("gps-readout").textContent = `${snapshot.satellites.length} GPS above ${snapshot.mask}° · ${Math.round(milliseconds)} ms / epoch`;
   status("Live · PLATEAU geometry");
@@ -78,6 +86,7 @@ $("progress").addEventListener("input", event => { setPlaying(false); settings.e
 $("preset").addEventListener("change", event => { setPlaying(false); settings.epoch = Number(event.target.value); revision++; syncControls(); requestTrace(); });
 $("play").addEventListener("click", () => setPlaying(!playing));
 $("reflections").addEventListener("change", event => { showReflections = event.target.checked; dirty = true; });
+$("basemap").addEventListener("change", event => { renderer?.basemap.setEnabled(event.target.checked); dirty = true; });
 $("reset").addEventListener("click", () => {
   setPlaying(false); Object.assign(settings, { epoch: 8000, antenna: 0, mask: 10 });
   $("antenna").value = 0; $("mask").value = 10; $("preset").value = "8000";
@@ -133,7 +142,7 @@ async function initialize() {
   const manifest = await response.json();
   const [meshBuffer, sceneBuffer] = await Promise.all([asset(manifest.mesh), asset(manifest.scene)]);
   scene = JSON.parse(new TextDecoder().decode(sceneBuffer));
-  renderer = new CityRenderer(canvas, $("annotations"), scene, decodeMesh(meshBuffer));
+  renderer = new CityRenderer(canvas, $("annotations"), scene, decodeMesh(meshBuffer), updateMap);
   $("progress").max = scene.track.length - 1;
   $("mesh-readout").textContent = `${scene.stats.triangles.toLocaleString("en-US")} triangles · ${scene.provenance.files.length} CityGML tiles`;
   $("geometry-readout").textContent = `${scene.stats.buildings.toLocaleString("en-US")} building components · ${scene.stats.bridges} bridge components · ${scene.stats.holes} interior rings preserved`;

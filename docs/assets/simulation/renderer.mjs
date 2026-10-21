@@ -1,10 +1,11 @@
 // Float32 is used only for drawing. The worker retains the Float64 source mesh.
 import { localPoint, sub, mul, norm, add } from "./orbit.mjs";
+import { OSMBasemap } from "./osm-layer.mjs";
 
 const COLORS = { LOS: [.52, .89, .74], NLOS: [.94, .74, .47], BLOCKED: [.92, .56, .57] };
 
 export class CityRenderer {
-  constructor(canvas, overlay, scene, mesh) {
+  constructor(canvas, overlay, scene, mesh, onMapChange = () => {}) {
     this.canvas = canvas; this.overlay = overlay; this.ctx = overlay.getContext("2d");
     const gl = canvas.getContext("webgl2", { alpha: false, antialias: true });
     if (!gl) throw new Error("This view requires WebGL 2. Try a browser with hardware acceleration enabled.");
@@ -53,10 +54,12 @@ export class CityRenderer {
     const [lo, hi] = scene.bounds, floor = lo[2] - 1;
     for (let x = Math.floor(lo[0] / 100) * 100; x <= hi[0]; x += 100) line([x, lo[1], floor], [x, hi[1], floor], [.12, .21, .27]);
     for (let y = Math.floor(lo[1] / 100) * 100; y <= hi[1]; y += 100) line([lo[0], y, floor], [hi[0], y, floor], [.12, .21, .27]);
+    this.grid = this.upload(new Float32Array(lines), gl.LINES); lines.length = 0;
     const track = scene.track.map(row => localPoint(row.slice(1), scene));
     for (let i = 1; i < track.length; i++) line(track[i - 1], track[i], [.30, .49, .65]);
     this.track = this.upload(new Float32Array(lines), gl.LINES);
-    this.dynamic = this.upload(new Float32Array(), gl.LINES, true); this.resize();
+    this.dynamic = this.upload(new Float32Array(), gl.LINES, true);
+    this.basemap = new OSMBasemap(gl, scene, onMapChange); this.resize();
   }
 
   upload(data, mode, dynamic = false) {
@@ -88,17 +91,19 @@ export class CityRenderer {
   }
 
   draw(snapshot, selected, reflections) {
+    if (!this.width || !this.height) return;
     const gl = this.gl, ctx = this.ctx;
     if (!this.camera.overview && snapshot) this.camera.target = snapshot.receiver.slice();
     if (this.camera.overview) this.camera.target = this.scene.bounds[0].map((value, i) => (value + this.scene.bounds[1][i]) / 2);
     this.basis(); gl.clearColor(.055, .10, .135, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    gl.useProgram(this.program); gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
     const matrix = [];
     for (let i = 0; i < 3; i++) matrix.push(this.right[i], this.up[i], -this.depth[i]);
+    const mapped = snapshot && this.basemap.draw(this.camera, this.width, this.height, this.scale, matrix);
+    gl.useProgram(this.program); gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
     gl.uniformMatrix3fv(this.uniforms.view, false, matrix); gl.uniform3fv(this.uniforms.target, this.camera.target);
     gl.uniform3f(this.uniforms.scale, 2 * this.scale / this.width, 2 * this.scale / this.height, 1 / 25000);
     const draw = (item, lit) => { gl.uniform1f(this.uniforms.lit, lit); gl.bindVertexArray(item.vao); gl.drawArrays(item.mode, 0, item.count); };
-    draw(this.city, 1); draw(this.track, 0); ctx.clearRect(0, 0, this.width, this.height);
+    draw(this.city, 1); if (!mapped) draw(this.grid, 0); draw(this.track, 0); ctx.clearRect(0, 0, this.width, this.height);
     if (!snapshot) return;
     const data = [], labels = [];
     const line = (points, color) => { for (let i = 1; i < points.length; i++) for (const point of [points[i - 1], points[i]]) data.push(...point, 0, 0, 0, ...color); };
@@ -132,7 +137,11 @@ export class CityRenderer {
     ctx.beginPath(); ctx.arc(x, y, 4, 0, 2 * Math.PI); ctx.fillStyle = "#85e4bc"; ctx.fill();
     ctx.strokeStyle = "#0c141c"; ctx.lineWidth = 2; ctx.stroke();
     ctx.font = "10px ui-monospace, monospace"; ctx.fillStyle = "#b0c3cf"; ctx.textAlign = "left";
-    const metres = this.camera.overview ? 500 : 100, size = metres * this.scale;
+    const maximum = Math.min(120, this.width * .25) / this.scale;
+    const power = 10 ** Math.floor(Math.log10(maximum));
+    const metres = [5,2,1].find(value => value * power <= maximum) * power, size = metres * this.scale;
+    ctx.fillStyle = "#0c141ce8"; ctx.fillRect(16, this.height - 76, Math.max(size + 18, 100), 36);
+    ctx.fillStyle = "#dce8ef";
     ctx.fillRect(24, this.height - 50, size, 1); ctx.fillRect(24, this.height - 54, 1, 5); ctx.fillRect(24 + size, this.height - 54, 1, 5);
     ctx.fillText(`${metres} m · ENU`, 24, this.height - 61);
   }

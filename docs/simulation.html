@@ -7,8 +7,8 @@
   <meta name="description" content="Trace GNSS signals through actual PLATEAU buildings and bridges in Tokyo Odaiba, with UrbanNav reference poses and real GPS broadcast ephemerides.">
   <title>PLATEAU Signal Lab · gnss_gpu</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230c141c'/%3E%3Cpath d='M8 23V13h6V7h5v10h5v6' fill='none' stroke='%2385e4bc' stroke-width='2'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="assets/simulation/style.css">
-  <script type="module" src="assets/simulation/app.mjs"></script>
+  <link rel="stylesheet" href="assets/simulation/style.css?v=osm-1">
+  <script type="module" src="assets/simulation/app.mjs?v=osm-1"></script>
 </head>
 <body>
   <div class="shell">
@@ -32,6 +32,7 @@
           <div class="stage-caption"><span class="caption-label">PLATEAU / 2022</span><strong id="scene-name">Tokyo · Odaiba</strong><span id="scene-description">Loading the full CityGML mesh</span></div>
           <div class="view-tools" aria-label="Camera controls"><button type="button" id="overview" aria-label="Toggle city overview" aria-pressed="false">◫</button><button type="button" id="zoom-in" aria-label="Zoom in">+</button><button type="button" id="zoom-out" aria-label="Zoom out">−</button><button type="button" id="reset-view" aria-label="Reset camera view">⌖</button></div>
           <div class="stage-note" id="stage-help">Drag to orbit <span>·</span> Scroll to zoom <span>·</span> Timeline follows the recorded route</div>
+          <div id="map-credit" class="map-credit"><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a><a id="osm-location" href="https://www.openstreetmap.org/#map=17/35.618026/139.775924" target="_blank" rel="noopener">View this location ↗</a></div>
           <div class="toast" id="toast" role="status" hidden></div>
         </div>
         <div class="legend" aria-label="Path legend"><span><i class="legend-line los"></i> Direct LOS</span><span><i class="legend-line nlos"></i> Single reflection</span><span><i class="legend-line blocked"></i> Blocked direct</span><span class="receiver-key"><i></i> Receiver</span></div>
@@ -48,6 +49,8 @@
           <label class="slider-label" for="antenna">Virtual height offset<output id="antenna-out">+0.0 m</output></label><input id="antenna" type="range" min="0" max="20" step="0.5" value="0" disabled data-load-control>
           <div class="range-endpoints"><span>Recorded ECEF pose</span><span>+20 m local up</span></div>
           <label class="slider-label second-slider" for="mask">Elevation mask<output id="mask-out">10°</output></label><input id="mask" type="range" min="5" max="30" step="1" value="10" disabled data-load-control>
+          <label class="check-row"><input id="basemap" type="checkbox" checked disabled data-load-control><span>OpenStreetMap basemap</span></label>
+          <p id="map-status" class="small-note map-status" role="status">Loading OpenStreetMap…</p>
           <label class="check-row"><input id="reflections" type="checkbox" checked><span>Show reflected paths</span></label>
         </section>
         <section class="panel signals">
@@ -68,6 +71,7 @@
       <div><span class="model-icon" aria-hidden="true">◈</span><p><strong>Actual geometry, traceable inputs.</strong> <span id="mesh-readout">320,932 triangles · 28 CityGML tiles</span>. All 12,410 reference poses retained.</p></div>
       <details><summary>Data sources, method &amp; limits</summary>
         <p id="geometry-readout">Building and bridge components, with original interior rings.</p>
+        <p><strong>Base map:</strong> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors (ODbL)</a>. Current roads, water and place labels provide context beneath the PLATEAU mesh. The raster map follows a nominal sea-level reference surface; it supplies no terrain or signal-obstruction geometry. Its date differs from the recorded drive and city model. Only tiles for the displayed camera view are requested, following the <a href="https://operations.osmfoundation.org/policies/tiles/">OSM tile usage policy</a>. A map outage does not stop the signal simulation.</p>
         <p><strong>City:</strong> <a href="https://www.geospatial.jp/ckan/dataset/plateau-tokyo23ku-2022">PLATEAU Tokyo 23 wards, 2022 (CC BY 4.0)</a>, Odaiba building and bridge CityGML. The highest available LoD is selected per component. T.P. heights are converted to ellipsoidal heights with bilinear <a href="https://web1.gsi.go.jp/buturisokuchi/grageo_reference.html">GSI GSIGEO2011 ver.2.1</a> corrections at every vertex. The geoid grid is used offline and is not redistributed.</p>
         <p><strong>Trajectory &amp; sky:</strong> <a href="https://github.com/IPNL-POLYU/UrbanNavDataset">UrbanNav Tokyo Odaiba, 2018-12-19</a>, Applanix POS LV620 reference ECEF coordinates and DLR/TUM CONGO/MGEX broadcast navigation data. GPS positions use healthy, already-transmitted ephemerides within their fit interval, Kepler propagation, harmonic corrections, iterative signal travel time and Earth rotation. Times are GPST. <a href="assets/plateau/UrbanNav-LICENSE.txt">UrbanNav MIT attribution ↗</a>.</p>
         <p><strong>Tracing:</strong> All triangles participate in Float64 BVH visibility tests. Single-bounce specular candidates are tested against each triangle, then both legs are checked for obstruction. Reflections use quasi-static satellite geometry per epoch. ¹ No path means no unobstructed direct or single-bounce ray inside the loaded mesh. Display rays are shortened; display buffers alone use Float32.</p>
