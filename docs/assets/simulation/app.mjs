@@ -1,30 +1,51 @@
 import { C } from "./orbit.mjs";
 import { decodeMesh } from "./mesh.mjs";
 import { CityRenderer } from "./renderer.mjs?v=osm-1";
+import { RouteNavigator, stepEpoch } from "./route-navigation.mjs?v=route-1";
 
 const $ = id => document.getElementById(id);
 const canvas = $("scene"), settings = { epoch: 8000, antenna: 0, mask: 10 };
 const colors = { LOS: "#85e4bc", NLOS: "#efbc79", BLOCKED: "#ec8f91" };
 let scene, renderer, worker, snapshot, selected, busy = true, pending, revision = 0, nextId = 0;
 let playing = false, dirty = true, previousTime = 0, playbackEpoch = settings.epoch, showReflections = true;
+let routeNavigator, controlsReady = false;
 
 function status(message, error = false) {
   $("status-text").textContent = message; $("trace-status").classList.toggle("error", error);
 }
 function fail(error) {
-  setPlaying(false); status("Unable to simulate", true);
-  $("toast").textContent = error.message; $("toast").hidden = false; canvas.dataset.error = "true";
-  for (const input of document.querySelectorAll(".playback button, .playback input, .environment input, #preset")) input.disabled = true;
+  controlsReady = false; canvas.dataset.error = "true"; setPlaying(false); status("Unable to simulate", true); syncRoute();
+  $("toast").textContent = error.message; $("toast").hidden = false;
+  for (const input of document.querySelectorAll("[data-load-control]")) input.disabled = true;
 }
 function gpst(tow) { return new Date((scene.week * 604800 + tow) * 1000 + Date.UTC(1980, 0, 6)).toISOString().slice(11, 23); }
 function syncControls() {
   $("antenna-out").textContent = `+${settings.antenna.toFixed(1)} m`; $("mask-out").textContent = `${settings.mask}°`;
   $("progress").value = settings.epoch;
   $("progress-out").textContent = scene ? `${gpst(scene.track[settings.epoch][0])} GPST` : "Loading…";
+  $("preset").value = [...$("preset").options].some(option => option.value === String(settings.epoch)) ? String(settings.epoch) : "";
   for (const id of ["antenna", "mask", "progress"]) {
     const input = $(id), fill = 100 * (Number(input.value) - Number(input.min)) / (Number(input.max) - Number(input.min));
     input.style.setProperty("--fill", `${fill}%`);
   }
+  syncRoute();
+}
+function syncRoute() {
+  if (!scene || !routeNavigator) return;
+  const ready = Boolean(controlsReady && snapshot?.epoch === settings.epoch && snapshot.antenna === settings.antenna && snapshot.mask === settings.mask);
+  const label = `Pose ${(settings.epoch + 1).toLocaleString("en-US")} of ${scene.track.length.toLocaleString("en-US")} · ${gpst(scene.track[settings.epoch][0])} GPST`;
+  $("route-selection").textContent = label;
+  $("route-trace").textContent = !controlsReady ? canvas.dataset.error ? "Simulation unavailable" : "Preparing full-mesh tracer…" : ready ? "Trace matches selected pose" : "Tracing selected pose…";
+  $("route-trace").dataset.ready = String(ready);
+  for (const button of document.querySelectorAll("[data-route-step]")) {
+    button.disabled = !controlsReady || stepEpoch(settings.epoch, Number(button.dataset.routeStep), scene.track.length) === settings.epoch;
+  }
+  routeNavigator.update(settings.epoch, ready, controlsReady, label);
+}
+function seekEpoch(epoch) {
+  if (!controlsReady) return;
+  setPlaying(false); settings.epoch = stepEpoch(epoch, 0, scene.track.length);
+  revision++; syncControls(); requestTrace();
 }
 function setPlaying(value) {
   playing = value; playbackEpoch = settings.epoch; $("play").setAttribute("aria-pressed", String(value));
@@ -65,7 +86,7 @@ function updateReadout(milliseconds) {
   $("spp-all").textContent = snapshot.spp.all ? `${snapshot.spp.all.horizontal.toFixed(2)} m` : "Unavailable";
   $("spp-los").textContent = snapshot.spp.los ? `${snapshot.spp.los.horizontal.toFixed(2)} m` : "Unavailable";
   $("spp-count").textContent = `${snapshot.spp.all?.satellites ?? 0} usable paths · 4 required, with full rank`;
-  inspect(); dirty = true;
+  inspect(); syncRoute(); dirty = true;
 }
 function inspect() {
   for (const button of document.querySelectorAll("[data-satellite]")) button.setAttribute("aria-pressed", String(button.dataset.satellite === selected));
@@ -82,8 +103,9 @@ function inspect() {
   $("feature-id").title = object?.source ?? "";
 }
 for (const id of ["antenna", "mask"]) $(id).addEventListener("input", event => { settings[id] = Number(event.target.value); revision++; syncControls(); requestTrace(); });
-$("progress").addEventListener("input", event => { setPlaying(false); settings.epoch = Number(event.target.value); revision++; syncControls(); requestTrace(); });
-$("preset").addEventListener("change", event => { setPlaying(false); settings.epoch = Number(event.target.value); revision++; syncControls(); requestTrace(); });
+$("progress").addEventListener("input", event => seekEpoch(Number(event.target.value)));
+$("preset").addEventListener("change", event => seekEpoch(Number(event.target.value)));
+for (const button of document.querySelectorAll("[data-route-step]")) button.addEventListener("click", () => seekEpoch(settings.epoch + Number(button.dataset.routeStep)));
 $("play").addEventListener("click", () => setPlaying(!playing));
 $("reflections").addEventListener("change", event => { showReflections = event.target.checked; dirty = true; });
 $("basemap").addEventListener("change", event => { renderer?.basemap.setEnabled(event.target.checked); dirty = true; });
@@ -143,6 +165,9 @@ async function initialize() {
   const [meshBuffer, sceneBuffer] = await Promise.all([asset(manifest.mesh), asset(manifest.scene)]);
   scene = JSON.parse(new TextDecoder().decode(sceneBuffer));
   renderer = new CityRenderer(canvas, $("annotations"), scene, decodeMesh(meshBuffer), updateMap);
+  routeNavigator = new RouteNavigator($("route"), scene, seekEpoch, epoch => {
+    $("route-preview").textContent = epoch === null ? "Click or tap the route to select a recorded pose." : `Preview · ${gpst(scene.track[epoch][0])} GPST · pose ${(epoch + 1).toLocaleString("en-US")}`;
+  });
   $("progress").max = scene.track.length - 1;
   $("mesh-readout").textContent = `${scene.stats.triangles.toLocaleString("en-US")} triangles · ${scene.provenance.files.length} CityGML tiles`;
   $("geometry-readout").textContent = `${scene.stats.buildings.toLocaleString("en-US")} building components · ${scene.stats.bridges} bridge components · ${scene.stats.holes} interior rings preserved`;
@@ -152,7 +177,7 @@ async function initialize() {
   worker.onerror = event => fail(new Error(event.message || "The simulation worker stopped."));
   worker.onmessage = ({ data }) => {
     if (data.type === "error") { fail(new Error(data.error)); return; }
-    if (data.type === "ready") { busy = false; for (const input of document.querySelectorAll("[data-load-control]")) input.disabled = false; requestTrace(); return; }
+    if (data.type === "ready") { busy = false; controlsReady = true; for (const input of document.querySelectorAll("[data-load-control]")) input.disabled = false; syncRoute(); requestTrace(); return; }
     busy = false;
     if (data.revision === revision) { snapshot = data.snapshot; updateReadout(data.milliseconds); }
     if (pending) { const item = pending; pending = null; send(item); }

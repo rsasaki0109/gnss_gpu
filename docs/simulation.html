@@ -7,8 +7,8 @@
   <meta name="description" content="Trace GNSS signals through actual PLATEAU buildings and bridges in Tokyo Odaiba, with UrbanNav reference poses and real GPS broadcast ephemerides.">
   <title>PLATEAU Signal Lab · gnss_gpu</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230c141c'/%3E%3Cpath d='M8 23V13h6V7h5v10h5v6' fill='none' stroke='%2385e4bc' stroke-width='2'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="assets/simulation/style.css?v=osm-1">
-  <script type="module" src="assets/simulation/app.mjs?v=osm-1"></script>
+  <link rel="stylesheet" href="assets/simulation/style.css?v=route-1">
+  <script type="module" src="assets/simulation/app.mjs?v=route-1"></script>
 </head>
 <body>
   <div class="shell">
@@ -23,7 +23,7 @@
     <main class="workspace">
       <section class="viewer" aria-label="PLATEAU simulation">
         <div class="viewer-toolbar">
-          <label class="scene-select">Epoch<select id="preset" disabled data-load-control><option value="8000">13:20 · Urban segment</option><option value="0">00:00 · Route start</option><option value="2000">03:20 · Urban segment</option><option value="6000">10:00 · Open segment</option><option value="12409">20:40 · Route end</option></select></label>
+          <label class="scene-select">Epoch<select id="preset" disabled data-load-control><option value="8000">13:20 · Urban segment</option><option value="0">00:00 · Route start</option><option value="2000">03:20 · Urban segment</option><option value="6000">10:00 · Open segment</option><option value="12409">20:40 · Route end</option><option value="" disabled>Selected recorded pose</option></select></label>
           <span class="trace-status" id="trace-status" role="status"><span class="live-dot"></span><span id="status-text">Preparing scene…</span></span>
         </div>
         <div class="stage" id="stage">
@@ -41,6 +41,22 @@
           <div class="timeline"><label for="progress">2018-12-19 <output id="progress-out">Loading…</output></label><input id="progress" type="range" min="0" max="12409" step="1" value="8000" disabled data-load-control></div>
           <button type="button" id="reset" class="text-button" disabled data-load-control>Reset</button>
         </div>
+        <section class="route-navigation" aria-labelledby="route-heading">
+          <div class="route-chart"><canvas id="route" role="slider" aria-label="Recorded route position" aria-describedby="route-help" aria-orientation="horizontal" aria-disabled="true" aria-valuemin="1" aria-valuemax="12410" aria-valuenow="8001" tabindex="-1"></canvas></div>
+          <div class="route-info">
+            <div class="section-title"><h2 id="route-heading">Explore recorded route</h2><span class="route-key"><i></i> Selected pose ±5 s</span></div>
+            <p id="route-selection" class="route-selection">12,410 original reference poses</p>
+            <p id="route-trace" class="route-trace">Loading the recorded route…</p>
+            <div class="route-steps" role="group" aria-label="Step through the recorded route">
+              <button type="button" data-route-step="-10" aria-label="Back 1 second" disabled data-load-control>−1 s</button>
+              <button type="button" data-route-step="-1" aria-label="Previous recorded pose, 0.1 seconds" disabled data-load-control>−0.1 s</button>
+              <button type="button" data-route-step="1" aria-label="Next recorded pose, 0.1 seconds" disabled data-load-control>+0.1 s</button>
+              <button type="button" data-route-step="10" aria-label="Forward 1 second" disabled data-load-control>+1 s</button>
+            </div>
+            <p id="route-preview" class="small-note">Click or tap the route to select a recorded pose.</p>
+            <p id="route-help" class="small-note">Arrow keys: 0.1 s · Shift + arrow: 1 s · Home / End: route limits</p>
+          </div>
+        </section>
         <div class="data-strip"><span id="epoch-readout">12,410 reference poses · 10 Hz</span><span id="gps-readout">Broadcast GPS ephemerides</span></div>
       </section>
       <aside class="sidebar" aria-label="Receiver controls and signals">
@@ -78,7 +94,8 @@
         <p id="repair-readout">Source topology repair is recorded in the scene manifest.</p>
         <p><strong>² Controlled range experiment:</strong> Horizontal displacement from iterative least squares using the earliest modeled path per usable satellite. It starts at the reference position, with ideal clock and atmospheric corrections, zero noise and no power threshold. LOS-only displacement is zero by construction when geometry permits a solution. This is geometric bias, not measured positioning accuracy, a receiver simulator, or a native PF/FGO benchmark.</p>
         <p><strong>Reconstruction limits:</strong> A 2018 drive is combined with a 2022 city model, so this does not reproduce the exact historical scene. JGD2011 horizontal coordinates are nominally aligned with WGS84; no <a href="https://positions.gsi.go.jp/cdcs/">epoch-dependent crustal correction</a> or reference-to-antenna lever-arm calibration is applied. This is not survey-grade frame registration. Moving objects, vegetation, RF power/materials, diffraction, multiple bounces, atmosphere and receiver tracking are not modeled. Occlusion is limited to the 28 loaded tiles. Playback shows the latest completed epoch; it does not compute every intermediate epoch in real time. The timeline evaluates any recorded pose exactly.</p>
-        <p><a href="assets/plateau/manifest.json">Source hashes &amp; asset checksums ↗</a> · <a href="assets/plateau/ATTRIBUTION.txt">Data attribution ↗</a> · <a href="https://github.com/rsasaki0109/gnss_gpu/blob/main/tools/build_plateau_browser_scene.py">Reproducible exporter ↗</a>. Arrow keys orbit; Space plays and pauses.</p>
+        <p><strong>Route navigation:</strong> The north-up route overview retains every recorded position. Click or tap near its line to select the closest recorded pose on screen; exact spatial ties prefer the current time, then the earlier source row. The highlighted segment spans up to five seconds on either side. Selection pauses playback. An amber marker indicates that the selected pose is still being traced; a green marker confirms that the displayed trace matches the selected pose and receiver controls. The route overview supports 0.1-second arrow steps, one-second Shift + arrow steps and Home / End. In the 3D view, arrow keys orbit and Space plays or pauses.</p>
+        <p><a href="assets/plateau/manifest.json">Source hashes &amp; asset checksums ↗</a> · <a href="assets/plateau/ATTRIBUTION.txt">Data attribution ↗</a> · <a href="https://github.com/rsasaki0109/gnss_gpu/blob/main/tools/build_plateau_browser_scene.py">Reproducible exporter ↗</a>.</p>
       </details>
     </section>
     <footer><span>gnss_gpu <span class="footer-separator">/</span> PLATEAU Signal Lab</span><a href="index.html">Back to the results snapshot ↗</a></footer>

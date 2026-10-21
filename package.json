@@ -7,6 +7,6 @@
   "scripts": {
     "site:preview": "python tools/serve_site_preview.py",
     "site:smoke": "playwright test -c tests/site/playwright.config.cjs",
-    "site:simulation:model": "node --test tests/site/simulation-model.test.cjs tests/site/map-geometry.test.cjs"
+    "site:simulation:model": "node --test tests/site/simulation-model.test.cjs tests/site/map-geometry.test.cjs tests/site/route-navigation.test.cjs"
   }
 }
