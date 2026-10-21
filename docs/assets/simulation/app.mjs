@@ -6,6 +6,7 @@ import { clampViewPitch } from "./view-geometry.mjs";
 import { DEFAULT_SCENE, readSceneLink, writeSceneLink } from "./scene-link.mjs";
 import { captureReference, compareReceiver } from "./comparison.mjs";
 import { SkyPlot } from "./sky-plot.mjs?v=arrival-1";
+import { ReflectionGeometry } from "./reflection-geometry.mjs";
 
 const $ = id => document.getElementById(id);
 const canvas = $("scene"), settings = { epoch: 8000, antenna: 0, mask: 10 };
@@ -16,6 +17,7 @@ let routeNavigator, controlsReady = false;
 let linkAssets, pendingReplay;
 let reference, referenceURL, comparisonReference, comparisonSnapshot;
 const skyPlot = new SkyPlot($("sky-plot"), id => { setPlaying(false); selectSatellite(id); });
+const reflectionPanel = new ReflectionGeometry($("reflection-panel"));
 
 function status(message, error = false) {
   $("status-text").textContent = message; $("trace-status").classList.toggle("error", error);
@@ -58,10 +60,11 @@ function seekEpoch(epoch) {
   revision++; syncControls(); requestTrace();
 }
 function setPlaying(value) {
-  if (value) { clearSurfaceFocus(); pendingReplay = null; $("share-panel").open = false; $("compare-panel").open = false; }
+  if (value) { clearSurfaceFocus(); pendingReplay = null; $("share-panel").open = false; $("compare-panel").open = false; $("reflection-panel").open = false; }
   playing = value; playbackEpoch = settings.epoch; $("play").setAttribute("aria-pressed", String(value));
   $("play-icon").textContent = value ? "Ⅱ" : "▶"; $("play-label").textContent = value ? "Pause" : "Play · 10×";
   updateSky();
+  updateReflectionGeometry();
 }
 function send(item) { busy = true; worker.postMessage(item); }
 function updateMap(stats) {
@@ -133,7 +136,12 @@ function syncFocusUI() {
   updateShare();
   updateComparison();
   updateSky();
+  updateReflectionGeometry();
 }
+function updateReflectionGeometry() {
+  reflectionPanel.update(snapshot, selected, {ready:currentTrace(),error:Boolean(canvas.dataset.error)});
+}
+$("reflection-panel").addEventListener("toggle", () => { if ($("reflection-panel").open && playing) setPlaying(false); });
 function updateSky() {
   skyPlot.update(snapshot, selected, {scene, ready:currentTrace(), error:Boolean(canvas.dataset.error), playing, time:snapshot?gpst(snapshot.tow):""});
   $("sky-pause").hidden = !playing; $("sky-pause").disabled = !controlsReady;

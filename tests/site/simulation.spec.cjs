@@ -110,6 +110,9 @@ test("a mismatched asset fails visibly without substituting synthetic geometry",
   await expect(page.locator(".sky-point")).toHaveCount(0);
   await expect(page.locator(".sky-arrival-readout")).toHaveAttribute("data-state","unavailable");
   await expect(page.locator(".sky-arrival-marker")).toHaveAttribute("visibility","hidden");
+  await expect(page.locator("#reflection-panel")).toHaveAttribute("data-state","unavailable");
+  await expect(page.locator("#reflection-results")).toBeHidden();
+  await expect(page.locator("#reflection-receiver-leg")).not.toHaveAttribute("data-value");
 });
 
 test("OSM is georeferenced, visibly credited and independent of the signal calculation", async ({page}) => {
@@ -671,4 +674,69 @@ test("a real reflected arrival below the satellite mask stays at its exact direc
   const trace=await canvas.getAttribute("data-trace-id");
   await page.locator("#focus-reflection").click();await expect(canvas).toHaveAttribute("data-view","reflection");
   await expect(arrival).toHaveAttribute("data-elevation",String(elevation));await expect(canvas).toHaveAttribute("data-trace-id",trace);
+});
+
+test("reflection geometry exposes actual segments, normal angles and the selected original surface without tracing again",async({page},testInfo)=>{
+  const errors=[];page.on("pageerror",error=>errors.push(error.message));
+  await page.goto("simulation.html");
+  const panel=page.locator("#reflection-panel"),canvas=page.locator("#scene"),results=page.locator("#reflection-results");
+  await expect(panel).toHaveAttribute("data-state","ready",{timeout:45000});
+  const trace=await canvas.getAttribute("data-trace-id"),receiver=await canvas.getAttribute("data-receiver");
+  await page.locator("#reflection-panel > summary").press("Enter");await expect(results).toBeVisible();
+  await expect(panel).toHaveAttribute("data-geometry-satellite","G12");await expect(panel).toHaveAttribute("data-epoch","8000");
+  await expect(page.locator("#reflection-status")).toHaveText("G12 · shortest single bounce · earliest modeled path.");
+  await expect(page.locator("#reflection-source-leg")).toHaveText("24,199.417 km");
+  await expect(page.locator("#reflection-receiver-leg")).toHaveText("117.558 m");
+  await expect(page.locator("#reflection-extra")).toHaveText("+23.038 m");
+  await expect(page.locator("#reflection-incidence")).toHaveText("71.758°");await expect(page.locator("#reflection-angle")).toHaveText("71.758°");
+  expect(Math.abs(Number(await page.locator("#reflection-receiver-leg").getAttribute("data-value"))-117.55809428100213)).toBeLessThan(1e-9);
+  expect(Number(await page.locator("#reflection-mismatch").getAttribute("data-value"))).toBeLessThan(1e-8);
+  await expect(page.locator("#reflection-mismatch")).toHaveText("<0.001°");
+  await expect(page.locator("#reflection-caption")).toContainText("Original triangle 46016");
+  await expect(page.locator("#reflection-sketch")).toHaveAttribute("aria-label",/G12 shortest single-bounce reflection/);
+  await expect(page.locator("#reflection-sketch line.geometry-incident")).toHaveAttribute("x2","160");
+  await expect(page.locator("#reflection-sketch line.geometry-outgoing")).toHaveAttribute("x1","160");
+  await panel.screenshot({path:testInfo.outputPath("reflection-geometry-panel.png")});
+  await page.screenshot({path:testInfo.outputPath("reflection-geometry-page.png"),fullPage:true});
+  await page.locator("#focus-reflection").click();await expect(canvas).toHaveAttribute("data-view","reflection");
+  await expect(panel).toHaveAttribute("data-geometry-satellite","G12");await expect(page.locator("#reflection-caption")).toContainText("Original triangle 46016");
+  await page.locator('[data-sky-satellite="G05"]').press("Enter");
+  await expect(panel).toHaveAttribute("data-state","direct");await expect(results).toBeHidden();
+  await expect(page.locator("#reflection-extra")).not.toHaveAttribute("data-value");
+  await page.locator('[data-sky-satellite="G10"]').press("Space");
+  await expect(panel).toHaveAttribute("data-state","blocked");await expect(results).toBeHidden();
+  await page.locator('[data-satellite="G12"]').click();await expect(panel).toHaveAttribute("data-state","ready");
+  await expect(canvas).toHaveAttribute("data-trace-id",trace);await expect(canvas).toHaveAttribute("data-receiver",receiver);
+  await expect(page.locator("#spp-all")).toHaveText("65.74 m");await expect(page.locator(".metrics strong")).toHaveText(["4","1","3"]);
+  await expect(page.locator("[data-satellite]")).toHaveCount(8);
+  await page.locator("#antenna").press("End");await expect(canvas).toHaveAttribute("data-antenna","20");
+  await page.locator('[data-sky-satellite="G10"]').press("Enter");
+  await expect(panel).toHaveAttribute("data-geometry-satellite","G10");await expect(panel).toHaveAttribute("data-antenna","20");
+  await expect(page.locator("#reflection-status")).toContainText("additional path; direct arrives first");
+  await expect(page.locator("#reflection-receiver-leg")).toHaveText("39.253 m");await expect(page.locator("#reflection-extra")).toHaveText("+3.562 m");
+  await expect(page.locator("#reflection-caption")).toContainText("Original triangle 52843");
+  const layout=await page.evaluate(()=>({client:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth}));
+  expect(layout.scroll).toBeLessThanOrEqual(layout.client+2);expect(errors).toEqual([]);
+});
+
+test("reflection details hide pending values, pause playback on opening and follow the completed mask",async({page})=>{
+  await page.route("**/simulation/city-worker.mjs",async route=>{
+    const response=await route.fetch(),source=await response.text();
+    await route.fulfill({response,body:`const deliver=self.postMessage.bind(self);self.postMessage=(message,...args)=>message.type==="result"?setTimeout(()=>deliver(message,...args),900):deliver(message,...args);\n${source}`});
+  });
+  await page.goto("simulation.html");
+  const panel=page.locator("#reflection-panel"),results=page.locator("#reflection-results"),canvas=page.locator("#scene");
+  await expect(panel).toHaveAttribute("data-state","ready",{timeout:45000});await page.locator("#reflection-panel > summary").click();
+  await page.locator("#mask").press("End");
+  await expect(panel).toHaveAttribute("data-state","pending");await expect(results).toBeHidden();
+  await expect(panel).not.toHaveAttribute("data-geometry-satellite");await expect(page.locator("#reflection-incidence")).not.toHaveAttribute("data-value");
+  await expect(panel).toHaveAttribute("data-state","direct");await expect(results).toBeHidden();
+  await page.locator("#play").click();await expect(panel).not.toHaveAttribute("open");
+  await expect.poll(async()=>Number(await page.locator("#progress").inputValue())).toBeGreaterThan(8000);
+  await page.locator("#reflection-panel > summary").click();
+  await expect(page.locator("#play")).toHaveAttribute("aria-pressed","false");await expect(page.locator("#sky-plot")).toHaveAttribute("data-state","ready");
+  const epoch=await canvas.getAttribute("data-epoch");expect(await page.locator("#progress").inputValue()).toBe(epoch);
+  const trace=await canvas.getAttribute("data-trace-id");
+  await page.locator("#reflection-panel > summary").press("Enter");await page.locator("#reflection-panel > summary").press("Enter");
+  await expect(canvas).toHaveAttribute("data-trace-id",trace);await expect(panel).toHaveAttribute("open");
 });
