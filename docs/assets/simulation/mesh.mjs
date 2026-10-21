@@ -142,7 +142,12 @@ export class MeshBVH {
     const axis = this.projection[t], i = (axis + 1) % 3, j = (axis + 2) % 3, o = t * 9, e = this.edges;
     const x = (i === 0 ? px : i === 1 ? py : pz) - e[o + i], y = (j === 0 ? px : j === 1 ? py : pz) - e[o + j];
     const determinant = e[o + 3 + i] * e[o + 6 + j] - e[o + 3 + j] * e[o + 6 + i];
-    const u = (x * e[o + 6 + j] - y * e[o + 6 + i]) / determinant;
+    const numeratorU = x * e[o + 6 + j] - y * e[o + 6 + i];
+    // Accepted barycentric coordinates are near [0,1]. If |u| >= 2 the
+    // unchanged tests below cannot pass. Doubling is exact unless it overflows;
+    // an infinite bound simply falls back to the original divisions.
+    if (Math.abs(numeratorU) > 2 * Math.abs(determinant)) return false;
+    const u = numeratorU / determinant;
     const v = (e[o + 3 + i] * y - e[o + 3 + j] * x) / determinant;
     return u >= -1e-10 && v >= -1e-10 && u + v <= 1 + 1e-10;
   }
