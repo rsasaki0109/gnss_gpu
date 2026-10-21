@@ -152,7 +152,7 @@ jobs:
           node-version: "20"
           cache: "npm"
       - run: python -m pip install --upgrade pip
-      - run: python -m pip install numpy matplotlib pillow
+      - run: python -m pip install numpy matplotlib pillow "shapely==2.1.2"
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: bash scripts/ci/run_site_smoke.sh

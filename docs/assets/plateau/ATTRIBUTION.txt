@@ -1,0 +1,26 @@
+PLATEAU Odaiba browser scene
+
+City geometry: Project PLATEAU, Ministry of Land, Infrastructure, Transport
+and Tourism (Japan), Tokyo 23 wards 2022 CityGML, CC BY 4.0.
+https://www.geospatial.jp/ckan/dataset/plateau-tokyo23ku-2022
+https://creativecommons.org/licenses/by/4.0/
+Modified by gnss_gpu contributors: highest LoD per feature component,
+constrained triangulation preserving holes, reported GEOS linework repair,
+geoid height conversion and ECEF-to-local-ENU transformation. No mesh
+decimation or coordinate quantization. Original file hashes are in manifest.json.
+
+Trajectory and navigation: UrbanNav-TK-20181219 Odaiba, IPNL-POLYU UrbanNavDataset.
+https://github.com/IPNL-POLYU/UrbanNavDataset
+MIT license and copyright notice: UrbanNav-LICENSE.txt in this directory.
+Reference: Applanix POS LV620 reference.csv. All 12,410 ECEF poses retained.
+Navigation: DLR/TUM CONGO/MGEX merged broadcast RINEX base.nav; GPS used here.
+
+Height correction: Geospatial Information Authority of Japan (GSI),
+Japan geoid 2011 (GSIGEO2011), version 2.1. Bilinear interpolation on the
+one arc-minute by 1.5 arc-minute source grid. Used offline for research;
+the original geoid grid is not redistributed.
+https://web1.gsi.go.jp/buturisokuchi/grageo_reference.html
+https://www.gsi.go.jp/buturisokuchi/grageo_geoidprocedure.html
+
+This is a cross-year geometric reconstruction of a 2018 reference drive and
+a 2022 city model, not a reproduction of the exact historical street scene.
