@@ -153,10 +153,36 @@
 .reflection-values dt { color:var(--dim); font-size:9px; line-height:1.5 }
 .reflection-values dd { color:var(--ink); font:12px/1.7 ui-monospace,monospace; margin:4px 0 0; overflow-wrap:anywhere }
 .reflection-panel .small-note { font-size:9px; margin:6px 0 0 }
+.range-status { margin:12px 0; color:var(--muted); font-size:10px; line-height:1.6 }
+.range-panel[data-state=pending] .range-status,.range-panel[data-state=no-solution] .range-status { color:var(--amber) }
+.range-summary,.range-terms { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin:16px 0; font-variant-numeric:tabular-nums }
+.range-summary div,.range-terms div { min-width:0 }
+.range-summary dt,.range-terms dt { color:var(--dim); font-size:9px; line-height:1.5 }
+.range-summary dd,.range-terms dd { margin:5px 0 0; color:var(--ink); font:12px/1.7 ui-monospace,monospace; overflow-wrap:anywhere }
+.range-summary dd { color:#c7adff }
+.range-equation { color:var(--muted); font:10px/1.8 ui-monospace,monospace; margin:14px 0 }
+.range-selection { border:1px solid #3d4c55; border-radius:6px; padding:12px; background:#14232d }
+.range-selection p { color:var(--muted); font-size:10px; line-height:1.6; margin:0 }
+.range-terms { margin:12px 0 0 }
+#range-excess { color:var(--amber) }
+.range-table { width:100%; table-layout:fixed; border-collapse:collapse; margin:18px 0 12px; font-size:10px; font-variant-numeric:tabular-nums }
+.range-table caption { text-align:left; color:var(--muted); padding-bottom:9px; font-size:10px }
+.range-table th,.range-table td { padding:6px; border-bottom:1px solid var(--line); text-align:right; font-weight:400; overflow-wrap:anywhere }
+.range-table th:first-child { text-align:left; width:19% }
+.range-table thead th { font-size:9px; color:var(--dim) }
+.range-table button { min-height:32px; min-width:42px; padding:6px; border:1px solid transparent; border-radius:4px; background:none; color:inherit; font:inherit }
+.range-table button[aria-pressed=true] { border-color:#658376; background:#254034 }
+.range-table tr[data-selected=true] { background:#1b2e36 }
+.range-table tr[data-path=LOS] th { color:var(--mint) }
+.range-table tr[data-path=NLOS] th { color:var(--amber) }
+.range-table tr[data-path=BLOCKED] th { color:var(--red) }
+.range-panel .small-note { font-size:9px; line-height:1.7; margin:7px 0 0 }
 @media(max-width:780px) {
   .reflection-layout { grid-template-columns:1fr; gap:0 }
   .reflection-values { margin:5px 0 12px; gap:14px 8px }
   .reflection-values dd { font-size:11px }
+  .range-summary,.range-terms { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px }
+  .range-table button { min-height:40px }
 }
 .share-content { padding-top:14px }
 .share-content label { display:block; margin-bottom:7px; font-size:10px; color:var(--muted) }
