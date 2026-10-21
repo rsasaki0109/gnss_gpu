@@ -138,7 +138,8 @@ jobs:
       - run: bash scripts/ci/run_wrapper_smoke.sh
 
   site-smoke:
-    runs-on: ubuntu-latest
+    # Keep the pinned Playwright version on its supported Ubuntu image.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
