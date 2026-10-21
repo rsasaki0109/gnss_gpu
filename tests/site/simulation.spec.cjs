@@ -620,7 +620,8 @@ test("selected reflected arrival uses the real final leg and distinguishes direc
   await page.goto("simulation.html");
   const canvas=page.locator("#scene"),arrival=page.locator(".sky-arrival-readout"),marker=page.locator(".sky-arrival-marker"),note=page.locator(".sky-arrival-note");
   await expect(page.locator("#sky-plot")).toHaveAttribute("data-state","ready",{timeout:45000});
-  await expect(arrival).toHaveAttribute("data-state","reflection");await expect(arrival).toHaveAttribute("data-satellite","G12");
+  await expect(arrival).toHaveAttribute("data-state","reflection");await expect(arrival).toHaveAttribute("data-arrival-satellite","G12");
+  await expect(page.locator("[data-satellite]")).toHaveCount(8);
   const az=Number(await arrival.getAttribute("data-azimuth")),el=Number(await arrival.getAttribute("data-elevation"));
   expect(Math.abs(az-127.0923929127461)).toBeLessThan(1e-10);expect(Math.abs(el-14.65096153366911)).toBeLessThan(1e-10);
   expect(Math.abs(Number(await arrival.getAttribute("data-separation"))-36.482981271152035)).toBeLessThan(1e-10);

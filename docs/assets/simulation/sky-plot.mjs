@@ -113,7 +113,7 @@ export class SkyPlot {
       else {
         state = "reflection";
         const {azimuth,elevation,separation} = arrival;
-        Object.assign(this.arrivalReadout.dataset,{satellite:signal.id,azimuth:azimuth??"",elevation,separation,plotted:String(elevation>=0)});
+        Object.assign(this.arrivalReadout.dataset,{arrivalSatellite:signal.id,azimuth:azimuth??"",elevation,separation,plotted:String(elevation>=0)});
         text = `◇ Reflected arrival · az ${azimuth===null?"— (vertical)":azimuth.toFixed(1)+"°"} · el ${elevation.toFixed(1)}°`;
         note = `Shortest single bounce · ${separation.toFixed(1)}° from satellite · ${signal.status === "LOS" ? "direct arrives first" : "earliest modeled path"}.`;
         if (elevation < 0) note += " Below local horizon; not plotted.";
