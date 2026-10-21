@@ -5,7 +5,7 @@ import { RouteNavigator, stepEpoch } from "./route-navigation.mjs?v=route-1";
 import { clampViewPitch } from "./view-geometry.mjs";
 import { DEFAULT_SCENE, readSceneLink, writeSceneLink } from "./scene-link.mjs";
 import { captureReference, compareReceiver } from "./comparison.mjs";
-import { SkyPlot } from "./sky-plot.mjs";
+import { SkyPlot } from "./sky-plot.mjs?v=arrival-1";
 
 const $ = id => document.getElementById(id);
 const canvas = $("scene"), settings = { epoch: 8000, antenna: 0, mask: 10 };
@@ -135,7 +135,7 @@ function syncFocusUI() {
   updateSky();
 }
 function updateSky() {
-  skyPlot.update(snapshot, selected, {ready:currentTrace(), error:Boolean(canvas.dataset.error), playing, time:snapshot?gpst(snapshot.tow):""});
+  skyPlot.update(snapshot, selected, {scene, ready:currentTrace(), error:Boolean(canvas.dataset.error), playing, time:snapshot?gpst(snapshot.tow):""});
   $("sky-pause").hidden = !playing; $("sky-pause").disabled = !controlsReady;
 }
 $("sky-pause").addEventListener("click", () => setPlaying(false));

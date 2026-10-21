@@ -116,6 +116,13 @@
 .sky-source,.sky-selection { margin:3px 0; font:9px/1.7 ui-monospace,monospace; color:var(--muted); overflow-wrap:anywhere }
 .sky-plot[data-state=pending] .sky-source,.sky-plot[data-state=unavailable] .sky-source { color:var(--amber) }
 .sky-selection { color:var(--ink) }
+.sky-arrival-marker { pointer-events:none }
+.sky-arrival-link { stroke:#c5b1ff; stroke-width:1; stroke-dasharray:3 3; opacity:.8 }
+.sky-arrival-diamond { fill:#152731; stroke:#c5b1ff; stroke-width:2 }
+.sky-arrival-readout,.sky-arrival-note { margin:4px 0; font:9px/1.7 ui-monospace,monospace; overflow-wrap:anywhere }
+.sky-arrival-readout { color:#c5b1ff }
+.sky-arrival-readout[data-state=pending],.sky-arrival-readout[data-state=unavailable],.sky-arrival-readout[data-state=blocked] { color:var(--muted) }
+.sky-arrival-note { color:var(--muted) }
 .sky-panel .sky-note { font-size:9px; margin-top:6px }
 #sky-pause { min-height:36px; margin:7px 0 0; padding:7px 10px; border:1px solid #3a5060; border-radius:5px; background:#1a2b38; font-size:10px }
 .scene-link-notice { display:flex; align-items:center; gap:12px; padding:10px 18px; border-bottom:1px solid #345247; background:#172c28; color:var(--mint); font-size:10px; line-height:1.6 }
