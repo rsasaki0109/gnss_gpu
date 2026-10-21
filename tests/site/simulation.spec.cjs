@@ -113,6 +113,10 @@ test("a mismatched asset fails visibly without substituting synthetic geometry",
   await expect(page.locator("#reflection-panel")).toHaveAttribute("data-state","unavailable");
   await expect(page.locator("#reflection-results")).toBeHidden();
   await expect(page.locator("#reflection-receiver-leg")).not.toHaveAttribute("data-value");
+  await expect(page.locator("#range-panel")).toHaveAttribute("data-state","unavailable");
+  await expect(page.locator("#range-results")).toBeHidden();
+  await expect(page.locator("#range-signals tr")).toHaveCount(0);
+  await expect(page.locator("#range-clock")).not.toHaveAttribute("data-value");
 });
 
 test("OSM is georeferenced, visibly credited and independent of the signal calculation", async ({page}) => {
@@ -739,4 +743,75 @@ test("reflection details hide pending values, pause playback on opening and foll
   const trace=await canvas.getAttribute("data-trace-id");
   await page.locator("#reflection-panel > summary").press("Enter");await page.locator("#reflection-panel > summary").press("Enter");
   await expect(canvas).toHaveAttribute("data-trace-id",trace);await expect(panel).toHaveAttribute("open");
+});
+
+test("range fit reads the existing solution and selects real paths without retracing",async({page},testInfo)=>{
+  const errors=[];page.on("pageerror",error=>errors.push(error.message));
+  await page.goto("simulation.html");
+  const panel=page.locator("#range-panel"),canvas=page.locator("#scene"),rows=page.locator("#range-signals tr");
+  await expect(panel).toHaveAttribute("data-state","ready",{timeout:45000});
+  const trace=await canvas.getAttribute("data-trace-id"),receiver=await canvas.getAttribute("data-receiver");
+  await page.locator("#range-panel > summary").press("Enter");await expect(page.locator("#range-results")).toBeVisible();
+  await expect(panel).toHaveAttribute("data-epoch","8000");await expect(panel).toHaveAttribute("data-fit-satellite","G12");
+  await expect(page.locator("#range-horizontal")).toHaveText("65.74 m");await expect(page.locator("#range-up")).toHaveText("+96.028 m");
+  await expect(page.locator("#range-clock")).toHaveText("+88.297 m");await expect(page.locator("#range-excess")).toHaveText("+23.038 m");
+  await expect(page.locator("#range-change")).toHaveText("-65.437 m");await expect(page.locator("#range-residual")).toHaveText("+0.178 m");
+  expect(Number(await page.locator("#range-rms").getAttribute("data-value"))).toBeLessThan(1);
+  expect(Math.abs(Number(await page.locator("#range-clock").getAttribute("data-value"))-88.29666935251403)).toBeLessThan(1e-7);
+  await expect(rows).toHaveCount(8);await expect(page.locator("#range-signals [data-value]")).toHaveCount(10);
+  await expect(page.locator('[data-fit-row="G12"] [data-term="excess"]')).toHaveText("+23.038 m");
+  await expect(page.locator('[data-fit-row="G15"] [data-term="residual"]')).toHaveText("+1.494 m");
+  await panel.screenshot({path:testInfo.outputPath("range-fit-panel.png")});
+  await page.screenshot({path:testInfo.outputPath("range-fit-page.png"),fullPage:true});
+  const direct=page.locator('button[data-fit-satellite="G05"]');await direct.press("Enter");
+  await expect(direct).toBeFocused();await expect(direct).toHaveAttribute("aria-pressed","true");
+  await expect(page.locator('[data-satellite="G05"]')).toHaveAttribute("aria-pressed","true");
+  await expect(page.locator('[data-sky-satellite="G05"]')).toHaveAttribute("aria-pressed","true");
+  await expect(page.locator("#range-excess")).toHaveText("0.000 m");await expect(page.locator("#range-residual")).toHaveText("+0.220 m");
+  await page.locator('button[data-fit-satellite="G10"]').press("Space");
+  await expect(panel).toHaveAttribute("data-fit-satellite","G10");await expect(page.locator("#range-selected")).toContainText("excluded from fit");
+  for(const id of ["excess","change","selected-clock","residual"]){await expect(page.locator(`#range-${id}`)).toHaveText("—");await expect(page.locator(`#range-${id}`)).not.toHaveAttribute("data-value");}
+  await expect(page.locator("#range-clock")).toHaveText("+88.297 m");
+  await page.locator('button[data-fit-satellite="G12"]').click();await expect(page.locator("#range-excess")).toHaveText("+23.038 m");
+  await expect(canvas).toHaveAttribute("data-trace-id",trace);await expect(canvas).toHaveAttribute("data-receiver",receiver);
+  await expect(page.locator("[data-satellite]")).toHaveCount(8);await expect(page.locator("#spp-all")).toHaveText("65.74 m");
+  await page.locator("#antenna").press("End");await expect(canvas).toHaveAttribute("data-antenna","20");
+  await page.locator('button[data-fit-satellite="G10"]').click();
+  await expect(panel).toHaveAttribute("data-antenna","20");await expect(page.locator("#excess-value")).toHaveText("+3.562 m");
+  await expect(page.locator("#range-excess")).toHaveText("0.000 m");await expect(page.locator("#range-rms")).toHaveText("0.000 m");
+  await expect(page.locator("#range-horizontal")).toHaveText("0.00 m");await expect(page.locator("#range-selected")).toContainText("direct arrives first");
+  const layout=await page.evaluate(()=>({client:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth}));
+  expect(layout.scroll).toBeLessThanOrEqual(layout.client+2);expect(errors).toEqual([]);
+});
+
+test("range fit clears pending and failed values and keeps unavailable solutions distinct from zero",async({page})=>{
+  await page.route("**/simulation/city-worker.mjs",async route=>{
+    const response=await route.fetch(),source=await response.text();
+    await route.fulfill({response,body:`const deliver=self.postMessage.bind(self);self.postMessage=(message,...args)=>message.type==="result"?setTimeout(()=>deliver(message,...args),900):deliver(message,...args);\n${source}`});
+  });
+  await page.goto("simulation.html");
+  const panel=page.locator("#range-panel"),canvas=page.locator("#scene"),results=page.locator("#range-results");
+  await expect(panel).toHaveAttribute("data-state","ready",{timeout:45000});await page.locator("#range-panel > summary").click();
+  await page.locator("#mask").press("End");
+  await expect(panel).toHaveAttribute("data-state","pending");await expect(results).toBeHidden();
+  await expect(panel).not.toHaveAttribute("data-fit-satellite");await expect(page.locator("#range-clock")).not.toHaveAttribute("data-value");
+  await expect(page.locator("#range-signals tr")).toHaveCount(0);
+  await expect(panel).toHaveAttribute("data-state","no-solution");await expect(results).toBeVisible();
+  await expect(panel).toHaveAttribute("data-mask","30");await expect(page.locator("#range-status")).toContainText("3 usable paths · no position solution");
+  await expect(page.locator("#range-signals tr")).toHaveCount(5);
+  await expect(page.locator("#range-horizontal")).toHaveText("—");await expect(page.locator("#range-horizontal")).not.toHaveAttribute("data-value");
+  await expect(page.locator('#range-signals [data-term="residual"][data-value]')).toHaveCount(0);
+  await expect(page.locator('[data-fit-row="G13"] [data-term="excess"]')).toHaveText("0.000 m");
+  await expect(page.locator('[data-fit-row="G20"] [data-term="excess"]')).toHaveText("—");
+  await page.locator("#play").click();await expect(panel).not.toHaveAttribute("open");
+  await expect.poll(async()=>Number(await page.locator("#progress").inputValue())).toBeGreaterThan(8000);
+  await page.locator("#range-panel > summary").click();await expect(page.locator("#play")).toHaveAttribute("aria-pressed","false");
+  await expect(page.locator("#sky-plot")).toHaveAttribute("data-state","ready");
+  expect(await panel.getAttribute("data-epoch")).toBe(await canvas.getAttribute("data-epoch"));
+  const trace=await canvas.getAttribute("data-trace-id");
+  await page.locator("#range-panel > summary").press("Enter");await page.locator("#range-panel > summary").press("Enter");
+  await expect(canvas).toHaveAttribute("data-trace-id",trace);await expect(panel).toHaveAttribute("open");
+  await canvas.dispatchEvent("webglcontextlost");
+  await expect(panel).toHaveAttribute("data-state","unavailable");await expect(results).toBeHidden();
+  await expect(page.locator("#range-signals tr")).toHaveCount(0);await expect(page.locator("#range-excess")).not.toHaveAttribute("data-value");
 });
