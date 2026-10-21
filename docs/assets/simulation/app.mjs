@@ -4,6 +4,7 @@ import { CityRenderer } from "./renderer.mjs?v=surface-1";
 import { RouteNavigator, stepEpoch } from "./route-navigation.mjs?v=route-1";
 import { clampViewPitch } from "./view-geometry.mjs";
 import { DEFAULT_SCENE, readSceneLink, writeSceneLink } from "./scene-link.mjs";
+import { captureReference, compareReceiver } from "./comparison.mjs";
 
 const $ = id => document.getElementById(id);
 const canvas = $("scene"), settings = { epoch: 8000, antenna: 0, mask: 10 };
@@ -12,6 +13,7 @@ let scene, renderer, worker, snapshot, selected, busy = true, pending, revision 
 let playing = false, dirty = true, previousTime = 0, playbackEpoch = settings.epoch, showReflections = true;
 let routeNavigator, controlsReady = false;
 let linkAssets, pendingReplay;
+let reference, referenceURL, comparisonReference, comparisonSnapshot;
 
 function status(message, error = false) {
   $("status-text").textContent = message; $("trace-status").classList.toggle("error", error);
@@ -54,7 +56,7 @@ function seekEpoch(epoch) {
   revision++; syncControls(); requestTrace();
 }
 function setPlaying(value) {
-  if (value) { clearSurfaceFocus(); pendingReplay = null; $("share-panel").open = false; }
+  if (value) { clearSurfaceFocus(); pendingReplay = null; $("share-panel").open = false; $("compare-panel").open = false; }
   playing = value; playbackEpoch = settings.epoch; $("play").setAttribute("aria-pressed", String(value));
   $("play-icon").textContent = value ? "Ⅱ" : "▶"; $("play-label").textContent = value ? "Pause" : "Play · 10×";
 }
@@ -123,6 +125,7 @@ function syncFocusUI() {
   $("overview").setAttribute("aria-pressed", String(Boolean(renderer?.camera.overview)));
   updateViewCaption();
   updateShare();
+  updateComparison();
 }
 function updateViewCaption() {
   const text = renderer?.focus ? `PLATEAU 2022 / ${renderer.camera.pitch < 0 ? "UNDERSIDE VIEW" : "SURFACE VIEW"}` : "PLATEAU / 2022";
@@ -150,6 +153,10 @@ function sceneNotice(message, warning = false) {
   $("scene-link-notice-text").textContent = message;
 }
 function shareStatus(message) { if ($("share-status").textContent !== message) $("share-status").textContent = message; }
+function sceneURL() {
+  const camera = renderer.camera;
+  return writeSceneLink(location.href, { epoch: snapshot.epoch, antenna: snapshot.antenna, mask: snapshot.mask, satellite: selected, view: renderer.focus?.kind ?? (camera.overview ? "overview" : "receiver"), yaw: camera.yaw, pitch: camera.pitch, zoom: camera.zoom, basemap: $("basemap").checked, reflections: showReflections }, linkAssets);
+}
 function updateShare() {
   const ready = currentTrace() && Boolean(linkAssets), input = $("scene-link"), open = $("open-scene-link");
   $("copy-scene-link").disabled = !ready; input.disabled = !ready;
@@ -159,13 +166,59 @@ function updateShare() {
     shareStatus(canvas.dataset.error ? "Scene link unavailable." : "Waiting for the selected pose to finish tracing…"); return;
   }
   if (!$("share-panel").open) return;
-  const camera = renderer.camera;
-  const link = writeSceneLink(location.href, { epoch: snapshot.epoch, antenna: snapshot.antenna, mask: snapshot.mask, satellite: selected, view: renderer.focus?.kind ?? (camera.overview ? "overview" : "receiver"), yaw: camera.yaw, pitch: camera.pitch, zoom: camera.zoom, basemap: $("basemap").checked, reflections: showReflections }, linkAssets);
+  const link = sceneURL();
   if (input.value !== link) {
     input.value = link; open.href = link;
     shareStatus(`Link ready · pose ${(snapshot.epoch + 1).toLocaleString("en-US")} · ${selected || "no satellite selected"}`);
   }
 }
+function updateComparison() {
+  const ready = currentTrace(), panel = $("compare-panel"), back = $("return-reference");
+  $("pin-reference").disabled = !ready; $("clear-reference").disabled = !reference;
+  $("pin-reference").textContent = reference ? "Replace pinned reference" : "Pin completed scene";
+  back.hidden = !reference || settings.epoch === reference.epoch; back.disabled = !controlsReady;
+  if (!panel.open) return;
+  $("reference-info").hidden = !reference;
+  if (reference) {
+    $("reference-label").textContent = `Pinned · pose ${(reference.epoch + 1).toLocaleString("en-US")} · ${gpst(reference.tow)} GPST · +${reference.antenna.toFixed(1)} m · mask ${reference.mask}°`;
+    $("reference-link").href = referenceURL;
+  }
+  $("comparison-results").hidden = true;
+  const message = (state, text) => { panel.dataset.state = state; $("comparison-status").textContent = text; };
+  if (!controlsReady) { message("unavailable", canvas.dataset.error ? "Comparison unavailable." : "Preparing the full-mesh tracer…"); return; }
+  if (!ready) { message("pending", "Waiting for the selected pose and receiver settings to finish tracing…"); return; }
+  if (!reference) { message("empty", "Pin a completed scene, then change height or elevation mask at the same pose."); return; }
+  const result = compareReceiver(reference, snapshot);
+  if (result.state !== "ready") { message("different-pose", "Different recorded pose. Return to the pinned pose to compare your current receiver settings, or replace the reference."); return; }
+  message("ready", `Same recorded pose · ${result.changes} satellite path / mask ${result.changes === 1 ? "change" : "changes"} · current − pinned`);
+  $("comparison-results").hidden = false;
+  if (comparisonReference === reference && comparisonSnapshot === snapshot) return;
+  comparisonReference = reference; comparisonSnapshot = snapshot;
+  $("comparison-conditions").textContent = `Pinned: +${reference.antenna.toFixed(1)} m / ${reference.mask}° mask → Current: +${snapshot.antenna.toFixed(1)} m / ${snapshot.mask}° mask`;
+  const cell = (row, text, tag = "td") => { const element = document.createElement(tag); element.textContent = text; row.append(element); return element; };
+  const labels = { LOS: "Direct LOS", NLOS: "Reflected only", BLOCKED: "No path", bias: "Geometric bias²" };
+  const value = (v, metric, delta = false) => v === null ? delta ? "—" : "Unavailable" : `${delta && v > 0 ? "+" : ""}${metric === "bias" ? v.toFixed(2) : v}${metric === "bias" ? " m" : ""}`;
+  $("comparison-metrics").replaceChildren(...result.metrics.map(metric => {
+    const row = document.createElement("tr"); row.dataset.metric = metric.key;
+    cell(row, labels[metric.key], "th").scope = "row";
+    cell(row, value(metric.before, metric.key)); cell(row, value(metric.after, metric.key)); cell(row, value(metric.delta, metric.key, true)); return row;
+  }));
+  const path = (row, label) => { const element = cell(row, label); element.dataset.path = label; return element; };
+  const excess = v => v === null ? "—" : `${v.toFixed(3)} m`;
+  $("comparison-signals").replaceChildren(...result.signals.map(signal => {
+    const row = document.createElement("tr"); row.dataset.signal = signal.id; row.dataset.changed = String(signal.before !== signal.after);
+    cell(row, signal.id, "th").scope = "row"; path(row, signal.before); path(row, signal.after); cell(row, excess(signal.beforeExcess)); cell(row, excess(signal.afterExcess)); return row;
+  }));
+}
+$("compare-panel").addEventListener("toggle", () => { if ($("compare-panel").open) { setPlaying(false); updateComparison(); } });
+$("pin-reference").addEventListener("click", () => {
+  if (!currentTrace()) return;
+  setPlaying(false); reference = captureReference(snapshot); referenceURL = sceneURL(); updateComparison();
+});
+$("clear-reference").addEventListener("click", () => {
+  reference = referenceURL = comparisonReference = comparisonSnapshot = null; $("reference-link").removeAttribute("href"); updateComparison();
+});
+$("return-reference").addEventListener("click", () => { if (reference) seekEpoch(reference.epoch); });
 function restoreSceneLink(resetEmpty = false) {
   let state, warning = "";
   try { state = readSceneLink(location.hash, linkAssets); }
