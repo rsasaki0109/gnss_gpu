@@ -5,6 +5,7 @@ import { RouteNavigator, stepEpoch } from "./route-navigation.mjs?v=route-1";
 import { clampViewPitch } from "./view-geometry.mjs";
 import { DEFAULT_SCENE, readSceneLink, writeSceneLink } from "./scene-link.mjs";
 import { captureReference, compareReceiver } from "./comparison.mjs";
+import { SkyPlot } from "./sky-plot.mjs";
 
 const $ = id => document.getElementById(id);
 const canvas = $("scene"), settings = { epoch: 8000, antenna: 0, mask: 10 };
@@ -14,6 +15,7 @@ let playing = false, dirty = true, previousTime = 0, playbackEpoch = settings.ep
 let routeNavigator, controlsReady = false;
 let linkAssets, pendingReplay;
 let reference, referenceURL, comparisonReference, comparisonSnapshot;
+const skyPlot = new SkyPlot($("sky-plot"), id => { setPlaying(false); selectSatellite(id); });
 
 function status(message, error = false) {
   $("status-text").textContent = message; $("trace-status").classList.toggle("error", error);
@@ -59,6 +61,7 @@ function setPlaying(value) {
   if (value) { clearSurfaceFocus(); pendingReplay = null; $("share-panel").open = false; $("compare-panel").open = false; }
   playing = value; playbackEpoch = settings.epoch; $("play").setAttribute("aria-pressed", String(value));
   $("play-icon").textContent = value ? "Ⅱ" : "▶"; $("play-label").textContent = value ? "Pause" : "Play · 10×";
+  updateSky();
 }
 function send(item) { busy = true; worker.postMessage(item); }
 function updateMap(stats) {
@@ -91,13 +94,16 @@ function updateReadout(milliseconds) {
     const name = document.createElement("span"); name.className = "sat-id"; name.textContent = signal.id;
     const elevation = document.createElement("span"); elevation.className = "elevation"; elevation.textContent = `${signal.elevation.toFixed(1)}°`;
     const tag = document.createElement("span"); tag.className = "path-tag"; tag.textContent = signal.status === "NLOS" ? "REFLECTED" : signal.status;
-    button.append(name, elevation, tag); button.addEventListener("click", () => { pendingReplay = null; if (selected !== signal.id) clearSurfaceFocus(); selected = signal.id; inspect(); dirty = true; }); return button;
+    button.append(name, elevation, tag); button.addEventListener("click", () => selectSatellite(signal.id)); return button;
   });
   $("satellites").replaceChildren(...buttons);
   $("spp-all").textContent = snapshot.spp.all ? `${snapshot.spp.all.horizontal.toFixed(2)} m` : "Unavailable";
   $("spp-los").textContent = snapshot.spp.los ? `${snapshot.spp.los.horizontal.toFixed(2)} m` : "Unavailable";
   $("spp-count").textContent = `${snapshot.spp.all?.satellites ?? 0} usable paths · 4 required, with full rank`;
   inspect(); syncRoute(); dirty = true;
+}
+function selectSatellite(id) {
+  pendingReplay = null; if (selected !== id) clearSurfaceFocus(); selected = id; inspect(); dirty = true;
 }
 function inspect() {
   for (const button of document.querySelectorAll("[data-satellite]")) button.setAttribute("aria-pressed", String(button.dataset.satellite === selected));
@@ -126,7 +132,14 @@ function syncFocusUI() {
   updateViewCaption();
   updateShare();
   updateComparison();
+  updateSky();
 }
+function updateSky() {
+  skyPlot.update(snapshot, selected, {ready:currentTrace(), error:Boolean(canvas.dataset.error), playing, time:snapshot?gpst(snapshot.tow):""});
+  $("sky-pause").hidden = !playing; $("sky-pause").disabled = !controlsReady;
+}
+$("sky-pause").addEventListener("click", () => setPlaying(false));
+$("sky-panel").addEventListener("toggle", () => { if ($("sky-panel").open && playing) setPlaying(false); });
 function updateViewCaption() {
   const text = renderer?.focus ? `PLATEAU 2022 / ${renderer.camera.pitch < 0 ? "UNDERSIDE VIEW" : "SURFACE VIEW"}` : "PLATEAU / 2022";
   if ($("view-caption").textContent !== text) $("view-caption").textContent = text;
