@@ -24,3 +24,11 @@ https://www.gsi.go.jp/buturisokuchi/grageo_geoidprocedure.html
 
 This is a cross-year geometric reconstruction of a 2018 reference drive and
 a 2022 city model, not a reproduction of the exact historical street scene.
+
+Optional live base map: Copyright OpenStreetMap contributors, ODbL.
+https://www.openstreetmap.org/copyright
+https://opendatacommons.org/licenses/odbl/
+OSM Standard raster tiles are requested only for the displayed camera view,
+with normal browser caching and visible attribution. They are not bundled
+or downloaded for offline use. OSM supplies display context only; the PLATEAU
+signal geometry and reference trajectory are not modified using OSM data.
