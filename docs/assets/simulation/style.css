@@ -133,6 +133,31 @@
 .scene-share { border-top:1px solid var(--line); padding:13px 20px; background:#101b25 }
 .scene-share summary { cursor:pointer; font-size:11px; color:var(--mint); line-height:1.6 }
 .scene-share summary span { margin-left:12px; color:var(--dim); font-size:9px }
+.reflection-status { margin:12px 0 0; color:var(--muted); font-size:10px; line-height:1.6 }
+.reflection-panel[data-state=ready] .reflection-status { color:var(--amber) }
+.reflection-panel[data-state=pending] .reflection-status { color:var(--amber) }
+.reflection-layout { display:grid; grid-template-columns:minmax(180px,.8fr) minmax(0,1.3fr); align-items:center; gap:20px }
+#reflection-sketch { display:block; width:100%; max-width:320px; margin:6px auto; font:10px ui-monospace,monospace }
+.geometry-surface { fill:none; stroke:#718998; stroke-width:1 }
+.geometry-normal { fill:none; stroke:#91a2ad; stroke-dasharray:4 4; stroke-width:1 }
+.geometry-normal-label { fill:var(--muted); font-size:9px }
+.geometry-incident,.geometry-outgoing { fill:none; stroke-width:2 }
+.geometry-incident { stroke:var(--amber) }
+.geometry-outgoing { stroke:var(--mint) }
+.geometry-incident-head,.geometry-incident-label { fill:var(--amber) }
+.geometry-outgoing-head,.geometry-outgoing-label { fill:var(--mint) }
+.geometry-arc { stroke-width:1; opacity:.7 }
+.geometry-contact { fill:var(--ink) }
+.reflection-values { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px 12px; margin:14px 0; font-variant-numeric:tabular-nums }
+.reflection-values div { min-width:0 }
+.reflection-values dt { color:var(--dim); font-size:9px; line-height:1.5 }
+.reflection-values dd { color:var(--ink); font:12px/1.7 ui-monospace,monospace; margin:4px 0 0; overflow-wrap:anywhere }
+.reflection-panel .small-note { font-size:9px; margin:6px 0 0 }
+@media(max-width:780px) {
+  .reflection-layout { grid-template-columns:1fr; gap:0 }
+  .reflection-values { margin:5px 0 12px; gap:14px 8px }
+  .reflection-values dd { font-size:11px }
+}
 .share-content { padding-top:14px }
 .share-content label { display:block; margin-bottom:7px; font-size:10px; color:var(--muted) }
 .share-controls { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:8px; align-items:center }
