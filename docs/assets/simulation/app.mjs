@@ -105,7 +105,7 @@ function updateReadout(milliseconds) {
   $("satellites").replaceChildren(...buttons);
   $("spp-all").textContent = snapshot.spp.all ? `${snapshot.spp.all.horizontal.toFixed(2)} m` : "Unavailable";
   $("spp-los").textContent = snapshot.spp.los ? `${snapshot.spp.los.horizontal.toFixed(2)} m` : "Unavailable";
-  $("spp-count").textContent = `${snapshot.spp.all?.satellites ?? 0} usable paths · 4 required, with full rank`;
+  $("spp-count").textContent = `${snapshot.satellites.filter(signal => signal.status !== "BLOCKED").length} usable paths · ideal ranges`;
   inspect(); syncRoute(); dirty = true;
 }
 function selectSatellite(id) {
@@ -116,7 +116,7 @@ function inspect() {
   const signal = snapshot.satellites.find(s => s.id === selected); $("selected-id").textContent = signal?.id ?? "—";
   syncFocusUI();
   if (!signal) { $("channel-status").textContent = "No GPS satellite above this mask."; return; }
-  $("channel-status").textContent = signal.status === "LOS" ? "A direct path reaches the recorded receiver position." : signal.status === "NLOS" ? "Direct path blocked. A single reflection reaches the receiver." : "No unobstructed direct or single-bounce path in this mesh.";
+  $("channel-status").textContent = signal.status === "LOS" ? "Direct LOS" : signal.status === "NLOS" ? "Reflected arrival · direct blocked" : "No modeled path";
   $("channel-status").style.color = colors[signal.status];
   $("direct-value").textContent = signal.directHit ? `Blocked at ${signal.directHit.distance.toFixed(1)} m` : "Clear within loaded mesh";
   $("path-count").textContent = signal.reflectionCount;

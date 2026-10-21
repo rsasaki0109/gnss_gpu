@@ -43,7 +43,7 @@ test("PLATEAU full-mesh simulation responds to exact epochs and receiver control
   await expect(canvas).toHaveAttribute("data-ready", "true", {timeout:45000});
   await expect(canvas).toHaveAttribute("data-triangles", "320932");
   await expect(canvas).toHaveAttribute("data-epoch", "8000");
-  await expect(page.getByRole("heading", { name: "Real city. Real satellite geometry." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Odaiba signal lab" })).toBeVisible();
   await expect(page.locator(".satellite")).toHaveCount(8);
   await expect(page.locator(".metrics strong")).toHaveText(["4","1","3"]);
   await expect(page.locator("#spp-all")).toHaveText("65.74 m");
@@ -90,7 +90,6 @@ test("PLATEAU full-mesh simulation responds to exact epochs and receiver control
 
 test("results page links to PLATEAU simulation within the Pages project prefix", async ({ page }) => {
   await page.goto("./");
-  await page.getByRole("link", { name: "Open the 3D simulation" }).click();
   await expect(page).toHaveURL(/\/gnss_gpu\/simulation\.html$/);
   await expect(page.locator("#scene")).toHaveAttribute("data-ready", "true", {timeout:45000});
 });
@@ -548,6 +547,8 @@ test("sky plot preserves real directions and selects the same signal without rec
   const errors=[];page.on("pageerror",error=>errors.push(error.message));
   await page.goto("simulation.html");
   const canvas=page.locator("#scene"),plot=page.locator("#sky-plot"),g12=page.locator('[data-sky-satellite="G12"]');
+  await expect(page.locator("#sky-panel")).not.toHaveAttribute("open");
+  await page.locator("#sky-panel > summary").click();
   await expect(plot).toHaveAttribute("data-state","ready",{timeout:45000});
   await expect(plot).toHaveAttribute("data-epoch","8000");await expect(plot).toHaveAttribute("data-mask","10");
   await expect(page.locator(".sky-point")).toHaveCount(8);
@@ -593,6 +594,7 @@ test("pending sky keeps its completed mask, blocks stale selection and can pause
   });
   await page.goto("simulation.html");
   const plot=page.locator("#sky-plot"),canvas=page.locator("#scene");
+  await page.locator("#sky-panel > summary").click();
   await expect(plot).toHaveAttribute("data-state","ready",{timeout:45000});
   await page.locator("#mask").press("End");
   await expect(plot).toHaveAttribute("data-state","pending");
@@ -626,6 +628,7 @@ test("selected reflected arrival uses the real final leg and distinguishes direc
   const errors=[];page.on("pageerror",error=>errors.push(error.message));
   await page.goto("simulation.html");
   const canvas=page.locator("#scene"),arrival=page.locator(".sky-arrival-readout"),marker=page.locator(".sky-arrival-marker"),note=page.locator(".sky-arrival-note");
+  await page.locator("#sky-panel > summary").click();
   await expect(page.locator("#sky-plot")).toHaveAttribute("data-state","ready",{timeout:45000});
   await expect(arrival).toHaveAttribute("data-state","reflection");await expect(arrival).toHaveAttribute("data-arrival-satellite","G12");
   await expect(page.locator("[data-satellite]")).toHaveCount(8);
@@ -665,6 +668,7 @@ test("selected reflected arrival uses the real final leg and distinguishes direc
 test("a real reflected arrival below the satellite mask stays at its exact direction",async({page})=>{
   await page.goto("simulation.html"+sceneHash({epoch:"3890",mask:"12"}));
   const canvas=page.locator("#scene"),arrival=page.locator(".sky-arrival-readout"),satellite=page.locator('[data-sky-satellite="G12"]');
+  await page.locator("#sky-panel > summary").click();
   await expect(page.locator("#sky-plot")).toHaveAttribute("data-state","ready",{timeout:45000});
   await expect(canvas).toHaveAttribute("data-epoch","3890");await expect(canvas).toHaveAttribute("data-mask","12");
   await expect(arrival).toHaveAttribute("data-state","reflection");await expect(arrival).toHaveAttribute("data-plotted","true");
@@ -684,6 +688,7 @@ test("reflection geometry exposes actual segments, normal angles and the selecte
   const errors=[];page.on("pageerror",error=>errors.push(error.message));
   await page.goto("simulation.html");
   const panel=page.locator("#reflection-panel"),canvas=page.locator("#scene"),results=page.locator("#reflection-results");
+  await page.locator("#sky-panel > summary").click();
   await expect(panel).toHaveAttribute("data-state","ready",{timeout:45000});
   const trace=await canvas.getAttribute("data-trace-id"),receiver=await canvas.getAttribute("data-receiver");
   await page.locator("#reflection-panel > summary").press("Enter");await expect(results).toBeVisible();

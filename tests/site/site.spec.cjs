@@ -20,7 +20,7 @@ test("artifact snapshot renders cleanly", async ({ page }) => {
     issues.push(`console: ${text}`);
   });
 
-  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.goto("results.html", { waitUntil: "domcontentloaded" });
 
   await expect(page.locator("#title")).toHaveText("gnss_gpu Artifact Snapshot");
   await expect(page.locator("#subtitle")).toContainText("PF+RobustClear-10K");

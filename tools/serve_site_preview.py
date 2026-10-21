@@ -20,6 +20,8 @@ def main():
     docs = Path(__file__).resolve().parents[1] / "docs"
 
     class Handler(SimpleHTTPRequestHandler):
+        extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".mjs": "text/javascript"}
+
         def do_GET(self):
             path = unquote(urlsplit(self.path).path)
             if ".claude" in path.replace("\\", "/").casefold().split("/"):
