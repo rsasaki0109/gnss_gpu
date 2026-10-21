@@ -544,10 +544,12 @@ test("sky plot preserves real directions and selects the same signal without rec
   await expect(page.locator(".sky-point")).toHaveCount(8);
   await expect(page.locator(".sky-source")).toHaveText("Completed · 8 GPS · 10° mask · 04:09:35.100 GPST");
   await expect(g12).toHaveAttribute("aria-pressed","true");
-  await expect(g12).toHaveAttribute("data-azimuth","164.84832473851634");
-  await expect(g12).toHaveAttribute("data-elevation","14.665448266301897");
+  const azimuth=Number(await g12.getAttribute("data-azimuth")),elevation=Number(await g12.getAttribute("data-elevation"));
+  // Transcendental functions can differ in their final bits across JS engines.
+  expect(Math.abs(azimuth-164.84832473851634)).toBeLessThan(1e-12);
+  expect(Math.abs(elevation-14.665448266301897)).toBeLessThan(1e-12);
   const x=Number(await g12.locator(".sky-dot").getAttribute("cx")),y=Number(await g12.locator(".sky-dot").getAttribute("cy"));
-  const radius=110*(1-14.665448266301897/90),angle=(90-164.84832473851634)*Math.PI/180;
+  const radius=110*(1-elevation/90),angle=(90-azimuth)*Math.PI/180;
   expect(Math.abs(x-(150+radius*Math.cos(angle)))).toBeLessThan(1e-10);expect(Math.abs(y-(150-radius*Math.sin(angle)))).toBeLessThan(1e-10);
   await expect(page.locator(".sky-selection")).toHaveText("G12 · az 164.8° · el 14.7° · NLOS");
   await page.locator("#sky-panel").screenshot({path:testInfo.outputPath("sky-plot-panel.png")});
