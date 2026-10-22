@@ -181,7 +181,6 @@ function updateSky() {
   $("sky-pause").hidden = !playing; $("sky-pause").disabled = !controlsReady;
 }
 $("sky-pause").addEventListener("click", () => setPlaying(false));
-$("sky-panel").addEventListener("toggle", () => { if ($("sky-panel").open && playing) setPlaying(false); });
 function updateViewCaption() {
   const text = renderer?.focus ? `PLATEAU 2022 / ${renderer.camera.pitch < 0 ? "UNDERSIDE VIEW" : "SURFACE VIEW"}` : "PLATEAU / 2022";
   if ($("view-caption").textContent !== text) $("view-caption").textContent = text;
