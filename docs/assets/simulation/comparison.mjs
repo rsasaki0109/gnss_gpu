@@ -12,7 +12,7 @@ export function captureReference(snapshot) {
     excess: signal.status === "LOS" ? 0 : signal.status === "NLOS" && Number.isFinite(signal.reflection?.extra) ? signal.reflection.extra : null,
   }));
   return Object.freeze({ epoch: snapshot.epoch, week: snapshot.week, tow: snapshot.tow,
-    antenna: snapshot.antenna, mask: snapshot.mask, counts: Object.freeze({ ...snapshot.counts }),
+    systems: snapshot.systems ?? "G", antenna: snapshot.antenna, mask: snapshot.mask, counts: Object.freeze({ ...snapshot.counts }),
     bias: Number.isFinite(snapshot.spp.all?.horizontal) ? snapshot.spp.all.horizontal : null,
     receiver: copyVector(snapshot.receiver), fit: captureFit(snapshot.spp.all),
     satellites: Object.freeze(satellites) });
@@ -21,6 +21,7 @@ export function captureReference(snapshot) {
 export function compareReceiver(reference, snapshot) {
   if (!reference || !snapshot) return { state: "empty" };
   if (reference.epoch !== snapshot.epoch || reference.week !== snapshot.week || reference.tow !== snapshot.tow) return { state: "different-pose" };
+  if (reference.systems !== (snapshot.systems ?? "G")) return { state: "different-systems" };
   const current = captureReference(snapshot), before = new Map(reference.satellites.map(signal => [signal.id, signal])), after = new Map(current.satellites.map(signal => [signal.id, signal]));
   const signals = [...new Set([...before.keys(), ...after.keys()])].sort().map(id => {
     const a = before.get(id), b = after.get(id);

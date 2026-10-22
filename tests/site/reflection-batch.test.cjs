@@ -71,6 +71,8 @@ test("shared receiver terms retain contact, non-finite and extreme-scale behavio
 test("full-city batches retain every reflection path across receiver and source changes",async()=>{
   const [{decodeMesh},{CitySimulation}]=await modules,folder=path.join(__dirname,"../../docs/assets/plateau");
   const scene=JSON.parse(gunzipSync(fs.readFileSync(path.join(folder,"odaiba-scene.json.gz")))),bytes=gunzipSync(fs.readFileSync(path.join(folder,"odaiba-mesh.bin.gz")));
+  // Preserve the original GPS-only numerical regression alongside multi-GNSS tests.
+  scene.navigation = scene.navigation.filter(record => record.id.startsWith("G"));
   const geometry=decodeMesh(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength));
   const simulation=new CitySimulation(scene,geometry);
   for(const value of [{epoch:8000},{epoch:3890,mask:12},{epoch:8000,antenna:20},{epoch:0},{epoch:12409}]){

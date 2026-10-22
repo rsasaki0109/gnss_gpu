@@ -7,6 +7,8 @@ const { createHash } = require("node:crypto");
 const folder = path.resolve(__dirname, "../../docs/assets/plateau");
 const manifest = JSON.parse(fs.readFileSync(path.join(folder, "manifest.json")));
 const scene = JSON.parse(gunzipSync(fs.readFileSync(path.join(folder, manifest.scene.file))));
+  // Preserve the original GPS-only numerical regression alongside multi-GNSS tests.
+  scene.navigation = scene.navigation.filter(record => record.id.startsWith("G"));
 const meshBytes = gunzipSync(fs.readFileSync(path.join(folder, manifest.mesh.file)));
 const modules = Promise.all([import("../../docs/assets/simulation/mesh.mjs"), import("../../docs/assets/simulation/orbit.mjs"), import("../../docs/assets/simulation/city.mjs")]);
 const close = (a, b, tolerance = 1e-9) => assert.ok(Math.abs(a - b) <= tolerance, `${a} != ${b} (tolerance ${tolerance})`);

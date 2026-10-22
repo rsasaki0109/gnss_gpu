@@ -7,7 +7,7 @@ const SCENE = JSON.parse(gunzipSync(fs.readFileSync(path.join(__dirname, "../../
 const POSITIONS = SCENE.track.map(row => SCENE.rotation.map(axis => axis.reduce((sum, value, i) => sum + value * (row[i + 1] - SCENE.origin[i]), 0)));
 const MANIFEST = JSON.parse(fs.readFileSync(path.join(__dirname, "../../docs/assets/plateau/manifest.json"), "utf8"));
 function sceneHash(overrides = {}) {
-  return "#" + new URLSearchParams({scene:"1",epoch:"8000",height:"0",mask:"10",sat:"G12",view:"receiver",yaw:"-0.63",pitch:"0.82",zoom:"1",map:"1",reflections:"1",mesh:MANIFEST.mesh.sha256,data:MANIFEST.scene.sha256,...overrides});
+  return "#" + new URLSearchParams({scene:"1",epoch:"8000",height:"0",mask:"10",sat:"G12",view:"receiver",yaw:"-0.63",pitch:"0.82",zoom:"1",map:"1",reflections:"1",systems:"G",mesh:MANIFEST.mesh.sha256,data:MANIFEST.scene.sha256,...overrides});
 }
 
 // A generated one-pixel test tile. Headless tests never contact OSM servers.
@@ -34,11 +34,11 @@ test.beforeEach(async ({page}) => {
   }));
 });
 
-test("PLATEAU full-mesh simulation responds to exact epochs and receiver controls", async ({ page }) => {
+test("GPS-only PLATEAU full-mesh simulation responds to exact epochs and receiver controls", async ({ page }) => {
   const errors = [];
   page.on("pageerror", error => errors.push(error.message));
   page.on("console", message => { if (message.type() === "error") errors.push(message.text()); });
-  await page.goto("simulation.html");
+  await page.goto("simulation.html"+sceneHash());
   const canvas = page.locator("#scene");
   await expect(canvas).toHaveAttribute("data-ready", "true", {timeout:45000});
   await expect(canvas).toHaveAttribute("data-triangles", "320932");
@@ -97,7 +97,7 @@ test(`the public scene keeps exact results using ${backend} in its Worker`,async
     const response=await route.fetch(),source=await response.text();
     await route.fulfill({response,body:prefix+source});
   });
-  await page.goto("simulation.html");
+  await page.goto("simulation.html"+sceneHash());
   await expect(page.locator("#scene")).toHaveAttribute("data-ready","true",{timeout:45000});
   await expect(page.locator(".metrics strong")).toHaveText(["4","1","3"]);
   await expect(page.locator("#spp-all")).toHaveText("65.74 m");
@@ -121,7 +121,7 @@ test("a mismatched asset fails visibly without substituting synthetic geometry",
     manifest.mesh.sha256 = "0".repeat(64);
     await route.fulfill({response, json:manifest});
   });
-  await page.goto("simulation.html");
+  await page.goto("simulation.html"+sceneHash());
   await expect(page.locator("#scene")).toHaveAttribute("data-error", "true", {timeout:45000});
   await expect(page.locator("#toast")).toContainText("Data integrity check failed");
   await expect(page.locator("#play")).toBeDisabled();
@@ -142,7 +142,7 @@ test("a mismatched asset fails visibly without substituting synthetic geometry",
 test("OSM is georeferenced, visibly credited and independent of the signal calculation", async ({page}) => {
   const tileRequests=[];
   page.on("request", request => { if(new URL(request.url()).hostname === "tile.openstreetmap.org") tileRequests.push(request.url()); });
-  await page.goto("simulation.html");
+  await page.goto("simulation.html"+sceneHash());
   const canvas=page.locator("#scene");
   await expect(canvas).toHaveAttribute("data-map-state","ready",{timeout:45000});
   await expect(canvas).toHaveAttribute("data-epoch","8000");
@@ -170,7 +170,7 @@ test("OSM is georeferenced, visibly credited and independent of the signal calcu
 test("a tile service outage leaves PLATEAU tracing operational", async ({page}) => {
   const errors=[];page.on("pageerror",error=>errors.push(error.message));
   await page.route("https://tile.openstreetmap.org/**",route=>route.abort("failed"));
-  await page.goto("simulation.html");
+  await page.goto("simulation.html"+sceneHash());
   const canvas=page.locator("#scene");
   await expect(canvas).toHaveAttribute("data-ready","true",{timeout:45000});
   await expect(canvas).toHaveAttribute("data-map-state","unavailable");
@@ -185,7 +185,7 @@ test("a tile service outage leaves PLATEAU tracing operational", async ({page}) 
 
 test("route keyboard and step buttons evaluate exact source poses, pause playback and respect endpoints", async ({page}) => {
   const errors=[]; page.on("pageerror", error => errors.push(error.message));
-  await page.goto("simulation.html");
+  await page.goto("simulation.html"+sceneHash());
   const canvas=page.locator("#scene"), route=page.getByRole("slider", {name:"Recorded route position"});
   await expect(route).toHaveAttribute("data-state", "ready", {timeout:45000});
   await expect(route).toHaveAttribute("data-pose-count", "12410");
@@ -222,7 +222,7 @@ test("route keyboard and step buttons evaluate exact source poses, pause playbac
 });
 
 test("clicking or tapping the route seeks an original nearby pose while empty space and drags leave it intact", async ({page,isMobile}) => {
-  await page.goto("simulation.html");
+  await page.goto("simulation.html"+sceneHash());
   const canvas=page.locator("#scene"), route=page.locator("#route");
   await expect(route).toHaveAttribute("data-state", "ready", {timeout:45000});
   await route.scrollIntoViewIfNeeded();
@@ -257,7 +257,7 @@ test("clicking or tapping the route seeks an original nearby pose while empty sp
 
 test("reflector and obstruction views isolate the selected path without recomputing or changing its solution", async ({page}) => {
   const errors=[]; page.on("pageerror",error=>errors.push(error.message));
-  await page.goto("simulation.html");
+  await page.goto("simulation.html"+sceneHash());
   const canvas=page.locator("#scene");
   await expect(canvas).toHaveAttribute("data-ready","true",{timeout:45000});
   await page.locator('[data-satellite="G12"]').click();
@@ -297,7 +297,7 @@ test("reflector and obstruction views isolate the selected path without recomput
 });
 
 test("surface focus restores the previous view and cannot retain stale surfaces across selection or settings changes", async ({page}) => {
-  await page.goto("simulation.html");
+  await page.goto("simulation.html"+sceneHash());
   const canvas=page.locator("#scene"),reflector=page.locator("#focus-reflection"),blockage=page.locator("#focus-blockage");
   await expect(canvas).toHaveAttribute("data-ready","true",{timeout:45000});
   await page.locator("#overview").click();
@@ -376,7 +376,7 @@ test("sharing waits for the selected trace, preserves receiver/display settings 
     const response=await route.fetch(),source=await response.text();
     await route.fulfill({response,body:`const deliver=self.postMessage.bind(self);self.postMessage=(message,...args)=>message.type==="result"?setTimeout(()=>deliver(message,...args),900):deliver(message,...args);\n${source}`});
   });
-  await page.goto("simulation.html");
+  await page.goto("simulation.html"+sceneHash());
   const canvas=page.locator("#scene"),copy=page.locator("#copy-scene-link");
   await expect(canvas).toHaveAttribute("data-ready","true",{timeout:45000});
   await page.locator("#share-panel > summary").click();
@@ -443,7 +443,7 @@ test("incompatible links and unavailable signals or surfaces show explicit messa
   await expect(canvas).toHaveAttribute("data-antenna","0");
   await expect(page.locator("#scene-link-notice-text")).toHaveText("Scene link uses a different dataset. Showing the default scene.");
   await expect(page.locator("#scene-link-notice")).toHaveAttribute("data-warning","true");
-  await expect(page.locator(".metrics strong")).toHaveText(["4","1","3"]);
+  await expect(page.locator("#gnss-systems")).toHaveValue("GECJ");
   await page.goto("simulation.html"+sceneHash({sat:"G01"}));
   await expect(page.locator("#scene-link-notice-text")).toHaveText("G01 is unavailable at this epoch and mask. Showing G12.");
   await expect(page.locator("#selected-id")).toHaveText("G12");
@@ -461,7 +461,7 @@ test("incompatible links and unavailable signals or surfaces show explicit messa
 test("clipboard denial leaves a fully selected manual link without an application error", async ({page}) => {
   const errors=[];page.on("pageerror",error=>errors.push(error.message));
   await page.addInitScript(()=>Object.defineProperty(navigator,"clipboard",{value:{writeText:()=>Promise.reject(new Error("Clipboard denied in test"))}}));
-  await page.goto("simulation.html");
+  await page.goto("simulation.html"+sceneHash());
   await expect(page.locator("#scene")).toHaveAttribute("data-ready","true",{timeout:45000});
   await page.locator("#share-panel > summary").click();
   await page.locator("#copy-scene-link").click();
@@ -473,7 +473,7 @@ test("clipboard denial leaves a fully selected manual link without an applicatio
 
 test("receiver comparison keeps an exact pinned reference and distinguishes changed, masked and unusable paths",async({page},testInfo)=>{
   const errors=[];page.on("pageerror",error=>errors.push(error.message));
-  await page.goto("simulation.html");
+  await page.goto("simulation.html"+sceneHash());
   const canvas=page.locator("#scene"),panel=page.locator("#compare-panel");
   await expect(canvas).toHaveAttribute("data-ready","true",{timeout:45000});
   const trace=await canvas.getAttribute("data-trace-id");
@@ -521,7 +521,7 @@ test("comparison hides pending and different-pose results, returns without chang
     const response=await route.fetch(),source=await response.text();
     await route.fulfill({response,body:`const deliver=self.postMessage.bind(self);self.postMessage=(message,...args)=>message.type==="result"?setTimeout(()=>deliver(message,...args),900):deliver(message,...args);\n${source}`});
   });
-  await page.goto("simulation.html");
+  await page.goto("simulation.html"+sceneHash());
   const canvas=page.locator("#scene"),panel=page.locator("#compare-panel"),pin=page.locator("#pin-reference"),results=page.locator("#comparison-results");
   await expect(canvas).toHaveAttribute("data-ready","true",{timeout:45000});
   await page.locator("#compare-panel > summary").click();await pin.click();
@@ -566,14 +566,14 @@ test("comparison hides pending and different-pose results, returns without chang
 
 test("sky plot preserves real directions and selects the same signal without recomputing geometry",async({page},testInfo)=>{
   const errors=[];page.on("pageerror",error=>errors.push(error.message));
-  await page.goto("simulation.html");
+  await page.goto("simulation.html"+sceneHash());
   const canvas=page.locator("#scene"),plot=page.locator("#sky-plot"),g12=page.locator('[data-sky-satellite="G12"]');
   await expect(page.locator("#sky-panel")).not.toHaveAttribute("open");
   await page.locator("#sky-panel > summary").click();
   await expect(plot).toHaveAttribute("data-state","ready",{timeout:45000});
   await expect(plot).toHaveAttribute("data-epoch","8000");await expect(plot).toHaveAttribute("data-mask","10");
   await expect(page.locator(".sky-point")).toHaveCount(8);
-  await expect(page.locator(".sky-source")).toHaveText("Completed · 8 GPS · 10° mask · 04:09:35.100 GPST");
+  await expect(page.locator(".sky-source")).toHaveText("Completed · 8 GNSS · 10° mask · 04:09:35.100 GPST");
   await expect(g12).toHaveAttribute("aria-pressed","true");
   const azimuth=Number(await g12.getAttribute("data-azimuth")),elevation=Number(await g12.getAttribute("data-elevation"));
   // Transcendental functions can differ in their final bits across JS engines.
@@ -613,14 +613,14 @@ test("pending sky keeps its completed mask, blocks stale selection and can pause
     const response=await route.fetch(),source=await response.text();
     await route.fulfill({response,body:`const deliver=self.postMessage.bind(self);self.postMessage=(message,...args)=>message.type==="result"?setTimeout(()=>deliver(message,...args),900):deliver(message,...args);\n${source}`});
   });
-  await page.goto("simulation.html");
+  await page.goto("simulation.html"+sceneHash());
   const plot=page.locator("#sky-plot"),canvas=page.locator("#scene");
   await page.locator("#sky-panel > summary").click();
   await expect(plot).toHaveAttribute("data-state","ready",{timeout:45000});
   await page.locator("#mask").press("End");
   await expect(plot).toHaveAttribute("data-state","pending");
   await expect(plot).toHaveAttribute("data-mask","10");
-  await expect(page.locator(".sky-source")).toContainText("Previous trace · updating · 8 GPS · 10° mask");
+  await expect(page.locator(".sky-source")).toContainText("Previous trace · updating · 8 GNSS · 10° mask");
   const old=page.locator('[data-sky-satellite="G05"]');
   await expect(old).toHaveAttribute("aria-disabled","true");await old.press("Enter");
   await expect(page.locator(".sky-arrival-readout")).toHaveAttribute("data-state","pending");
@@ -647,7 +647,7 @@ test("pending sky keeps its completed mask, blocks stale selection and can pause
 
 test("selected reflected arrival uses the real final leg and distinguishes direct, blocked and below-horizon paths",async({page},testInfo)=>{
   const errors=[];page.on("pageerror",error=>errors.push(error.message));
-  await page.goto("simulation.html");
+  await page.goto("simulation.html"+sceneHash());
   const canvas=page.locator("#scene"),arrival=page.locator(".sky-arrival-readout"),marker=page.locator(".sky-arrival-marker"),note=page.locator(".sky-arrival-note");
   await page.locator("#sky-panel > summary").click();
   await expect(page.locator("#sky-plot")).toHaveAttribute("data-state","ready",{timeout:45000});
@@ -707,7 +707,7 @@ test("a real reflected arrival below the satellite mask stays at its exact direc
 
 test("reflection geometry exposes actual segments, normal angles and the selected original surface without tracing again",async({page},testInfo)=>{
   const errors=[];page.on("pageerror",error=>errors.push(error.message));
-  await page.goto("simulation.html");
+  await page.goto("simulation.html"+sceneHash());
   const panel=page.locator("#reflection-panel"),canvas=page.locator("#scene"),results=page.locator("#reflection-results");
   await page.locator("#sky-panel > summary").click();
   await expect(panel).toHaveAttribute("data-state","ready",{timeout:45000});
@@ -754,7 +754,7 @@ test("reflection details hide pending values, pause playback on opening and foll
     const response=await route.fetch(),source=await response.text();
     await route.fulfill({response,body:`const deliver=self.postMessage.bind(self);self.postMessage=(message,...args)=>message.type==="result"?setTimeout(()=>deliver(message,...args),900):deliver(message,...args);\n${source}`});
   });
-  await page.goto("simulation.html");
+  await page.goto("simulation.html"+sceneHash());
   const panel=page.locator("#reflection-panel"),results=page.locator("#reflection-results"),canvas=page.locator("#scene");
   await expect(panel).toHaveAttribute("data-state","ready",{timeout:45000});await page.locator("#reflection-panel > summary").click();
   await page.locator("#mask").press("End");
@@ -773,7 +773,7 @@ test("reflection details hide pending values, pause playback on opening and foll
 
 test("range fit reads the existing solution and selects real paths without retracing",async({page},testInfo)=>{
   const errors=[];page.on("pageerror",error=>errors.push(error.message));
-  await page.goto("simulation.html");
+  await page.goto("simulation.html"+sceneHash());
   const panel=page.locator("#range-panel"),canvas=page.locator("#scene"),rows=page.locator("#range-signals tr");
   await expect(panel).toHaveAttribute("data-state","ready",{timeout:45000});
   const trace=await canvas.getAttribute("data-trace-id"),receiver=await canvas.getAttribute("data-receiver");
@@ -815,7 +815,7 @@ test("range fit clears pending and failed values and keeps unavailable solutions
     const response=await route.fetch(),source=await response.text();
     await route.fulfill({response,body:`const deliver=self.postMessage.bind(self);self.postMessage=(message,...args)=>message.type==="result"?setTimeout(()=>deliver(message,...args),900):deliver(message,...args);\n${source}`});
   });
-  await page.goto("simulation.html");
+  await page.goto("simulation.html"+sceneHash());
   const panel=page.locator("#range-panel"),canvas=page.locator("#scene"),results=page.locator("#range-results");
   await expect(panel).toHaveAttribute("data-state","ready",{timeout:45000});await page.locator("#range-panel > summary").click();
   await page.locator("#mask").press("End");
@@ -844,7 +844,7 @@ test("range fit clears pending and failed values and keeps unavailable solutions
 
 test("stored fit follows the 3D camera without changing paths or positioning results",async({page},testInfo)=>{
   const errors=[];page.on("pageerror",error=>errors.push(error.message));
-  await page.goto("simulation.html");
+  await page.goto("simulation.html"+sceneHash());
   const fit=page.locator("#position-fit"),canvas=page.locator("#scene"),line=page.locator("#fit-displacement"),marker=page.locator("#fit-marker");
   await expect(fit).toHaveAttribute("data-state","ready",{timeout:45000});await expect(fit).toBeVisible();await expect(page.locator("#fit-legend")).toBeVisible();
   const trace=await canvas.getAttribute("data-trace-id"),world=await fit.getAttribute("data-position"),reference=await canvas.getAttribute("data-receiver");
@@ -889,7 +889,7 @@ test("fit marker clears immediately for pending, unavailable and failed results"
     const response=await route.fetch(),source=await response.text();
     await route.fulfill({response,body:'const deliver=self.postMessage.bind(self);self.postMessage=(message,...args)=>message.type==="result"?setTimeout(()=>deliver(message,...args),900):deliver(message,...args);\n'+source});
   });
-  await page.goto("simulation.html");
+  await page.goto("simulation.html"+sceneHash());
   const fit=page.locator("#position-fit"),line=page.locator("#fit-displacement"),marker=page.locator("#fit-marker"),legend=page.locator("#fit-legend");
   const cleared=async()=>{
     await expect(fit).toBeHidden();await expect(legend).toBeHidden();
@@ -906,7 +906,7 @@ test("fit marker clears immediately for pending, unavailable and failed results"
 
 
 test("pinned fit comparison uses each receiver's own position and follows the camera without retracing",async({page},testInfo)=>{
-  const errors=[];page.on("pageerror",error=>errors.push(error.message));await page.goto("simulation.html");
+  const errors=[];page.on("pageerror",error=>errors.push(error.message));await page.goto("simulation.html"+sceneHash());
   const current=page.locator("#position-fit"),pin=page.locator("#pinned-position-fit"),canvas=page.locator("#scene"),line=page.locator("#pinned-fit-displacement"),legend=page.locator("#pinned-fit-legend");
   await expect(current).toHaveAttribute("data-state","ready",{timeout:45000});
   const oldWorld=await current.getAttribute("data-position"),oldReceiver=await canvas.getAttribute("data-receiver"),oldTrace=await canvas.getAttribute("data-trace-id");
@@ -943,7 +943,7 @@ test("pinned fit clears pending, focused, different-pose, missing and failed com
     const response=await route.fetch(),source=await response.text();
     await route.fulfill({response,body:'const deliver=self.postMessage.bind(self);self.postMessage=(message,...args)=>message.type==="result"?setTimeout(()=>deliver(message,...args),900):deliver(message,...args);\n'+source});
   });
-  await page.goto("simulation.html");const pin=page.locator("#pinned-position-fit"),current=page.locator("#position-fit"),canvas=page.locator("#scene");
+  await page.goto("simulation.html"+sceneHash());const pin=page.locator("#pinned-position-fit"),current=page.locator("#position-fit"),canvas=page.locator("#scene");
   const cleared=async()=>{
     await expect(pin).toBeHidden();await expect(page.locator("#pinned-fit-legend")).toBeHidden();
     const stored=await pin.evaluate(root=>({keys:Object.keys(root.dataset),view:root.getAttribute("viewBox"),line:["x1","y1","x2","y2"].map(key=>root.querySelector("line").getAttribute(key)),points:root.querySelector("polygon").getAttribute("points"),origin:["cx","cy"].map(key=>root.querySelector("circle").getAttribute(key))}));
@@ -957,7 +957,40 @@ test("pinned fit clears pending, focused, different-pose, missing and failed com
   await page.locator("#return-reference").click();await expect(pin).toHaveAttribute("data-state","ready");await expect(canvas).toHaveAttribute("data-epoch","8000");
   await page.locator("#antenna").press("Home");await expect(current).toHaveAttribute("data-antenna","0");await expect(pin).toHaveAttribute("data-state","same-settings");
   await page.locator("#mask").press("End");await expect(pin).toHaveAttribute("data-state","pending");await cleared();await expect(pin).toHaveAttribute("data-state","no-current-solution");await cleared();
-  await page.locator("#pin-reference").click();await page.locator("#reset").click();await expect(current).toHaveAttribute("data-state","ready");await expect(pin).toHaveAttribute("data-state","no-solution");await cleared();
+  await page.locator("#pin-reference").click();await page.locator("#mask").press("Home");await expect(current).toHaveAttribute("data-state","ready");await expect(pin).toHaveAttribute("data-state","no-solution");await cleared();
   await page.locator("#pin-reference").click();await page.locator("#antenna").press("End");await expect(pin).toHaveAttribute("data-state","ready");
   await canvas.dispatchEvent("webglcontextlost");await expect(pin).toHaveAttribute("data-state","unavailable");await cleared();
+});
+
+
+test("default multi-GNSS traces four systems, switches modes and restores a non-GPS scene link",async({page})=>{
+ const errors=[];page.on("pageerror",e=>errors.push(e.message));
+ await page.goto("simulation.html");
+ const canvas=page.locator("#scene");
+ await expect(canvas).toHaveAttribute("data-ready","true",{timeout:45000});
+ await expect(canvas).toHaveAttribute("data-systems","GECJ");
+ await expect(page.locator("#gnss-systems")).toHaveValue("GECJ");
+ await expect(page.locator(".satellite")).toHaveCount(27);
+ await expect(page.locator(".metrics strong")).toHaveText(["18","1","8"]);
+ await expect(page.locator("#spp-all")).toHaveText("3.01 m");
+ for(const system of ["C","E","G","J"]) expect(await page.locator(`[data-satellite^="${system}"]`).count()).toBeGreaterThan(0);
+ await page.locator('[data-satellite="C01"]').click();
+ await expect(page.locator("#selected-id")).toHaveText("C01");
+ await page.locator("#share-panel > summary").click();
+ await expect(page.locator("#scene-link")).toBeEnabled();
+ const link=await page.locator("#scene-link").inputValue();
+ expect(new URLSearchParams(new URL(link).hash.slice(1)).get("systems")).toBe("GECJ");
+ for(const [system,count] of [["G",8],["E",5],["C",11],["J",3]]){
+  await page.locator("#gnss-systems").selectOption(system);
+  await expect(canvas).toHaveAttribute("data-systems",system);
+  await expect(page.locator(".satellite")).toHaveCount(count);
+  if(system==="G") await expect(page.locator("#spp-all")).toHaveText("65.74 m");
+ }
+ await page.goto(link);
+ await expect(canvas).toHaveAttribute("data-ready","true",{timeout:45000});
+ await expect(canvas).toHaveAttribute("data-systems","GECJ");
+ await expect(page.locator("#selected-id")).toHaveText("C01");
+ await expect(page.locator(".satellite")).toHaveCount(27);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2)).toBe(true);
+ expect(errors).toEqual([]);
 });

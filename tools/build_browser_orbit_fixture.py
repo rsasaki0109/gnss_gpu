@@ -15,7 +15,7 @@ import sys
 import types
 
 
-def build(root: Path, navigation: Path, scene_path: Path, output: Path):
+def build(root: Path, navigation: Path, scene_path: Path, output: Path, systems="G"):
     for path in (root, navigation, scene_path, output):
         if ".claude" in (part.casefold() for part in path.parts):
             raise ValueError("Excluded source path")
@@ -30,7 +30,7 @@ def build(root: Path, navigation: Path, scene_path: Path, output: Path):
     from gnss_gpu.io.nav_rinex import read_nav_rinex_multi
 
     scene = json.loads(gzip.decompress(scene_path.read_bytes()))
-    navs = read_nav_rinex_multi(navigation, systems=("G",))
+    navs = read_nav_rinex_multi(navigation, systems=tuple(systems))
     cases = []
     for satellite in sorted(navs):
         records = [r for r in scene["navigation"] if r["id"] == satellite]
@@ -45,7 +45,22 @@ def build(root: Path, navigation: Path, scene_path: Path, output: Path):
             and n.week == record["parameters"][18]
         )
         for time in (273375.025, 273975.1, 274615.925):
-            position, clock = Ephemeris._compute_single_cpu(nav, time)
+            native_time = time
+            if nav.system == "E":
+                a0, a1, tow, reference_week = record["gpga"]
+                native_time += (a0 + a1 * ((scene["week"] - reference_week) * 604800 + time - tow)) / (1 - a1)
+            position, clock = Ephemeris._compute_single_cpu(nav, native_time, obs_code="C1C")
+            if nav.system == "C" and nav.prn <= 5:
+                # Independent frame-matrix composition around the native CPU
+                # MEO solution; BDS ICD 5.2.4.1 GEO uses a tilted orbital frame.
+                import numpy as np
+                import math
+                angle = 7.292115e-5 * (time - 14 - nav.toe)
+                def rz(a):
+                    return np.array([[math.cos(a), -math.sin(a), 0], [math.sin(a), math.cos(a), 0], [0, 0, 1]])
+                tilt = math.radians(5)
+                rx = np.array([[1, 0, 0], [0, math.cos(tilt), -math.sin(tilt)], [0, math.sin(tilt), math.cos(tilt)]])
+                position = rz(-angle) @ rx @ rz(angle) @ position
             cases.append(
                 {
                     "record": record,
@@ -56,7 +71,7 @@ def build(root: Path, navigation: Path, scene_path: Path, output: Path):
                 }
             )
     fixture = {
-        "method": "gnss_gpu.ephemeris.Ephemeris._compute_single_cpu (GPS L1, no GPU)",
+        "method": "gnss_gpu.ephemeris.Ephemeris._compute_single_cpu (L1/E1/B1; GPGA alignment; BDS GEO independent frame-matrix composition; no GPU)",
         "source_sha256": hashlib.sha256(
             (root / "python/gnss_gpu/ephemeris.py").read_bytes()
         ).hexdigest(),
@@ -84,5 +99,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output", type=Path, default=Path("tests/site/fixtures/gps-orbits.json")
     )
+    parser.add_argument("--systems", default="G", choices=("G", "GECJ"))
     args = parser.parse_args()
-    build(args.root, args.nav, args.scene, args.output)
+    build(args.root, args.nav, args.scene, args.output, args.systems)

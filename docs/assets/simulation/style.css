@@ -1317,3 +1317,6 @@ footer {
     scroll-behavior:auto!important
   }
 }
+
+label[for="gnss-systems"] { display:block; margin:12px 0 6px; color:var(--muted); font-size:11px }
+#gnss-systems { width:100%; max-width:100%; box-sizing:border-box; font-size:11px }
