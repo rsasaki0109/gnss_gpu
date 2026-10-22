@@ -75,6 +75,7 @@ test("all full-city snapshot fields and reflection paths match the pre-optimizat
   const scene=JSON.parse(gunzipSync(fs.readFileSync(path.join(folder,"odaiba-scene.json.gz")))),bytes=gunzipSync(fs.readFileSync(path.join(folder,"odaiba-mesh.bin.gz")));
   const geometry=decodeMesh(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength));
   const current=new CitySimulation(scene,geometry),reference=new CitySimulation(scene,geometry);reference.bvh.containsXYZ=originalContains;
+  reference.bvh.reflectionsBatch=function(receiver,sources){return sources.map(source=>this.reflections(receiver,source));};
   const settings=[0,2000,4000,6000,8000,12409].flatMap(epoch=>[0,7.5,20].flatMap(antenna=>[5,10,30].map(mask=>({epoch,antenna,mask}))));
   settings.push({epoch:3890,antenna:0,mask:12},{epoch:3890,antenna:20,mask:12});
   assert.equal(settings.length,56);

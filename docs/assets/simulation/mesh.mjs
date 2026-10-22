@@ -152,6 +152,46 @@ export class MeshBVH {
     return u >= -1e-10 && v >= -1e-10 && u + v <= 1 + 1e-10;
   }
 
+  reflectionsBatch(receiver, sources) {
+    if (sources.length < 2) return sources.map(source => this.reflections(receiver, source));
+    const results = sources.map(() => []), p = this.planes;
+    const direct = sources.map(source => Math.hypot(...source.map((v, i) => v - receiver[i])));
+    // Each source still visits triangles in ascending ID order. Share only the
+    // receiver/triangle terms; keep each point, predicate and path calculation
+    // in the same Float64 operation order as reflections().
+    for (let t = 0; t < this.mesh.triangleCount; t++) {
+      const o = t * 4, nx = p[o], ny = p[o + 1], nz = p[o + 2];
+      const dr = nx * receiver[0] + ny * receiver[1] + nz * receiver[2] - p[o + 3];
+      if (Math.abs(dr) < CONTACT) continue;
+      const mx = receiver[0] - 2 * dr * nx, my = receiver[1] - 2 * dr * ny, mz = receiver[2] - 2 * dr * nz;
+      const axis = this.projection[t], i = (axis + 1) % 3, j = (axis + 2) % 3, offset = t * 9, e = this.edges;
+      const ai = e[offset + i], aj = e[offset + j], bi = e[offset + 3 + i], bj = e[offset + 3 + j], ci = e[offset + 6 + i], cj = e[offset + 6 + j];
+      const determinant = bi * cj - bj * ci;
+      for (let s = 0; s < sources.length; s++) {
+        const source = sources[s], result = results[s];
+        const ds = nx * source[0] + ny * source[1] + nz * source[2] - p[o + 3];
+        if (dr * ds <= 0) continue;
+        const factor = dr / (dr + ds);
+        const qx = mx + (source[0] - mx) * factor, qy = my + (source[1] - my) * factor, qz = mz + (source[2] - mz) * factor;
+        const x = (i === 0 ? qx : i === 1 ? qy : qz) - ai, y = (j === 0 ? qx : j === 1 ? qy : qz) - aj;
+        const numeratorU = x * cj - y * ci;
+        // Same conservative rejection and tolerances as containsXYZ().
+        if (Math.abs(numeratorU) > 2 * Math.abs(determinant)) continue;
+        const u = numeratorU / determinant, v = (bi * y - bj * x) / determinant;
+        if (!(u >= -1e-10 && v >= -1e-10 && u + v <= 1 + 1e-10)) continue;
+        const q = [qx, qy, qz];
+        if (result.some(path => Math.hypot(...path.point.map((v, i) => v - q[i])) < 1e-7)) continue;
+        if (!this.clearSegment(receiver, q) || !this.clearSegment(q, source)) continue;
+        const distance = Math.hypot(...q.map((v, i) => v - receiver[i])) + Math.hypot(...source.map((v, i) => v - q[i]));
+        const extra = distance - direct[s];
+        if (extra < -1e-7) throw new Error("Reflection violated triangle inequality");
+        result.push({ point: q, triangle: t, object: this.mesh.owners[t], distance, extra: Math.max(0, extra) });
+      }
+    }
+    for (const result of results) result.sort((a, b) => a.distance - b.distance || a.triangle - b.triangle);
+    return results;
+  }
+
   reflections(receiver, source) {
     const result = [], p = this.planes, direct = Math.hypot(...source.map((v, i) => v - receiver[i]));
     for (let t = 0; t < this.mesh.triangleCount; t++) {
