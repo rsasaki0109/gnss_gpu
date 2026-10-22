@@ -1,5 +1,5 @@
 import { C, add, sub, dot, mul, norm, geodetic, enuRotation, localPoint, selectNavigation, receivedSatellite, geometricSPP } from "./orbit.mjs";
-import { MeshBVH } from "./mesh.mjs?v=reflection-1";
+import { MeshBVH } from "./mesh.mjs?v=reflection-batch-1";
 
 export class CitySimulation {
   constructor(scene, mesh) {
@@ -14,7 +14,7 @@ export class CitySimulation {
     const base = row.slice(1), baseLLH = geodetic(base);
     const receiverECEF = add(base, mul(enuRotation(baseLLH.lat, baseLLH.lon)[2], antenna));
     const receiver = localPoint(receiverECEF, this.scene), llh = geodetic(receiverECEF);
-    const orientation = enuRotation(llh.lat, llh.lon), satellites = [];
+    const orientation = enuRotation(llh.lat, llh.lon), candidates = [];
     const records = selectNavigation(this.scene.navigation, time, this.scene.week);
     for (const record of records) {
       const state = receivedSatellite(record, time, receiverECEF, this.scene.week);
@@ -24,12 +24,17 @@ export class CitySimulation {
       if (elevation < mask) continue;
       const source = localPoint(state.position, this.scene), direction = mul(sub(source, receiver), 1 / range);
       const directHit = this.bvh.firstHit(receiver, direction, range);
-      const paths = this.bvh.reflections(receiver, source), reflection = paths[0] ?? null;
+      candidates.push({ id: record.id, azimuth, elevation, source, direction, range, directHit, clock: state.clock, transitTime: state.transitTime });
+    }
+    const batches = this.bvh.reflectionsBatch(receiver, candidates.map(satellite => satellite.source));
+    const satellites = candidates.map((satellite, i) => {
+      const { id, azimuth, elevation, source, direction, range, directHit, clock, transitTime } = satellite;
+      const paths = batches[i], reflection = paths[0] ?? null;
       const status = !directHit ? "LOS" : reflection ? "NLOS" : "BLOCKED";
       if (directHit) directHit.vertices = this.bvh.triangle(directHit.triangle);
       if (reflection) reflection.vertices = this.bvh.triangle(reflection.triangle);
-      satellites.push({ id: record.id, azimuth, elevation, source, direction, range, status, directHit, reflection, reflectionCount: paths.length, clock: state.clock, transitTime: state.transitTime });
-    }
+      return { id, azimuth, elevation, source, direction, range, status, directHit, reflection, reflectionCount: paths.length, clock, transitTime };
+    });
     const counts = { LOS: 0, NLOS: 0, BLOCKED: 0 };
     satellites.forEach(satellite => counts[satellite.status]++);
     return { epoch, tow: row[0], week: this.scene.week, antenna, mask, receiver, receiverECEF, latitude: llh.lat * 180 / Math.PI, longitude: llh.lon * 180 / Math.PI, height: llh.height,
