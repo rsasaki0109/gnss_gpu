@@ -1,6 +1,6 @@
 const { test, expect } = require("@playwright/test");
 const { deflateSync } = require("node:zlib");
-const { gunzipSync } = require("node:zlib");
+const { gunzipSync, gzipSync } = require("node:zlib");
 const fs = require("node:fs");
 const path = require("node:path");
 const SCENE = JSON.parse(gunzipSync(fs.readFileSync(path.join(__dirname, "../../docs/assets/plateau/odaiba-scene.json.gz"))));
@@ -1026,4 +1026,20 @@ test("default GLONASS support traces five systems and shares GLONASS-only select
  await expect(page.locator(".satellite")).toHaveCount(34);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2)).toBe(true);
  expect(errors).toEqual([]);
+});
+
+
+test("versioned scene requests avoid a stale four-system asset",async({page})=>{
+ const stale=gzipSync(Buffer.from(JSON.stringify({...SCENE,navigation:SCENE.navigation.filter(r=>r.id[0]!=="R")})));
+ const staleRequests=[];
+ await page.route("**/plateau/odaiba-scene.json.gz*",route=>{
+  if(new URL(route.request().url()).searchParams.get("sha256")===MANIFEST.scene.sha256) return route.continue();
+  staleRequests.push(route.request().url());
+  return route.fulfill({status:200,contentType:"application/gzip",body:stale,headers:{"Cache-Control":"public, max-age=600"}});
+ });
+ await page.goto("simulation.html");
+ await expect(page.locator("#scene")).toHaveAttribute("data-ready","true",{timeout:45000});
+ await expect(page.locator("#scene")).toHaveAttribute("data-systems","GECJR");
+ await expect(page.locator(".satellite")).toHaveCount(34);
+ expect(staleRequests).toEqual([]);
 });

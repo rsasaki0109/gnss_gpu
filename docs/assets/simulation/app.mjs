@@ -361,7 +361,9 @@ canvas.addEventListener("webglcontextlost", event => { event.preventDefault(); f
 document.addEventListener("visibilitychange", () => { if (document.hidden) setPlaying(false); });
 
 async function asset(entry) {
-  const response = await fetch(new URL(`../plateau/${entry.file}`, import.meta.url));
+  const url = new URL(`../plateau/${entry.file}`, import.meta.url);
+  url.searchParams.set("sha256", entry.sha256);
+  const response = await fetch(url);
   if (!response.ok) throw new Error(`Unable to load ${entry.file}: HTTP ${response.status}`);
   const bytes = await response.arrayBuffer();
   const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map(v => v.toString(16).padStart(2, "0")).join("");
@@ -371,7 +373,7 @@ async function asset(entry) {
 }
 async function initialize() {
   status("Loading verified PLATEAU data · 4.9 MB…");
-  const response = await fetch(new URL("../plateau/manifest.json", import.meta.url));
+  const response = await fetch(new URL("../plateau/manifest.json", import.meta.url), {cache:"no-cache"});
   if (!response.ok) throw new Error(`Unable to load data manifest: HTTP ${response.status}`);
   const manifest = await response.json();
   const [meshBuffer, sceneBuffer] = await Promise.all([asset(manifest.mesh), asset(manifest.scene)]);
