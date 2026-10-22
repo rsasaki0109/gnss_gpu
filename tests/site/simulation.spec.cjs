@@ -65,7 +65,7 @@ test("route evaluation compares exact completed poses, exports assumptions and i
   const trace=await canvas.getAttribute("data-trace-id"),bias=await page.locator("#spp-all").textContent();
   await page.locator("#history-metric").selectOption("bias");
   await expect(page.locator("#signal-history")).toHaveAttribute("data-selected","FIT");
-  await page.locator("#signal-history details > summary").click();
+  await page.locator("#signal-history > details.tool-help > summary").click();
   await page.locator("#power-material").selectOption("glass");
   await page.locator("#power-antenna").selectOption("zenith");
   await expect(page.locator("#spp-all")).toHaveText(bias);await expect(canvas).toHaveAttribute("data-trace-id",trace);
@@ -125,7 +125,7 @@ test("signal history streams completed five-system samples and resets on seek/se
   await expect(page.locator("#route-trace")).toHaveAttribute("data-ready","true");
   await page.locator('[data-satellite="R06"]').click();
   await expect(history).toHaveAttribute("data-selected","R06");
-  await expect(history.locator("output")).toContainText("R06");
+  await expect(history.locator(".signal-history-heading > output")).toContainText("R06");
   await page.locator("#preset").selectOption("0");
   await expect(history).toHaveAttribute("data-epoch","0");
   await expect(history).toHaveAttribute("data-samples","1");
