@@ -29,7 +29,7 @@ test("forced Float64 Wasm preserves exact ULP boundaries for every projection an
     const triangle=[[0,0,0],[0,1,0],[0,0,1]].map(p=>rotate(p,axis));
     if(reversed)[triangle[1],triangle[2]]=[triangle[2],triangle[1]];
     const bvh=new MeshBVH(meshOf([triangle]),{reflectionBackend:"wasm"});
-    assert.equal(bvh.reflectionBackend,"wasm");
+    assert.equal(bvh.reflectionBackend,"wasm");assert.equal(bvh.reflectionKernel.simd,true);
     compare(bvh,rotate([1,0,0],axis),sources.map(p=>rotate(p,axis)));
     assert.equal(bvh.reflectionKernel.scans,1);assert.equal(bvh.reflectionKernel.fallbacks,0);
   }
@@ -79,4 +79,32 @@ test("backend selection is explicit and rejects invalid capacity settings",async
   const js=new MeshBVH(mesh,{reflectionBackend:"js"});assert.equal(js.reflectionBackend,"js");assert.equal(js.reflectionKernel,null);
   compare(js,[4,-2,1.5],[[6,4,6],[-6,4,6]]);
   for(const options of [{reflectionBackend:"other"},{reflectionCapacity:-1},{reflectionCapacity:.5},{reflectionCapacity:65537}])assert.throws(()=>new MeshBVH(mesh,options),RangeError);
+});
+
+
+test("strict SIMD isolates source lanes and never emits an unused odd lane",async()=>{
+  const [{MeshBVH}]=await modules;
+  const bvh=new MeshBVH(meshOf(wall),{reflectionBackend:"wasm"});
+  assert.equal(bvh.reflectionKernel.simd,true);
+  const pattern=[[6,4,6],[-6,4,6],[NaN,0,0],[6,-4,3],[Infinity,0,0],[20200000,4,6],[6,4,6]];
+  for(const length of [512,511,31,9,8,7,5,4,3,2,1,0,3,512]) {
+    compare(bvh,[4,-2,1.5],Array.from({length},(_,i)=>pattern[i%pattern.length]));
+  }
+  assert.equal(bvh.reflectionKernel.fallbacks,0);
+  // The fourth input remains in memory after shortening an even batch to odd.
+  // It must neither emit a candidate nor trigger capacity fallback.
+  const bounded=new MeshBVH(meshOf(wall),{reflectionBackend:"wasm",reflectionCapacity:0});
+  compare(bounded,[4,-2,1.5],[[-6,4,6],[-6,4,6],[-6,4,6],[6,4,6]]);
+  assert.equal(bounded.reflectionKernel.fallbacks,1);
+  compare(bounded,[4,-2,1.5],[[-6,4,6],[-6,4,6],[-6,4,6]]);
+  assert.equal(bounded.reflectionKernel.fallbacks,1);
+});
+
+test("SIMD compilation failure keeps scalar Wasm, then JavaScript if both fail",()=>{
+  const url=pathToFileURL(path.resolve(__dirname,"../../docs/assets/simulation/mesh.mjs")).href;
+  for(const failures of [1,2]){
+    const source='import assert from "node:assert/strict";import {MeshBVH} from '+JSON.stringify(url)+';let attempts=0;const failures='+failures+';WebAssembly.Module=new Proxy(WebAssembly.Module,{construct(target,args){if(++attempts<=failures)throw new WebAssembly.CompileError("Backend unavailable");return Reflect.construct(target,args);}});const meshOf='+meshOf.toString()+';const wall='+JSON.stringify(wall)+';const mesh=meshOf(Array.from({length:128},(_,i)=>wall[i%2]));const bvh=new MeshBVH(mesh);assert.equal(attempts,2);assert.equal(bvh.reflectionBackend,failures===1?"wasm":"js");if(failures===1)assert.equal(bvh.reflectionKernel.simd,false);const receiver=[4,-2,1.5];for(const sources of [[[6,4,6],[-6,4,6]],[[NaN,0,0],[6,4,6],[20200000,4,6]]])assert.deepEqual(bvh.reflectionsBatch(receiver,sources),sources.map(s=>bvh.reflections(receiver,s)));if(failures===2)assert.throws(()=>new MeshBVH(mesh,{reflectionBackend:"wasm"}),/unavailable/);assert.equal(attempts,2);';
+    const result=spawnSync(process.execPath,["--input-type=module","-e",source],{encoding:"utf8",windowsHide:true});
+    assert.equal(result.status,0,result.stderr);
+  }
 });

@@ -47,7 +47,7 @@ async function worker(config) {
     checks++;
     if(round>=0)times[i].push(milliseconds);
   }
-  process.stdout.write(JSON.stringify({indexMs,times,checks,reflectionBackend:simulation.bvh.reflectionBackend??"js",kernelScans:simulation.bvh.reflectionKernel?.scans??0,kernelFallbacks:simulation.bvh.reflectionKernel?.fallbacks??0}));
+  process.stdout.write(JSON.stringify({indexMs,times,checks,reflectionBackend:simulation.bvh.reflectionBackend??"js",reflectionSimd:simulation.bvh.reflectionKernel?.simd??false,kernelScans:simulation.bvh.reflectionKernel?.scans??0,kernelFallbacks:simulation.bvh.reflectionKernel?.fallbacks??0}));
 }
 
 async function main() {
@@ -116,7 +116,7 @@ async function main() {
       exactChecks:Object.values(runs).flat().reduce((sum,run)=>sum+run.checks,0),
       baselineTotalMs,currentTotalMs,speedup:baseline?baselineTotalMs/currentTotalMs:null,
       timeReductionPercent:baseline?100*(1-currentTotalMs/baselineTotalMs):null,
-      backends:Object.fromEntries(Object.entries(runs).filter(([,value])=>value.length).map(([key,value])=>[key,value.map(({reflectionBackend,kernelScans,kernelFallbacks})=>({reflectionBackend,kernelScans,kernelFallbacks}))])),
+      backends:Object.fromEntries(Object.entries(runs).filter(([,value])=>value.length).map(([key,value])=>[key,value.map(({reflectionBackend,reflectionSimd,kernelScans,kernelFallbacks})=>({reflectionBackend,reflectionSimd,kernelScans,kernelFallbacks}))])),
       indexMs:Object.fromEntries(Object.entries(runs).filter(([,value])=>value.length).map(([key,value])=>[key,value.map(run=>run.indexMs)])),
       results:cases,
     };
