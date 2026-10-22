@@ -957,7 +957,7 @@ test("pinned fit clears pending, focused, different-pose, missing and failed com
   await page.locator("#return-reference").click();await expect(pin).toHaveAttribute("data-state","ready");await expect(canvas).toHaveAttribute("data-epoch","8000");
   await page.locator("#antenna").press("Home");await expect(current).toHaveAttribute("data-antenna","0");await expect(pin).toHaveAttribute("data-state","same-settings");
   await page.locator("#mask").press("End");await expect(pin).toHaveAttribute("data-state","pending");await cleared();await expect(pin).toHaveAttribute("data-state","no-current-solution");await cleared();
-  await page.locator("#pin-reference").click();await page.locator("#reset").click();await expect(current).toHaveAttribute("data-state","ready");await expect(pin).toHaveAttribute("data-state","no-solution");await cleared();
+  await page.locator("#pin-reference").click();await page.locator("#mask").press("Home");await expect(current).toHaveAttribute("data-state","ready");await expect(pin).toHaveAttribute("data-state","no-solution");await cleared();
   await page.locator("#pin-reference").click();await page.locator("#antenna").press("End");await expect(pin).toHaveAttribute("data-state","ready");
   await canvas.dispatchEvent("webglcontextlost");await expect(pin).toHaveAttribute("data-state","unavailable");await cleared();
 });

@@ -59,6 +59,8 @@ test("default full-city trace includes four constellations and preserves every G
   }
   const {captureReference,compareReceiver}=await import("../../docs/assets/simulation/comparison.mjs");
   assert.equal(compareReceiver(captureReference(multi),gps).state,"different-systems");
+  const {pinnedPositionFit}=await import("../../docs/assets/simulation/position-fit.mjs");
+  assert.equal(pinnedPositionFit(captureReference(multi),gps,null,{enabled:true}).state,"different-systems");
   assert.equal(multi.satellites.length,27);
   assert.ok(multi.spp.all && Number.isFinite(multi.spp.all.horizontal));
   const snapshot=structuredClone(scene);
