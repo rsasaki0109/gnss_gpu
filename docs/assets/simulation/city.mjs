@@ -1,4 +1,4 @@
-import { C, GNSS_SYSTEMS, validateSystems, add, sub, dot, mul, norm, geodetic, enuRotation, localPoint, selectNavigation, receivedSatellite, geometricSPP } from "./orbit.mjs?v=multi-gnss-1";
+import { C, GNSS_SYSTEMS, validateSystems, add, sub, dot, mul, norm, geodetic, enuRotation, localPoint, selectNavigation, receivedSatellite, geometricSPP } from "./orbit.mjs?v=glonass-1";
 import { MeshBVH } from "./mesh.mjs?v=reflection-loops-1";
 
 export class CitySimulation {

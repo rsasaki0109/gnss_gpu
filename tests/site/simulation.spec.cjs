@@ -443,7 +443,7 @@ test("incompatible links and unavailable signals or surfaces show explicit messa
   await expect(canvas).toHaveAttribute("data-antenna","0");
   await expect(page.locator("#scene-link-notice-text")).toHaveText("Scene link uses a different dataset. Showing the default scene.");
   await expect(page.locator("#scene-link-notice")).toHaveAttribute("data-warning","true");
-  await expect(page.locator("#gnss-systems")).toHaveValue("GECJ");
+  await expect(page.locator("#gnss-systems")).toHaveValue("GECJR");
   await page.goto("simulation.html"+sceneHash({sat:"G01"}));
   await expect(page.locator("#scene-link-notice-text")).toHaveText("G01 is unavailable at this epoch and mask. Showing G12.");
   await expect(page.locator("#selected-id")).toHaveText("G12");
@@ -963,9 +963,9 @@ test("pinned fit clears pending, focused, different-pose, missing and failed com
 });
 
 
-test("default multi-GNSS traces four systems, switches modes and restores a non-GPS scene link",async({page})=>{
+test("four-system multi-GNSS traces four systems, switches modes and restores a non-GPS scene link",async({page})=>{
  const errors=[];page.on("pageerror",e=>errors.push(e.message));
- await page.goto("simulation.html");
+ await page.goto("simulation.html"+sceneHash({systems:"GECJ"}));
  const canvas=page.locator("#scene");
  await expect(canvas).toHaveAttribute("data-ready","true",{timeout:45000});
  await expect(canvas).toHaveAttribute("data-systems","GECJ");
@@ -991,6 +991,39 @@ test("default multi-GNSS traces four systems, switches modes and restores a non-
  await expect(canvas).toHaveAttribute("data-systems","GECJ");
  await expect(page.locator("#selected-id")).toHaveText("C01");
  await expect(page.locator(".satellite")).toHaveCount(27);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2)).toBe(true);
+ expect(errors).toEqual([]);
+});
+
+
+test("default GLONASS support traces five systems and shares GLONASS-only selections",async({page})=>{
+ const errors=[];page.on("pageerror",e=>errors.push(e.message));
+ await page.goto("simulation.html");
+ const canvas=page.locator("#scene");
+ await expect(canvas).toHaveAttribute("data-ready","true",{timeout:45000});
+ await expect(canvas).toHaveAttribute("data-systems","GECJR");
+ await expect(page.locator("#gnss-systems")).toHaveValue("GECJR");
+ await expect(page.locator(".satellite")).toHaveCount(34);
+ await expect(page.locator(".metrics strong")).toHaveText(["21","4","9"]);
+ await expect(page.locator("#spp-all")).toHaveText("23.37 m");
+ expect(await page.locator('[data-satellite^="R"]').count()).toBe(7);
+ await page.locator("#gnss-systems").selectOption("R");
+ await expect(canvas).toHaveAttribute("data-systems","R");
+ await expect(page.locator(".satellite")).toHaveCount(7);
+ await expect(page.locator(".metrics strong")).toHaveText(["3","3","1"]);
+ await page.locator('[data-satellite="R06"]').click();
+ await page.locator("#share-panel > summary").click();
+ await expect(page.locator("#scene-link")).toBeEnabled();
+ const link=await page.locator("#scene-link").inputValue();
+ const fields=new URLSearchParams(new URL(link).hash.slice(1));
+ expect(fields.get("systems")).toBe("R");expect(fields.get("sat")).toBe("R06");
+ await page.goto(link);
+ await expect(canvas).toHaveAttribute("data-ready","true",{timeout:45000});
+ await expect(canvas).toHaveAttribute("data-systems","R");
+ await expect(page.locator("#selected-id")).toHaveText("R06");
+ await page.locator("#reset").click();
+ await expect(canvas).toHaveAttribute("data-systems","GECJR");
+ await expect(page.locator(".satellite")).toHaveCount(34);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2)).toBe(true);
  expect(errors).toEqual([]);
 });

@@ -1,3 +1,4 @@
+import { glonassOrbit, glonassElapsed, usableGlonass } from "./glonass.mjs?v=glonass-1";
 // Broadcast Kepler orbits; all state computation remains binary64.
 // RINEX 3.03 Appendix A; Galileo OS SIS ICD; BDS B1I ICD (GEO rotation).
 export const C = 299792458;
@@ -11,9 +12,9 @@ export const mul = (a, k) => a.map(v => v * k);
 export const dot = (a, b) => a.reduce((sum, v, i) => sum + v * b[i], 0);
 export const norm = a => Math.hypot(...a);
 const weekDelta = t => t > WEEK / 2 ? t - WEEK : t < -WEEK / 2 ? t + WEEK : t;
-export const GNSS_SYSTEMS = "GECJ";
+export const GNSS_SYSTEMS = "GECJR";
 export function validateSystems(systems) {
-  if (![GNSS_SYSTEMS, "G", "E", "C", "J"].includes(systems)) throw new RangeError("Invalid GNSS systems");
+  if (![GNSS_SYSTEMS, "GECJ", "G", "E", "C", "J", "R"].includes(systems)) throw new RangeError("Invalid GNSS systems");
   return systems;
 }
 function systemTime(record, time, week) {
@@ -27,8 +28,11 @@ function systemTime(record, time, week) {
   return { time, week };
 }
 
+const navigationWeek = record => record.id[0] === "R" ? Math.floor((record.toc + record.utcOffset) / WEEK) : record.parameters[18] + (record.id[0] === "C" ? 1356 : 0);
+
 // Keep GPS week and seconds-of-week separate to retain sub-microsecond time.
-export function orbit(record, time, week = record.parameters[18] + (record.id[0] === "C" ? 1356 : 0)) {
+export function orbit(record, time, week = navigationWeek(record)) {
+  if (record.id[0] === "R") return glonassOrbit(record,time,week);
   const p = record.parameters;
   const system = record.id[0];
   if (!GNSS_SYSTEMS.includes(system) || p.length < 26 || !p.every(Number.isFinite) || !(p[5] >= 0 && p[5] < 1) || p[7] < 1000 || !Number.isFinite(time) || !Number.isInteger(week)) throw new RangeError("Invalid broadcast orbit");
@@ -75,6 +79,12 @@ export function selectNavigation(records, time, week) {
   for (const record of records) {
     const system = record.id[0];
     if (!GNSS_SYSTEMS.includes(system)) continue;
+    if (system === "R") {
+      if (!usableGlonass(record,time,week)) continue;
+      const age = Math.abs(glonassElapsed(record,time,week)), previous = selected.get(record.id);
+      if (!previous || age < previous.age || (age === previous.age && record.toc > previous.record.toc)) selected.set(record.id,{record,age});
+      continue;
+    }
     const native = systemTime(record, time, week), p = record.parameters, toe = (p[18] - native.week) * WEEK + p[8];
     const age = Math.abs(native.time - toe), fit = system === "E" ? 14400 : system === "C" ? 3600 : (p[25] > 1 ? p[25] : 4) * 1800;
     let transmission = (p[18] - native.week) * WEEK + p[24];
@@ -89,7 +99,7 @@ export function selectNavigation(records, time, week) {
   return [...selected.values()].map(item => item.record).sort((a, b) => a.id.localeCompare(b.id));
 }
 
-export function receivedSatellite(record, time, receiver, week = record.parameters[18] + (record.id[0] === "C" ? 1356 : 0)) {
+export function receivedSatellite(record, time, receiver, week = navigationWeek(record)) {
   let tau = 0.075, state;
   for (let i = 0; i < 8; i++) {
     const raw = orbit(record, time - tau, week), theta = OMEGA_E * tau;

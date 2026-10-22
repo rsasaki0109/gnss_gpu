@@ -1,4 +1,4 @@
-import { GNSS_SYSTEMS, validateSystems } from "./orbit.mjs?v=multi-gnss-1";
+import { GNSS_SYSTEMS, validateSystems } from "./orbit.mjs?v=glonass-1";
 // Scene links preserve original input values; camera values affect drawing only.
 export const DEFAULT_SCENE = Object.freeze({ epoch: 8000, antenna: 0, mask: 10, systems: GNSS_SYSTEMS, satellite: "", view: "receiver", yaw: -.63, pitch: .82, zoom: 1, basemap: true, reflections: true });
 const FIELDS = ["scene", "epoch", "height", "mask", "sat", "view", "yaw", "pitch", "zoom", "map", "reflections", "systems", "mesh", "data"];
@@ -20,7 +20,7 @@ export function readSceneLink(hash, assets) {
   };
   const state = { systems: validateSystems(fields.get("systems") ?? "G"), epoch: number("epoch"), antenna: number("height"), mask: number("mask"), satellite: fields.get("sat"), view: fields.get("view"), yaw: number("yaw"), pitch: number("pitch"), zoom: number("zoom"), basemap: fields.get("map") === "1", reflections: fields.get("reflections") === "1" };
   if (!Number.isInteger(state.epoch) || state.epoch < 0 || state.epoch >= assets.epochs || state.antenna < 0 || state.antenna > 20 || !Number.isInteger(state.antenna * 2) || !Number.isInteger(state.mask) || state.mask < 5 || state.mask > 30) throw new Error("Scene link receiver settings are outside the recorded controls.");
-  if (state.satellite && (!/^[GECJ]\d{2}$/.test(state.satellite) || !assets.satellites.includes(state.satellite))) throw new Error("Scene link requests an unknown satellite.");
+  if (state.satellite && (!/^[GECJR]\d{2}$/.test(state.satellite) || !assets.satellites.includes(state.satellite))) throw new Error("Scene link requests an unknown satellite.");
   const focused = state.view === "reflection" || state.view === "blockage";
   if (!VIEWS.has(state.view) || state.zoom < .3 || state.zoom > 6 || Math.abs(state.pitch) < .15 || Math.abs(state.pitch) > 1.48 || (!focused && state.pitch < 0) || (focused && !state.satellite)) throw new Error("Scene link view is invalid.");
   if (!["0", "1"].includes(fields.get("map")) || !["0", "1"].includes(fields.get("reflections")) || (state.view === "reflection" && !state.reflections)) throw new Error("Scene link display options are inconsistent.");

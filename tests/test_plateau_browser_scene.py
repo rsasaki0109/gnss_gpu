@@ -192,5 +192,39 @@ class NavigationTests(unittest.TestCase):
                 builder.update_navigation(nav, folder)
 
 
+
+    def test_glonass_state_units_clock_sign_and_utc_frame_time(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "glonass.nav"
+            def write(health=0, frame=273600, year=2018, leap=None):
+                text = (f"{leap:6d}                                                      LEAP SECONDS\n" if leap is not None else "")
+                text += "                                                            END OF HEADER\n"
+                text += f"R06 {year} 12 19 04 15 00" + "".join(f"{v:19.12E}" for v in [1e-4, 2e-11, frame]) + "\n"
+                for row in [[19000, 1.2, 1e-9, health], [11000, -2.3, -2e-9, -4], [12000, .8, 3e-9, 0]]:
+                    text += "    " + "".join(f"{v:19.12E}" for v in row) + "\n"
+                path.write_text(text, encoding="ascii")
+            write()
+            r = builder.read_navigation(path, 273600, 274000, 2032)[0]
+            self.assertEqual(r["position"], [19000000, 11000000, 12000000])
+            self.assertEqual(r["velocity"], [1200, -2300, 800])
+            for actual, expected in zip(r["acceleration"], [1e-6, -2e-6, 3e-6]):
+                self.assertAlmostEqual(actual, expected, places=15)
+            self.assertEqual(r["clock"][0], 1e-4)
+            self.assertEqual(r["utcOffset"], 18)
+            self.assertEqual(r["frequencyChannel"], -4)
+            self.assertEqual(r["transmission"], 2032 * 604800 + 273600)
+            self.assertNotIn("parameters", r)
+            for kwargs in ({"health": 1}, {"frame": 0.9999e9}):
+                write(**kwargs)
+                with self.assertRaisesRegex(ValueError, "No matching"):
+                    builder.read_navigation(path, 273600, 274000, 2032)
+            write(leap=17)
+            with self.assertRaisesRegex(ValueError, "UTC offset"):
+                builder.read_navigation(path, 273600, 274000, 2032)
+            write(year=2019)
+            with self.assertRaisesRegex(ValueError, "LEAP SECONDS"):
+                builder.read_navigation(path, 273600, 274000, 2032)
+
+
 if __name__ == "__main__":
     unittest.main()

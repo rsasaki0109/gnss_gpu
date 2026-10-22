@@ -40,13 +40,13 @@ test("Galileo E1 validity, transmission causality, BDT week/seconds offsets and 
   const wrong=structuredClone(c);wrong.id="C06";
   assert.ok(Math.hypot(...orbit(wrong,5,2032).position.map((v,i)=>v-a.position[i]))>100000);
   assert.throws(()=>orbit({...c,id:"R01"},5,2032),/orbit/);
-  for(const s of ["","R","GG","GX",null]) assert.throws(()=>validateSystems(s));
+  for(const s of ["","S","GG","GX",null]) assert.throws(()=>validateSystems(s));
 });
-test("default full-city trace includes four constellations and preserves every GPS-only path",async()=>{
+test("four-system full-city trace includes four constellations and preserves every GPS-only path",async()=>{
   const [, {CitySimulation},{decodeMesh}]=await modules;
   const bytes=gunzipSync(fs.readFileSync(path.join(folder,"odaiba-mesh.bin.gz")));
   const sim=new CitySimulation(scene,decodeMesh(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength)));
-  const settings={epoch:8000,antenna:0,mask:10};
+  const settings={epoch:8000,antenna:0,mask:10,systems:"GECJ"};
   const multi=sim.compute(settings),gps=sim.compute({...settings,systems:"G"});
   assert.equal(multi.systems,"GECJ");
   assert.deepEqual([...new Set(multi.satellites.map(s=>s.id[0]))].sort(),["C","E","G","J"]);
