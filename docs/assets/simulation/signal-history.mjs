@@ -21,7 +21,7 @@ export class SignalHistory {
     const last = this.samples.at(-1);
     if (key !== this.key || (last && time < last.time)) this.clear();
     this.key = key;
-    const sample = {time, week:snapshot.week, tow:snapshot.tow, epoch:snapshot.epoch, model, bias:snapshot.spp?.all?.horizontal??null, signals:scene ? signalMetrics(snapshot,scene,model) : snapshot.satellites.map(s => ({id:s.id, status:s.status, power:relativePower(s), elevation:s.elevation, extra:s.status==="LOS"?0:s.status==="NLOS"?s.reflection.extra:null}))};
+    const sample = {time, week:snapshot.week, tow:snapshot.tow, epoch:snapshot.epoch, antenna:snapshot.antenna, mask:snapshot.mask, systems:snapshot.systems, model, bias:snapshot.spp?.all?.horizontal??null, signals:scene ? signalMetrics(snapshot,scene,model) : snapshot.satellites.map(s => ({id:s.id, status:s.status, power:relativePower(s), elevation:s.elevation, extra:s.status==="LOS"?0:s.status==="NLOS"?s.reflection.extra:null}))};
     if (this.samples.at(-1)?.time === time) this.samples.pop();
     this.samples.push(sample);
     this.samples = this.samples.filter(s => time - s.time <= 120).slice(-600);
@@ -89,7 +89,7 @@ export class SignalHistoryPlot {
 }
 
 export function historyCSV(samples) {
-  const lines=["epoch,gps_week,gps_tow_s,satellite,path,elevation_deg,earliest_excess_m,modeled_relative_power_db,power_state,frequency_hz,horizontal_geometric_bias_m,material_assumption,polarization,antenna_pattern"];
-  for(const sample of samples)for(const signal of sample.signals)lines.push([sample.epoch,sample.week,sample.tow,signal.id,signal.status,signal.elevation,signal.extra,signal.power,signal.powerState,signal.frequency,sample.bias,sample.model.material,sample.model.polarization,sample.model.antenna].map(v=>v==null?"":String(v)).join(","));
+  const lines=["epoch,gps_week,gps_tow_s,satellite,path,elevation_deg,earliest_excess_m,modeled_relative_power_db,power_state,frequency_hz,horizontal_geometric_bias_m,material_assumption,polarization,antenna_pattern,systems,antenna_offset_m,mask_deg"];
+  for(const sample of samples)for(const signal of sample.signals)lines.push([sample.epoch,sample.week,sample.tow,signal.id,signal.status,signal.elevation,signal.extra,signal.power,signal.powerState,signal.frequency,sample.bias,sample.model.material,sample.model.polarization,sample.model.antenna,sample.systems,sample.antenna,sample.mask].map(v=>v==null?"":String(v)).join(","));
   return lines.join("\r\n")+"\r\n";
 }
