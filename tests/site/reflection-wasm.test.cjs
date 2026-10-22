@@ -30,8 +30,15 @@ test("forced Float64 Wasm preserves exact ULP boundaries for every projection an
     if(reversed)[triangle[1],triangle[2]]=[triangle[2],triangle[1]];
     const bvh=new MeshBVH(meshOf([triangle]),{reflectionBackend:"wasm"});
     assert.equal(bvh.reflectionBackend,"wasm");assert.equal(bvh.reflectionKernel.simd,true);
-    compare(bvh,rotate([1,0,0],axis),sources.map(p=>rotate(p,axis)));
-    assert.equal(bvh.reflectionKernel.scans,1);assert.equal(bvh.reflectionKernel.fallbacks,0);
+    const receiver=rotate([1,0,0],axis),rotated=sources.map(p=>rotate(p,axis));
+    compare(bvh,receiver,rotated);let scans=1;
+    // Exercise every specialized packet count, odd tails and generic dispatch
+    // against the independent scalar predicate at the same ULP boundaries.
+    for(let width=2;width<=17;width++)for(let start=0;start<rotated.length;start+=width) {
+      const batch=rotated.slice(start,start+width);compare(bvh,receiver,batch);
+      if(batch.length>=2)scans++;
+    }
+    assert.equal(bvh.reflectionKernel.scans,scans);assert.equal(bvh.reflectionKernel.fallbacks,0);
   }
 });
 
@@ -87,7 +94,7 @@ test("strict SIMD isolates source lanes and never emits an unused odd lane",asyn
   const bvh=new MeshBVH(meshOf(wall),{reflectionBackend:"wasm"});
   assert.equal(bvh.reflectionKernel.simd,true);
   const pattern=[[6,4,6],[-6,4,6],[NaN,0,0],[6,-4,3],[Infinity,0,0],[20200000,4,6],[6,4,6]];
-  for(const length of [512,511,31,9,8,7,5,4,3,2,1,0,3,512]) {
+  for(const length of [512,511,31,17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0,3,16,17,512]) {
     compare(bvh,[4,-2,1.5],Array.from({length},(_,i)=>pattern[i%pattern.length]));
   }
   assert.equal(bvh.reflectionKernel.fallbacks,0);
@@ -107,4 +114,21 @@ test("SIMD compilation failure keeps scalar Wasm, then JavaScript if both fail",
     const result=spawnSync(process.execPath,["--input-type=module","-e",source],{encoding:"utf8",windowsHide:true});
     assert.equal(result.status,0,result.stderr);
   }
+});
+
+
+test("projection changes within one scan retain triangle order for every packet count",async()=>{
+  const [{MeshBVH}]=await modules;
+  const translated=(point,axis)=>rotate(point,axis).map(v=>v+axis*100);
+  // Keep each orientation in a separate region. Interleaved copies of each
+  // wall exercise deduplication and first-triangle selection across branches.
+  const triangles=[0,1,2,2,0,1,0,2,1].flatMap(axis=>wall.map(t=>t.map(p=>translated(p,axis))));
+  const bvh=new MeshBVH(meshOf(triangles),{reflectionBackend:"wasm"});
+  for(let count=2;count<=18;count++)for(const axis of [0,1,2]) {
+    const receiver=translated([4,-2,1.5],axis);
+    const sources=Array.from({length:count},(_,i)=>translated([6+(i%3)*.01,4,6],axis));
+    compare(bvh,receiver,sources);
+    assert(bvh.reflectionsBatch(receiver,sources).every(paths=>paths.length>0),"Accepted paths must exercise every projection");
+  }
+  assert.equal(bvh.reflectionKernel.fallbacks,0);
 });

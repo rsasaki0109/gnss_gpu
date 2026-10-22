@@ -1,5 +1,5 @@
 import { C, add, sub, dot, mul, norm, geodetic, enuRotation, localPoint, selectNavigation, receivedSatellite, geometricSPP } from "./orbit.mjs";
-import { MeshBVH } from "./mesh.mjs?v=reflection-simd-1";
+import { MeshBVH } from "./mesh.mjs?v=reflection-loops-1";
 
 export class CitySimulation {
   constructor(scene, mesh, options) {
