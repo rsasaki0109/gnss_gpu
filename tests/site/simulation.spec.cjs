@@ -27,6 +27,33 @@ function tileFixture() {
   return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk("IHDR",header),chunk("IDAT",deflateSync(Buffer.from([0,230,238,230,255]))),chunk("IEND",Buffer.alloc(0))]);
 }
 const TILE = tileFixture();
+
+test("signal history streams completed five-system samples and resets on seek/settings", async ({page}, testInfo) => {
+  const errors=[]; page.on("pageerror",error=>errors.push(error.message));
+  await page.goto("simulation.html");
+  const scene=page.locator("#scene"), history=page.locator("#signal-history");
+  await expect(scene).toHaveAttribute("data-ready","true",{timeout:45000});
+  await expect(history).toHaveAttribute("data-samples","1");
+  await expect(history).toHaveAttribute("data-epoch","8000");
+  await expect(history.locator("path[data-signal^=R]")).not.toHaveCount(0);
+  await page.locator("#play").click();
+  await expect.poll(async()=>Number(await history.getAttribute("data-samples")),{timeout:30000}).toBeGreaterThan(2);
+  await page.locator("#play").click();
+  await expect(page.locator("#route-trace")).toHaveAttribute("data-ready","true");
+  await page.locator('[data-satellite="R06"]').click();
+  await expect(history).toHaveAttribute("data-selected","R06");
+  await expect(history.locator("output")).toContainText("R06");
+  await page.locator("#preset").selectOption("0");
+  await expect(history).toHaveAttribute("data-epoch","0");
+  await expect(history).toHaveAttribute("data-samples","1");
+  await page.locator("#gnss-systems").selectOption("G");
+  await expect(scene).toHaveAttribute("data-systems","G");
+  await expect(history).toHaveAttribute("data-samples","1");
+  await expect(history.locator("path[data-signal^=R]")).toHaveCount(0);
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await history.screenshot({path:testInfo.outputPath("signal-history.png")});
+  expect(errors).toEqual([]);
+});
 test.beforeEach(async ({page}) => {
   await page.route("https://tile.openstreetmap.org/**", route => route.fulfill({
     status:200, contentType:"image/png", body:TILE,
