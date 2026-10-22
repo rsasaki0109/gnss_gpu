@@ -50,3 +50,10 @@ test("real five-system completed city snapshots remain byte-for-byte unchanged b
   assert.equal(result.spp.all.horizontal,23.369187327492245);
   assert.deepEqual([...new Set(h.samples[0].signals.map(s=>s.id[0]))].sort(),["C","E","G","J","R"]);
 });
+
+test("history CSV preserves captured receiver settings and full precision",async()=>{
+  const {SignalHistory,historyCSV}=await modules,h=new SignalHistory();
+  h.append(snapshot(123.123456789,{antenna:2.1,mask:15,systems:"R"}));
+  const csv=historyCSV(h.samples);
+  assert.ok(csv.includes("123.123456789"));assert.ok(csv.includes("systems,antenna_offset_m,mask_deg"));assert.ok(csv.includes("fixed,rhcp,isotropic,R,2.1,15"));
+});
