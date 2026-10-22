@@ -88,6 +88,22 @@ test("PLATEAU full-mesh simulation responds to exact epochs and receiver control
   expect(layout.scroll).toBeLessThanOrEqual(layout.client + 2); expect(errors).toEqual([]);
 });
 
+test("the public scene keeps exact results when WebAssembly is unavailable in its Worker",async({page})=>{
+  await page.route("**/simulation/city-worker.mjs*",async route=>{
+    const response=await route.fetch(),source=await response.text();
+    await route.fulfill({response,body:'self.WebAssembly=undefined;\n'+source});
+  });
+  await page.goto("simulation.html");
+  await expect(page.locator("#scene")).toHaveAttribute("data-ready","true",{timeout:45000});
+  await expect(page.locator(".metrics strong")).toHaveText(["4","1","3"]);
+  await expect(page.locator("#spp-all")).toHaveText("65.74 m");
+  await expect(page.locator("#excess-value")).toHaveText("+23.038 m");
+  await page.locator("#antenna").press("End");
+  await expect(page.locator("#scene")).toHaveAttribute("data-antenna","20");
+  await expect(page.locator(".metrics strong")).toHaveText(["7","0","1"]);
+  await expect(page.locator("#spp-all")).toHaveText("0.00 m");
+});
+
 test("results page links to PLATEAU simulation within the Pages project prefix", async ({ page }) => {
   await page.goto("./");
   await expect(page).toHaveURL(/\/gnss_gpu\/simulation\.html$/);

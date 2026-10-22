@@ -1,11 +1,11 @@
 import { C, add, sub, dot, mul, norm, geodetic, enuRotation, localPoint, selectNavigation, receivedSatellite, geometricSPP } from "./orbit.mjs";
-import { MeshBVH } from "./mesh.mjs?v=reflection-batch-1";
+import { MeshBVH } from "./mesh.mjs?v=reflection-wasm-1";
 
 export class CitySimulation {
-  constructor(scene, mesh) {
+  constructor(scene, mesh, options) {
     if (scene.version !== 1 || scene.stats.triangles !== mesh.triangleCount || scene.stats.vertices !== mesh.vertexCount) throw new Error("Scene and mesh versions differ");
     this.scene = scene;
-    this.bvh = new MeshBVH(mesh);
+    this.bvh = new MeshBVH(mesh, options);
   }
 
   compute({ epoch = 0, antenna = 0, mask = 10 } = {}) {
