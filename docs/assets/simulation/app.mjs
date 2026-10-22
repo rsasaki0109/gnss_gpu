@@ -1,3 +1,4 @@
+import { SignalHistoryPlot } from "./signal-history.mjs?v=signal-history-1";
 import { C, GNSS_SYSTEMS } from "./orbit.mjs?v=glonass-1";
 import { decodeMesh } from "./mesh.mjs?v=glonass-1";
 import { CityRenderer } from "./renderer.mjs?v=surface-1";
@@ -18,6 +19,7 @@ let playing = false, dirty = true, previousTime = 0, playbackEpoch = settings.ep
 let routeNavigator, controlsReady = false;
 let linkAssets, pendingReplay;
 let reference, referenceURL, comparisonReference, comparisonSnapshot;
+const signalPlot = new SignalHistoryPlot($("signal-history"));
 const skyPlot = new SkyPlot($("sky-plot"), id => { setPlaying(false); selectSatellite(id); });
 const reflectionPanel = new ReflectionGeometry($("reflection-panel"));
 const rangePanel = new RangeFit($("range-panel"), id => { setPlaying(false); selectSatellite(id); });
@@ -62,7 +64,7 @@ function syncRoute() {
 function currentTrace() { return Boolean(controlsReady && snapshot?.epoch === settings.epoch && snapshot.antenna === settings.antenna && snapshot.mask === settings.mask && snapshot.systems === settings.systems); }
 function seekEpoch(epoch) {
   if (!controlsReady) return;
-  setPlaying(false); settings.epoch = stepEpoch(epoch, 0, scene.track.length);
+  setPlaying(false); signalPlot.clear(); settings.epoch = stepEpoch(epoch, 0, scene.track.length);
   revision++; syncControls(); requestTrace();
 }
 function setPlaying(value) {
@@ -116,6 +118,7 @@ function selectSatellite(id) {
   pendingReplay = null; if (selected !== id) clearSurfaceFocus(); selected = id; inspect(); dirty = true;
 }
 function inspect() {
+  signalPlot.render(selected);
   for (const button of document.querySelectorAll("[data-satellite]")) button.setAttribute("aria-pressed", String(button.dataset.satellite === selected));
   const signal = snapshot.satellites.find(s => s.id === selected); $("selected-id").textContent = signal?.id ?? "—";
   syncFocusUI();
@@ -269,13 +272,13 @@ function restoreSceneLink(resetEmpty = false) {
   try { state = readSceneLink(location.hash, linkAssets); }
   catch (error) { state = { ...DEFAULT_SCENE }; warning = `${error.message} Showing the default scene.`; }
   if (!state) { if (resetEmpty && !location.hash) state = { ...DEFAULT_SCENE }; else return false; }
-  setPlaying(false); resetCamera();
+  setPlaying(false); signalPlot.clear(); resetCamera();
   Object.assign(settings, { epoch: state.epoch, antenna: state.antenna, mask: state.mask, systems: state.systems });
   $("antenna").value = state.antenna; $("mask").value = state.mask;
   selected = state.satellite || undefined; showReflections = state.reflections;
   $("reflections").checked = state.reflections; $("basemap").checked = state.basemap; renderer.basemap.setEnabled(state.basemap);
   pendingReplay = { state, warning }; sceneNotice(warning, Boolean(warning)); syncControls();
-  if (currentTrace() && !busy && !pending) applySceneView();
+  if (currentTrace() && !busy && !pending) { signalPlot.append(snapshot); applySceneView(); }
   else { revision++; requestTrace(true); }
   return true;
 }
@@ -319,7 +322,7 @@ $("play").addEventListener("click", () => setPlaying(!playing));
 $("reflections").addEventListener("change", event => { pendingReplay = null; showReflections = event.target.checked; if (!showReflections && renderer?.focus?.kind === "reflection") clearSurfaceFocus(); dirty = true; });
 $("basemap").addEventListener("change", event => { pendingReplay = null; renderer?.basemap.setEnabled(event.target.checked); dirty = true; });
 $("reset").addEventListener("click", () => {
-  setPlaying(false); Object.assign(settings, { epoch: 8000, antenna: 0, mask: 10, systems: GNSS_SYSTEMS });
+  setPlaying(false); signalPlot.clear(); Object.assign(settings, { epoch: 8000, antenna: 0, mask: 10, systems: GNSS_SYSTEMS });
   $("antenna").value = 0; $("mask").value = 10; $("preset").value = "8000";
   resetCamera(); revision++; syncControls(); requestTrace();
 });
@@ -394,7 +397,7 @@ async function initialize() {
     if (data.type === "error") { fail(new Error(data.error)); return; }
     if (data.type === "ready") { busy = false; controlsReady = true; for (const input of document.querySelectorAll("[data-load-control]")) input.disabled = false; syncRoute(); if (!restoreSceneLink()) requestTrace(); return; }
     busy = false;
-    if (data.revision === revision) { clearSurfaceFocus(); snapshot = data.snapshot; canvas.dataset.traceId = data.id; updateReadout(data.milliseconds); applySceneView(); }
+    if (data.revision === revision) { clearSurfaceFocus(); snapshot = data.snapshot; signalPlot.append(snapshot); canvas.dataset.traceId = data.id; updateReadout(data.milliseconds); applySceneView(); }
     if (pending) { const item = pending; pending = null; send(item); }
   };
   worker.postMessage({ type: "init", scene, buffer: meshBuffer }, [meshBuffer]); syncControls();
