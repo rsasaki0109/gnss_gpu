@@ -1,5 +1,5 @@
-import { encoded } from "./reflection-candidates.bytes.mjs?v=reflection-simd-1";
-import { encoded as simdEncoded } from "./reflection-candidates-simd.bytes.mjs?v=reflection-simd-1";
+import { encoded } from "./reflection-candidates.bytes.mjs?v=reflection-loops-1";
+import { encoded as simdEncoded } from "./reflection-candidates-simd.bytes.mjs?v=reflection-loops-1";
 
 export const REFLECTION_SOURCE_LIMIT = 512;
 let attempted = false, compiled = null;
