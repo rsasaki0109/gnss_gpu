@@ -1,3 +1,4 @@
+import { signalMetrics, validatePower } from "./power-model.mjs?v=analysis-1";
 // Display-only link model: per-satellite 20 Mm reference,
 // fixed 0.5 reflected field coefficient, earliest path only. No C/N0 claim.
 export function relativePower(signal) {
@@ -12,14 +13,15 @@ export function relativePower(signal) {
 export class SignalHistory {
   constructor() { this.clear(); }
   clear() { this.samples = []; this.key = null; }
-  append(snapshot) {
+  append(snapshot, scene, options) {
+    const model=validatePower(options);
     const time = snapshot.week * 604800 + snapshot.tow;
     if (!Number.isFinite(time)) throw new RangeError("Invalid signal time");
-    const key = JSON.stringify([snapshot.antenna, snapshot.mask, snapshot.systems]);
+    const key = JSON.stringify([snapshot.antenna, snapshot.mask, snapshot.systems, model]);
     const last = this.samples.at(-1);
     if (key !== this.key || (last && time < last.time)) this.clear();
     this.key = key;
-    const sample = {time, epoch:snapshot.epoch, signals:snapshot.satellites.map(s => ({id:s.id, status:s.status, power:relativePower(s)}))};
+    const sample = {time, week:snapshot.week, tow:snapshot.tow, epoch:snapshot.epoch, model, bias:snapshot.spp?.all?.horizontal??null, signals:scene ? signalMetrics(snapshot,scene,model) : snapshot.satellites.map(s => ({id:s.id, status:s.status, power:relativePower(s), elevation:s.elevation, extra:s.status==="LOS"?0:s.status==="NLOS"?s.reflection.extra:null}))};
     if (this.samples.at(-1)?.time === time) this.samples.pop();
     this.samples.push(sample);
     this.samples = this.samples.filter(s => time - s.time <= 120).slice(-600);
@@ -34,11 +36,17 @@ export class SignalHistoryPlot {
     this.svg = root.querySelector("svg"); this.readout = root.querySelector("output");
   }
   clear() { this.history.clear(); this.render(); }
-  append(snapshot) { this.history.append(snapshot); }
+  append(snapshot,scene,options) { this.history.append(snapshot,scene,options); }
   render(selected) {
-    const samples = this.history.samples, latest = samples.at(-1);
+    const metric=this.root.querySelector("#history-metric")?.value??"power";
+    const unit={power:"dB",elevation:"°",extra:"m",bias:"m"}[metric];
+    const heading=this.root.querySelector("#history-unit");if(heading)heading.textContent=metric==="power"?"Model · relative dB":metric==="bias"?"Geometric fit² · m":`${metric} · ${unit}`;
+    const samples = this.history.samples.map(sample=>({...sample,signals:metric==="bias"?[{id:"FIT",status:"GEOMETRIC",power:sample.bias}]:sample.signals.map(signal=>({...signal,power:signal[metric]}))})), latest = samples.at(-1);
+    if(metric==="bias")selected="FIT";
     this.root.dataset.samples = samples.length;
     this.svg.replaceChildren();
+    const exportButton=this.root.querySelector("#history-export");if(exportButton)exportButton.disabled=!latest;
+    this.svg.setAttribute("aria-label", `Completed ${metric} history, ${unit}`);
     if (!latest) { delete this.root.dataset.epoch; delete this.root.dataset.selected; this.readout.textContent = "Waiting for a completed trace…"; return; }
     this.root.dataset.epoch = latest.epoch;
     this.root.dataset.selected = selected ?? "";
@@ -49,10 +57,10 @@ export class SignalHistoryPlot {
       this.svg.append(el); return el;
     };
     const values = samples.flatMap(s => s.signals.map(v => v.power).filter(Number.isFinite));
-    const low = Math.min(-12, Math.floor(Math.min(0,...values) / 5) * 5), high = Math.max(3, Math.ceil(Math.max(0,...values) / 5) * 5);
+    const low = metric==="power"?Math.min(-12, Math.floor(Math.min(0,...values)/5)*5):0, high = Math.max(metric==="elevation"?90:metric==="power"?3:10, Math.ceil(Math.max(0,...values)/5)*5);
     const x = t => 45 + (t - latest.time + 120) / 120 * 645;
     const y = power => 14 + (high - power) / (high - low) * 126;
-    for (const level of [high,0,low]) {
+    for (const level of [...new Set([high,0,low])]) {
       node("line", {x1:45,x2:690,y1:y(level),y2:y(level),stroke:"#ffffff20"});
       node("text", {x:39,y:y(level)+4,"text-anchor":"end",fill:"#a9b9b6","font-size":11},`${level}`);
     }
@@ -68,7 +76,7 @@ export class SignalHistoryPlot {
         path += `${previous && sample.time-previous.time<=10 ? "L" : "M"}${x(sample.time)},${y(signal.power)} `;
         if (id===selected || sample===latest) {
           const point = node("circle", {...attrs,cx:x(sample.time),cy:y(signal.power),r:id===selected?2.5:2,fill:attrs.stroke});
-          const title = document.createElementNS(NS,"title"); title.textContent = `${id} · ${signal.status} · ${signal.power.toPrecision(8)} dB · GPST ${sample.time}`; point.append(title);
+          const title = document.createElementNS(NS,"title"); title.textContent = `${id} · ${signal.status} · ${signal.power.toPrecision(8)} ${unit} · GPST ${sample.time}`; point.append(title);
         }
         previous = {time:sample.time,power:signal.power};
       }
@@ -76,6 +84,12 @@ export class SignalHistoryPlot {
     }
     const signal = latest.signals.find(s=>s.id===selected);
     const clock = new Date(Date.UTC(1980,0,6) + latest.time * 1000).toISOString().slice(11,23);
-    this.readout.textContent = `${selected ?? "—"} · ${signal?.power == null ? "No modeled path" : `${signal.power.toFixed(2)} dB`} · ${clock} GPST · ${samples.length} samples`;
+    this.readout.textContent = `${selected ?? "—"} · ${signal?.power == null ? (metric==="power"&&signal?.powerState==="zero"?"Zero by RF model":"Value unavailable") : `${signal.power.toFixed(2)} ${unit}`} · ${clock} GPST · ${samples.length} samples`;
   }
+}
+
+export function historyCSV(samples) {
+  const lines=["epoch,gps_week,gps_tow_s,satellite,path,elevation_deg,earliest_excess_m,modeled_relative_power_db,power_state,frequency_hz,horizontal_geometric_bias_m,material_assumption,polarization,antenna_pattern"];
+  for(const sample of samples)for(const signal of sample.signals)lines.push([sample.epoch,sample.week,sample.tow,signal.id,signal.status,signal.elevation,signal.extra,signal.power,signal.powerState,signal.frequency,sample.bias,sample.model.material,sample.model.polarization,sample.model.antenna].map(v=>v==null?"":String(v)).join(","));
+  return lines.join("\r\n")+"\r\n";
 }

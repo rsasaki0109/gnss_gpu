@@ -1,4 +1,5 @@
-import { SignalHistoryPlot } from "./signal-history.mjs?v=signal-history-1";
+import { SignalHistoryPlot, historyCSV } from "./signal-history.mjs?v=analysis-1";
+import { AnalysisView, download } from "./analysis-view.mjs?v=analysis-1";
 import { C, GNSS_SYSTEMS } from "./orbit.mjs?v=glonass-1";
 import { decodeMesh } from "./mesh.mjs?v=glonass-1";
 import { CityRenderer } from "./renderer.mjs?v=surface-1";
@@ -20,6 +21,11 @@ let routeNavigator, controlsReady = false;
 let linkAssets, pendingReplay;
 let reference, referenceURL, comparisonReference, comparisonSnapshot;
 const signalPlot = new SignalHistoryPlot($("signal-history"));
+const powerOptions=()=>({material:$("power-material").value,polarization:$("power-polarization").value,antenna:$("power-antenna").value});
+const analysisView=new AnalysisView($("route-analysis"),{settings:()=>({...settings}),power:powerOptions,send:item=>worker?.postMessage(item),pause:()=>setPlaying(false),seek:seekEpoch});
+$("history-metric").addEventListener("change",()=>signalPlot.render(selected));
+$("history-export").addEventListener("click",()=>download("gnss-signal-history.csv",historyCSV(signalPlot.history.samples)));
+for(const id of ["power-material","power-polarization","power-antenna"])$(id).addEventListener("change",()=>{setPlaying(false);signalPlot.clear();if(currentTrace()){signalPlot.append(snapshot,scene,powerOptions());signalPlot.render(selected);}});
 const skyPlot = new SkyPlot($("sky-plot"), id => { setPlaying(false); selectSatellite(id); });
 const reflectionPanel = new ReflectionGeometry($("reflection-panel"));
 const rangePanel = new RangeFit($("range-panel"), id => { setPlaying(false); selectSatellite(id); });
@@ -68,7 +74,7 @@ function seekEpoch(epoch) {
   revision++; syncControls(); requestTrace();
 }
 function setPlaying(value) {
-  if (value) { clearSurfaceFocus(); pendingReplay = null; $("share-panel").open = false; $("compare-panel").open = false; $("reflection-panel").open = false; $("range-panel").open = false; }
+  if (value) { worker?.postMessage({type:"analysis-pause"}); clearSurfaceFocus(); pendingReplay = null; $("share-panel").open = false; $("compare-panel").open = false; $("reflection-panel").open = false; $("range-panel").open = false; }
   playing = value; playbackEpoch = settings.epoch; $("play").setAttribute("aria-pressed", String(value));
   $("play-icon").textContent = value ? "Ⅱ" : "▶"; $("play-label").textContent = value ? "Pause" : "Play · 10×";
   updateSky();
@@ -278,7 +284,7 @@ function restoreSceneLink(resetEmpty = false) {
   selected = state.satellite || undefined; showReflections = state.reflections;
   $("reflections").checked = state.reflections; $("basemap").checked = state.basemap; renderer.basemap.setEnabled(state.basemap);
   pendingReplay = { state, warning }; sceneNotice(warning, Boolean(warning)); syncControls();
-  if (currentTrace() && !busy && !pending) { signalPlot.append(snapshot); applySceneView(); }
+  if (currentTrace() && !busy && !pending) { signalPlot.append(snapshot,scene,powerOptions()); applySceneView(); }
   else { revision++; requestTrace(true); }
   return true;
 }
@@ -391,13 +397,14 @@ async function initialize() {
   $("geometry-readout").textContent = `${scene.stats.buildings.toLocaleString("en-US")} building components · ${scene.stats.bridges} bridge components · ${scene.stats.holes} interior rings preserved`;
   $("repair-readout").textContent = `${scene.stats.topology_repaired_faces} source face repaired with GEOS linework; ${scene.stats.inserted_boundary_vertices} boundary-intersection vertices inserted. No mesh decimation or coordinate quantization.`;
   status("Indexing all 320,932 triangles…");
-  worker = new Worker(new URL("./city-worker.mjs?v=glonass-1", import.meta.url), { type: "module" });
+  worker = new Worker(new URL("./city-worker.mjs?v=analysis-1", import.meta.url), { type: "module" });
   worker.onerror = event => fail(new Error(event.message || "The simulation worker stopped."));
   worker.onmessage = ({ data }) => {
+    if (data.type === "analysis" || data.type === "analysis-error") { analysisView.receive(data); return; }
     if (data.type === "error") { fail(new Error(data.error)); return; }
-    if (data.type === "ready") { busy = false; controlsReady = true; for (const input of document.querySelectorAll("[data-load-control]")) input.disabled = false; syncRoute(); if (!restoreSceneLink()) requestTrace(); return; }
+    if (data.type === "ready") { busy = false; controlsReady = true; analysisView.init(scene,linkAssets); for (const input of document.querySelectorAll("[data-load-control]")) input.disabled = false; syncRoute(); if (!restoreSceneLink()) requestTrace(); return; }
     busy = false;
-    if (data.revision === revision) { clearSurfaceFocus(); snapshot = data.snapshot; signalPlot.append(snapshot); canvas.dataset.traceId = data.id; updateReadout(data.milliseconds); applySceneView(); }
+    if (data.revision === revision) { clearSurfaceFocus(); snapshot = data.snapshot; signalPlot.append(snapshot,scene,powerOptions()); canvas.dataset.traceId = data.id; updateReadout(data.milliseconds); applySceneView(); }
     if (pending) { const item = pending; pending = null; send(item); }
   };
   worker.postMessage({ type: "init", scene, buffer: meshBuffer }, [meshBuffer]); syncControls();

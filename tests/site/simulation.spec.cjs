@@ -28,6 +28,52 @@ function tileFixture() {
 }
 const TILE = tileFixture();
 
+test("route evaluation compares exact completed poses, exports assumptions and inspects a map result",async({page},testInfo)=>{
+  const errors=[];page.on("pageerror",e=>errors.push(e.message));
+  await page.goto("simulation.html");const canvas=page.locator("#scene");
+  await expect(canvas).toHaveAttribute("data-ready","true",{timeout:45000});
+  const trace=await canvas.getAttribute("data-trace-id"),bias=await page.locator("#spp-all").textContent();
+  await page.locator("#history-metric").selectOption("bias");
+  await expect(page.locator("#signal-history")).toHaveAttribute("data-selected","FIT");
+  await page.locator("#signal-history details > summary").click();
+  await page.locator("#power-material").selectOption("glass");
+  await page.locator("#power-antenna").selectOption("zenith");
+  await expect(page.locator("#spp-all")).toHaveText(bias);await expect(canvas).toHaveAttribute("data-trace-id",trace);
+  const historyDownload=page.waitForEvent("download");await page.locator("#history-export").click();
+  const historyCSV=fs.readFileSync(await(await historyDownload).path(),"utf8");
+  expect(historyCSV).toContain("modeled_relative_power_db,power_state");expect(historyCSV).toContain("glass,rhcp,zenith");
+  const root=page.locator("#route-analysis");await root.locator(":scope > summary").click();
+  await page.locator("#analysis-range").selectOption("50");await page.locator("#analysis-step").selectOption("10");
+  await page.locator("#analysis-start").click();
+  await expect(root).toHaveAttribute("data-state","complete",{timeout:45000});await expect(root).toHaveAttribute("data-completed","11");
+  await expect(canvas).toHaveAttribute("data-trace-id",trace);await expect(page.locator("#spp-all")).toHaveText(bias);
+  const jsonDownload=page.waitForEvent("download");await page.locator("#analysis-json").click();
+  const output=JSON.parse(fs.readFileSync(await(await jsonDownload).path(),"utf8"));
+  expect(output.completed).toBe(11);expect(output.total).toBe(11);expect(output.assets.mesh).toBe(MANIFEST.mesh.sha256);
+  expect(output.results[0].epoch).toBe(7950);expect(output.results.at(-1).epoch).toBe(8050);
+  expect(output.results.every(row=>row.traces===1)).toBe(true);expect(output.power.material).toBe("glass");
+  expect(output.conditions.map(c=>c.systems)).toEqual(["GECJR","G"]);
+  const csvDownload=page.waitForEvent("download");await page.locator("#analysis-csv").click();
+  const csv=fs.readFileSync(await(await csvDownload).path(),"utf8");expect(csv).toContain("horizontal_geometric_bias_m");expect(csv).toContain("glass,rhcp,zenith");
+  await page.locator("#analysis-condition").selectOption("2");await page.locator("#analysis-metric").selectOption("blocked");
+  await root.screenshot({path:testInfo.outputPath("route-analysis.png")});
+  await page.locator("#analysis-jump").click();await expect(canvas).toHaveAttribute("data-epoch","7950");
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test("long route evaluation pauses, resumes, stops and preserves partial exports",async({page})=>{
+  await page.goto("simulation.html");await expect(page.locator("#scene")).toHaveAttribute("data-ready","true",{timeout:45000});
+  const root=page.locator("#route-analysis");await root.locator(":scope > summary").click();await page.locator("#analysis-start").click();
+  await expect.poll(async()=>Number(await root.getAttribute("data-completed"))).toBeGreaterThan(0);
+  await page.locator("#analysis-pause").click();await expect(root).toHaveAttribute("data-state","paused");
+  const completed=Number(await root.getAttribute("data-completed"));
+  await page.locator("#analysis-pause").click();await expect.poll(async()=>Number(await root.getAttribute("data-completed"))).toBeGreaterThan(completed);
+  await page.locator("#analysis-stop").click();await expect(root).toHaveAttribute("data-state","cancelled");await expect(page.locator("#analysis-csv")).toBeEnabled();
+  const download=page.waitForEvent("download");await page.locator("#analysis-json").click();const output=JSON.parse(fs.readFileSync(await(await download).path(),"utf8"));
+  expect(output.state).toBe("cancelled");expect(output.completed).toBeGreaterThan(0);expect(output.completed).toBeLessThan(output.total);
+});
+
 test("signal history streams completed five-system samples and resets on seek/settings", async ({page}, testInfo) => {
   const errors=[]; page.on("pageerror",error=>errors.push(error.message));
   await page.goto("simulation.html");
