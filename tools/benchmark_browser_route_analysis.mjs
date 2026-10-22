@@ -23,4 +23,4 @@ for(let round=-2;round<7;round++)for(const name of ["independent","shared","shar
 }
 const median=values=>{const s=[...values].sort((a,b)=>a-b);return (s[(s.length-1)>>1]+s[s.length>>1])/2;};
 const baseline=median(times.independent),shared=median(times.shared);
-console.log(JSON.stringify({schema:1,scope:"CPU compute only; same-height five-system versus GPS comparison",epochs,conditions,rounds:7,order:"ABBA",exactSnapshotChecks:checks,independentMedianMs:baseline,sharedMedianMs:shared,speedup:baseline/shared,computeReductionPercent:100*(1-shared/baseline),times},null,2));
+console.log(JSON.stringify({schema:1,scope:"CPU compute only; same-height five-system versus GPS comparison",epochs,conditions,rounds:7,order:"ABBA",exactComparisonChecks:checks,independentMedianMs:baseline,sharedMedianMs:shared,speedup:baseline/shared,computeReductionPercent:100*(1-shared/baseline),times},null,2));
