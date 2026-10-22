@@ -210,10 +210,13 @@ def triangulate(rings, stats=None):
     return triangles
 
 
-def read_navigation(path, start, stop, week):
+def read_navigation(path, start, stop, week, systems="GECJ"):
     with allowed(path).open(encoding="ascii") as stream:
         lines = iter(stream)
+        gpga = None
         for line in lines:
+            if line.startswith("GPGA") and "TIME SYSTEM CORR" in line:
+                gpga = [float(line[5:22].replace("D", "E")), float(line[22:38].replace("D", "E")), int(line[38:45]), int(line[45:50])]
             if "END OF HEADER" in line:
                 break
         records = []
@@ -222,7 +225,7 @@ def read_navigation(path, start, stop, week):
                 continue
             system = line[0]
             block = [next(lines) for _ in range(3 if system in "RS" else 7)]
-            if system != "G":
+            if system not in systems:
                 continue
             fields = [
                 float(
@@ -235,22 +238,27 @@ def read_navigation(path, start, stop, week):
             toc_abs = (
                 datetime(*stamp, tzinfo=timezone.utc) - GPS_EPOCH
             ).total_seconds()
-            toe_abs = int(fields[18]) * 604800 + fields[8]
+            toe_abs = (int(fields[18]) + (1356 if system == "C" else 0)) * 604800 + fields[8] + (14 if system == "C" else 0)
+            healthy = (int(fields[17]) & 5 and int(fields[17]) & 512 and int(fields[21]) & 7 == 0 and fields[20] >= 0) if system == "E" else fields[21] == 0
+            maximum_age = 14400 if system == "E" else 3600 if system == "C" else 7200
             if (
-                fields[21] != 0
-                or toe_abs < week * 604800 + start - 7200
-                or toe_abs > week * 604800 + stop + 7200
+                not healthy
+                or toe_abs < week * 604800 + start - maximum_age
+                or toe_abs > week * 604800 + stop + maximum_age
             ):
                 continue
             clocks = [
                 float(line[23 + 19 * i : 23 + 19 * (i + 1)].replace("D", "E"))
                 for i in range(3)
             ]
-            records.append(
-                {"id": line[:3], "toc": toc_abs, "clock": clocks, "parameters": fields}
-            )
+            record = {"id": line[:3], "toc": toc_abs, "clock": clocks, "parameters": fields}
+            if system == "E":
+                if gpga is None:
+                    raise ValueError("Galileo requires GPGA time correction")
+                record["gpga"] = gpga
+            records.append(record)
     if not records:
-        raise ValueError("No matching healthy GPS broadcast records")
+        raise ValueError("No matching healthy GNSS broadcast records")
     return records
 
 
@@ -416,7 +424,7 @@ def build(gml_dir, reference, nav, geoid, output):
             "city_license": "CC BY 4.0",
             "files": sources,
             "track_source": "UrbanNav-TK-20181219 / Odaiba, Applanix POS LV620 reference.csv (all epochs)",
-            "navigation_source": "UrbanNav base.nav, DLR/TUM CONGO/MGEX merged RINEX 3.03 GPS broadcast ephemerides",
+            "navigation_source": "UrbanNav base.nav, DLR/TUM CONGO/MGEX merged RINEX 3.03 GPS/Galileo/BeiDou/QZSS broadcast ephemerides",
             "urbannav_url": "https://github.com/IPNL-POLYU/UrbanNavDataset",
             "reference_sha256": sha(reference),
             "navigation_sha256": sha(nav),
@@ -451,6 +459,27 @@ def build(gml_dir, reference, nav, geoid, output):
     return manifest
 
 
+
+def update_navigation(nav, output):
+    """Refresh broadcast records without regenerating or rounding city geometry."""
+    output = allowed(output)
+    manifest_path = output / "manifest.json"
+    original_manifest = manifest_path.read_bytes()
+    manifest = json.loads(original_manifest)
+    path = output / manifest["scene"]["file"]
+    if sha(path) != manifest["scene"]["sha256"]:
+        raise ValueError("Existing scene checksum differs")
+    scene = json.loads(gzip.decompress(path.read_bytes()))
+    scene["navigation"] = read_navigation(nav, scene["track"][0][0], scene["track"][-1][0], scene["week"])
+    scene["provenance"]["navigation_source"] = "UrbanNav base.nav, DLR/TUM CONGO/MGEX merged RINEX 3.03 GPS/Galileo/BeiDou/QZSS broadcast ephemerides"
+    scene["provenance"]["navigation_sha256"] = sha(nav)
+    manifest["scene"] = compress(path, json.dumps(scene, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode())
+    manifest["provenance"] = scene["provenance"]
+    newline = "\r\n" if b"\r\n" in original_manifest else "\n"
+    manifest_path.write_bytes((json.dumps(manifest, indent=2) + "\n").replace("\n", newline).encode())
+    print(dict(Counter(r["id"][0] for r in scene["navigation"])))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gml-dir", type=Path, default=Path("data/plateau/odaiba"))
@@ -466,7 +495,11 @@ def main():
         "--geoid", type=Path, default=Path("data/geoid/gsigeo2011_ver2_1.asc")
     )
     parser.add_argument("--output", type=Path, default=Path("docs/assets/plateau"))
+    parser.add_argument("--navigation-only", action="store_true", help="Refresh navigation in an existing verified scene; keep the mesh unchanged")
     args = parser.parse_args()
+    if args.navigation_only:
+        update_navigation(args.nav, args.output)
+        return
     build(args.gml_dir, args.reference, args.nav, args.geoid, args.output)
 
 

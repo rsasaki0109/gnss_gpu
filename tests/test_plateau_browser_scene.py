@@ -138,5 +138,59 @@ class GeometryTests(unittest.TestCase):
             )
 
 
+
+class NavigationTests(unittest.TestCase):
+    @staticmethod
+    def nav_file(path, gpga=True, health=0):
+        header = ""
+        if gpga:
+            header = f"GPGA {2.6e-9:17.10E}{-1.5e-14:16.9E}{259200:7d}{2032:5d}          TIME SYSTEM CORR\n"
+        text = header + "                                                            END OF HEADER\n"
+        for system in "GECJ":
+            fields = [0.0] * 28
+            fields[5], fields[7], fields[8] = .005, 5153.7, 273600
+            fields[17], fields[18] = (517 if system == "E" else 0), (676 if system == "C" else 2032)
+            fields[20], fields[21], fields[24] = 1, (health if system == "E" else 0), 273500
+            text += f"{system}01 2018 12 19 04 00 00" + "".join(f"{v:19.12E}" for v in [1e-4, 0, 0]) + "\n"
+            for i in range(0, 28, 4):
+                text += "    " + "".join(f"{v:19.12E}" for v in fields[i:i+4]) + "\n"
+        path.write_text(text, encoding="ascii")
+
+    def test_four_system_records_keep_native_weeks_and_time_corrections(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "mixed.nav"
+            self.nav_file(path)
+            records = builder.read_navigation(path, 273600, 274000, 2032)
+            self.assertEqual([r["id"] for r in records], ["G01", "E01", "C01", "J01"])
+            self.assertEqual(records[2]["parameters"][18], 676)
+            self.assertEqual(records[1]["gpga"], [2.6e-9, -1.5e-14, 259200, 2032])
+            self.assertEqual(len(builder.read_navigation(path, 273600, 274000, 2032, systems="G")), 1)
+            self.nav_file(path, health=1)
+            self.assertNotIn("E01", [r["id"] for r in builder.read_navigation(path, 273600, 274000, 2032)])
+            self.nav_file(path, gpga=False)
+            with self.assertRaisesRegex(ValueError, "GPGA"):
+                builder.read_navigation(path, 273600, 274000, 2032)
+
+    def test_navigation_refresh_is_reproducible_and_leaves_mesh_untouched(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            nav = folder / "mixed.nav"
+            self.nav_file(nav)
+            mesh = folder / "mesh.bin.gz"
+            mesh.write_bytes(b"unchanged geometry")
+            scene = {"week": 2032, "track": [[273600], [274000]], "navigation": [], "provenance": {}}
+            info = builder.compress(folder / "scene.json.gz", json.dumps(scene).encode())
+            manifest = {"scene": info, "mesh": {"file": mesh.name}, "provenance": {}}
+            (folder / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            builder.update_navigation(nav, folder)
+            first = (folder / "scene.json.gz").read_bytes()
+            builder.update_navigation(nav, folder)
+            self.assertEqual((folder / "scene.json.gz").read_bytes(), first)
+            self.assertEqual(mesh.read_bytes(), b"unchanged geometry")
+            (folder / "scene.json.gz").write_bytes(b"corrupted")
+            with self.assertRaisesRegex(ValueError, "checksum"):
+                builder.update_navigation(nav, folder)
+
+
 if __name__ == "__main__":
     unittest.main()

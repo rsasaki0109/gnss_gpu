@@ -35,6 +35,7 @@ export function pinnedPositionFit(reference,snapshot,view,{enabled = false,ready
   if (focused) return {state:"surface"};
   if (![reference.epoch,reference.week,reference.tow,snapshot.epoch,snapshot.week,snapshot.tow].every(Number.isFinite) ||
       reference.epoch !== snapshot.epoch || reference.week !== snapshot.week || reference.tow !== snapshot.tow) return {state:"different-pose"};
+  if ((reference.systems ?? "G") !== (snapshot.systems ?? "G")) return {state:"different-systems"};
   if (reference.antenna === snapshot.antenna && reference.mask === snapshot.mask) return {state:"same-settings"};
   if (!snapshot.spp?.all) return {state:"no-current-solution"};
   // The pin is a detached summary in the same fixed scene frame. Its receiver

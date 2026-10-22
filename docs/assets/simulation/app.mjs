@@ -1,17 +1,17 @@
-import { C } from "./orbit.mjs";
-import { decodeMesh } from "./mesh.mjs?v=reflection-loops-1";
+import { C, GNSS_SYSTEMS } from "./orbit.mjs?v=multi-gnss-1";
+import { decodeMesh } from "./mesh.mjs?v=multi-gnss-1";
 import { CityRenderer } from "./renderer.mjs?v=surface-1";
 import { RouteNavigator, stepEpoch } from "./route-navigation.mjs?v=route-1";
 import { clampViewPitch } from "./view-geometry.mjs";
-import { DEFAULT_SCENE, readSceneLink, writeSceneLink } from "./scene-link.mjs";
-import { captureReference, compareReceiver } from "./comparison.mjs?v=pinned-1";
-import { SkyPlot } from "./sky-plot.mjs?v=arrival-1";
+import { DEFAULT_SCENE, readSceneLink, writeSceneLink } from "./scene-link.mjs?v=multi-gnss-1";
+import { captureReference, compareReceiver } from "./comparison.mjs?v=multi-gnss-1";
+import { SkyPlot } from "./sky-plot.mjs?v=multi-gnss-1";
 import { ReflectionGeometry } from "./reflection-geometry.mjs";
 import { RangeFit } from "./range-fit.mjs";
-import { PositionFit } from "./position-fit.mjs?v=pinned-1";
+import { PositionFit } from "./position-fit.mjs?v=multi-gnss-1";
 
 const $ = id => document.getElementById(id);
-const canvas = $("scene"), settings = { epoch: 8000, antenna: 0, mask: 10 };
+const canvas = $("scene"), settings = { epoch: 8000, antenna: 0, mask: 10, systems: GNSS_SYSTEMS };
 const colors = { LOS: "#85e4bc", NLOS: "#efbc79", BLOCKED: "#ec8f91" };
 let scene, renderer, worker, snapshot, selected, busy = true, pending, revision = 0, nextId = 0;
 let playing = false, dirty = true, previousTime = 0, playbackEpoch = settings.epoch, showReflections = true;
@@ -35,6 +35,7 @@ function fail(error) {
 }
 function gpst(tow) { return new Date((scene.week * 604800 + tow) * 1000 + Date.UTC(1980, 0, 6)).toISOString().slice(11, 23); }
 function syncControls() {
+  $("gnss-systems").value = settings.systems;
   $("antenna-out").textContent = `+${settings.antenna.toFixed(1)} m`; $("mask-out").textContent = `${settings.mask}°`;
   $("progress").value = settings.epoch;
   $("progress-out").textContent = scene ? `${gpst(scene.track[settings.epoch][0])} GPST` : "Loading…";
@@ -58,7 +59,7 @@ function syncRoute() {
   routeNavigator.update(settings.epoch, ready, controlsReady, label);
   syncFocusUI();
 }
-function currentTrace() { return Boolean(controlsReady && snapshot?.epoch === settings.epoch && snapshot.antenna === settings.antenna && snapshot.mask === settings.mask); }
+function currentTrace() { return Boolean(controlsReady && snapshot?.epoch === settings.epoch && snapshot.antenna === settings.antenna && snapshot.mask === settings.mask && snapshot.systems === settings.systems); }
 function seekEpoch(epoch) {
   if (!controlsReady) return;
   setPlaying(false); settings.epoch = stepEpoch(epoch, 0, scene.track.length);
@@ -92,9 +93,9 @@ function updateReadout(milliseconds) {
   $("scene-description").textContent = `${snapshot.latitude.toFixed(6)}° N  ${snapshot.longitude.toFixed(6)}° E`;
   $("osm-location").href = `https://www.openstreetmap.org/?mlat=${snapshot.latitude.toFixed(6)}&mlon=${snapshot.longitude.toFixed(6)}#map=17/${snapshot.latitude.toFixed(6)}/${snapshot.longitude.toFixed(6)}`;
   $("epoch-readout").textContent = `${snapshot.epoch + 1} / ${scene.track.length.toLocaleString("en-US")} · ${gpst(snapshot.tow)} GPST`;
-  $("gps-readout").textContent = `${snapshot.satellites.length} GPS above ${snapshot.mask}° · ${Math.round(milliseconds)} ms / epoch`;
+  $("gps-readout").textContent = `${snapshot.satellites.length} GNSS above ${snapshot.mask}° · ${Math.round(milliseconds)} ms / epoch`;
   status("Live · PLATEAU geometry");
-  Object.assign(canvas.dataset, { ready: "true", epoch: snapshot.epoch, antenna: snapshot.antenna, mask: snapshot.mask, triangles: scene.stats.triangles, receiver: snapshot.receiver.join(",") });
+  Object.assign(canvas.dataset, { ready: "true", epoch: snapshot.epoch, antenna: snapshot.antenna, mask: snapshot.mask, systems: snapshot.systems, triangles: scene.stats.triangles, receiver: snapshot.receiver.join(",") });
   if (!snapshot.satellites.some(s => s.id === selected)) selected = (snapshot.satellites.find(s => s.status === "NLOS") ?? snapshot.satellites[0])?.id;
   const buttons = snapshot.satellites.map(signal => {
     const button = document.createElement("button"); button.type = "button"; button.className = "satellite"; button.dataset.satellite = signal.id;
@@ -118,7 +119,7 @@ function inspect() {
   for (const button of document.querySelectorAll("[data-satellite]")) button.setAttribute("aria-pressed", String(button.dataset.satellite === selected));
   const signal = snapshot.satellites.find(s => s.id === selected); $("selected-id").textContent = signal?.id ?? "—";
   syncFocusUI();
-  if (!signal) { $("channel-status").textContent = "No GPS satellite above this mask."; return; }
+  if (!signal) { $("channel-status").textContent = "No GNSS satellite above this mask."; return; }
   $("channel-status").textContent = signal.status === "LOS" ? "Direct LOS" : signal.status === "NLOS" ? "Reflected arrival · direct blocked" : "No modeled path";
   $("channel-status").style.color = colors[signal.status];
   $("direct-value").textContent = signal.directHit ? `Blocked at ${signal.directHit.distance.toFixed(1)} m` : "Clear within loaded mesh";
@@ -198,7 +199,7 @@ function sceneNotice(message, warning = false) {
 function shareStatus(message) { if ($("share-status").textContent !== message) $("share-status").textContent = message; }
 function sceneURL() {
   const camera = renderer.camera;
-  return writeSceneLink(location.href, { epoch: snapshot.epoch, antenna: snapshot.antenna, mask: snapshot.mask, satellite: selected, view: renderer.focus?.kind ?? (camera.overview ? "overview" : "receiver"), yaw: camera.yaw, pitch: camera.pitch, zoom: camera.zoom, basemap: $("basemap").checked, reflections: showReflections }, linkAssets);
+  return writeSceneLink(location.href, { epoch: snapshot.epoch, antenna: snapshot.antenna, mask: snapshot.mask, systems: snapshot.systems, satellite: selected, view: renderer.focus?.kind ?? (camera.overview ? "overview" : "receiver"), yaw: camera.yaw, pitch: camera.pitch, zoom: camera.zoom, basemap: $("basemap").checked, reflections: showReflections }, linkAssets);
 }
 function updateShare() {
   const ready = currentTrace() && Boolean(linkAssets), input = $("scene-link"), open = $("open-scene-link");
@@ -232,6 +233,7 @@ function updateComparison() {
   if (!ready) { message("pending", "Waiting for the selected pose and receiver settings to finish tracing…"); return; }
   if (!reference) { message("empty", "Pin a completed scene, then change height or elevation mask at the same pose."); return; }
   const result = compareReceiver(reference, snapshot);
+  if (result.state === "different-systems") { message("different-systems", "Choose the pinned satellite systems or pin the current scene to compare."); return; }
   if (result.state !== "ready") { message("different-pose", "Different recorded pose. Return to the pinned pose to compare your current receiver settings, or replace the reference."); return; }
   message("ready", `Same recorded pose · ${result.changes} satellite path / mask ${result.changes === 1 ? "change" : "changes"} · current − pinned`);
   $("comparison-results").hidden = false;
@@ -268,7 +270,7 @@ function restoreSceneLink(resetEmpty = false) {
   catch (error) { state = { ...DEFAULT_SCENE }; warning = `${error.message} Showing the default scene.`; }
   if (!state) { if (resetEmpty && !location.hash) state = { ...DEFAULT_SCENE }; else return false; }
   setPlaying(false); resetCamera();
-  Object.assign(settings, { epoch: state.epoch, antenna: state.antenna, mask: state.mask });
+  Object.assign(settings, { epoch: state.epoch, antenna: state.antenna, mask: state.mask, systems: state.systems });
   $("antenna").value = state.antenna; $("mask").value = state.mask;
   selected = state.satellite || undefined; showReflections = state.reflections;
   $("reflections").checked = state.reflections; $("basemap").checked = state.basemap; renderer.basemap.setEnabled(state.basemap);
@@ -308,6 +310,7 @@ $("copy-scene-link").addEventListener("click", async () => {
 });
 $("dismiss-scene-notice").addEventListener("click", () => sceneNotice(""));
 window.addEventListener("hashchange", () => { if (controlsReady && linkAssets) restoreSceneLink(true); });
+$("gnss-systems").addEventListener("change", event => { setPlaying(false); settings.systems = event.target.value; reference = referenceURL = comparisonReference = comparisonSnapshot = null; revision++; syncControls(); requestTrace(); });
 for (const id of ["antenna", "mask"]) $(id).addEventListener("input", event => { settings[id] = Number(event.target.value); revision++; syncControls(); requestTrace(); });
 $("progress").addEventListener("input", event => seekEpoch(Number(event.target.value)));
 $("preset").addEventListener("change", event => seekEpoch(Number(event.target.value)));
@@ -316,7 +319,7 @@ $("play").addEventListener("click", () => setPlaying(!playing));
 $("reflections").addEventListener("change", event => { pendingReplay = null; showReflections = event.target.checked; if (!showReflections && renderer?.focus?.kind === "reflection") clearSurfaceFocus(); dirty = true; });
 $("basemap").addEventListener("change", event => { pendingReplay = null; renderer?.basemap.setEnabled(event.target.checked); dirty = true; });
 $("reset").addEventListener("click", () => {
-  setPlaying(false); Object.assign(settings, { epoch: 8000, antenna: 0, mask: 10 });
+  setPlaying(false); Object.assign(settings, { epoch: 8000, antenna: 0, mask: 10, systems: GNSS_SYSTEMS });
   $("antenna").value = 0; $("mask").value = 10; $("preset").value = "8000";
   resetCamera(); revision++; syncControls(); requestTrace();
 });
@@ -383,7 +386,7 @@ async function initialize() {
   $("geometry-readout").textContent = `${scene.stats.buildings.toLocaleString("en-US")} building components · ${scene.stats.bridges} bridge components · ${scene.stats.holes} interior rings preserved`;
   $("repair-readout").textContent = `${scene.stats.topology_repaired_faces} source face repaired with GEOS linework; ${scene.stats.inserted_boundary_vertices} boundary-intersection vertices inserted. No mesh decimation or coordinate quantization.`;
   status("Indexing all 320,932 triangles…");
-  worker = new Worker(new URL("./city-worker.mjs?v=reflection-loops-1", import.meta.url), { type: "module" });
+  worker = new Worker(new URL("./city-worker.mjs?v=multi-gnss-1", import.meta.url), { type: "module" });
   worker.onerror = event => fail(new Error(event.message || "The simulation worker stopped."));
   worker.onmessage = ({ data }) => {
     if (data.type === "error") { fail(new Error(data.error)); return; }

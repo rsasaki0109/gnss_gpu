@@ -39,7 +39,7 @@ function element(tag, attributes = {}, text) {
 export class SkyPlot {
   constructor(root, onSelect) {
     this.root = root; this.onSelect = onSelect;
-    this.svg = element("svg",{viewBox:"0 0 300 300",role:"group","aria-label":"GPS sky directions, north up and east right"});
+    this.svg = element("svg",{viewBox:"0 0 300 300",role:"group","aria-label":"GNSS sky directions, north up and east right"});
     this.svg.append(element("desc",{},"Circles show geometric satellite directions above the completed elevation mask. The diamond shows the selected satellite's shortest reflected arrival when above the local horizon. Select with Enter or Space, or use the satellite list."));
     const grid = element("g",{"aria-hidden":"true",class:"sky-grid"});
     grid.append(element("circle",{cx:150,cy:150,r:110,class:"sky-horizon"}));
@@ -91,7 +91,7 @@ export class SkyPlot {
       this.updateArrival(scene,snapshot,signal,{ready,error});
       this.selected = selected; this.lastReady = ready; this.lastError = error;
     }
-    const source = error ? "Sky unavailable · simulation stopped" : !snapshot ? "Preparing GPS sky…" : `${ready ? "Completed" : playing ? "Live completed trace · updating" : "Previous trace · updating"} · ${snapshot.satellites.length} GPS · ${snapshot.mask}° mask · ${time} GPST`;
+    const source = error ? "Sky unavailable · simulation stopped" : !snapshot ? "Preparing GNSS sky…" : `${ready ? "Completed" : playing ? "Live completed trace · updating" : "Previous trace · updating"} · ${snapshot.satellites.length} GNSS · ${snapshot.mask}° mask · ${time} GPST`;
     if (this.source.textContent !== source) this.source.textContent = source;
     const description = signal ? `${signal.id} · az ${signal.azimuth.toFixed(1)}° · el ${signal.elevation.toFixed(1)}° · ${signal.status}` : "Select a satellite to inspect its direction.";
     if (this.selection.textContent !== description) this.selection.textContent = description;

@@ -66,6 +66,8 @@ test("full-mesh fits preserve the original bias, coincidence and unavailable sol
   const {positionFit}=await modulePromise;
   const [{CitySimulation},{decodeMesh}]=await Promise.all([import("../../docs/assets/simulation/city.mjs"),import("../../docs/assets/simulation/mesh.mjs")]);
   const folder=path.join(__dirname,"../../docs/assets/plateau"),scene=JSON.parse(gunzipSync(fs.readFileSync(path.join(folder,"odaiba-scene.json.gz")))),bytes=gunzipSync(fs.readFileSync(path.join(folder,"odaiba-mesh.bin.gz")));
+  // Preserve the original GPS-only numerical regression alongside multi-GNSS tests.
+  scene.navigation = scene.navigation.filter(record => record.id.startsWith("G"));
   const simulation=new CitySimulation(scene,decodeMesh(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength)));
   for(const settings of [{epoch:8000},{epoch:8000,antenna:20},{epoch:8000,mask:30},{epoch:3890,mask:12}]){
     const snapshot=freeze(simulation.compute(settings)),before=structuredClone(snapshot),result=positionFit(snapshot,view(-.63,.82,800,565,snapshot.receiver));
@@ -108,6 +110,8 @@ test("pinned comparisons require completed matching times, distinct settings and
 test("real height comparisons project the exact pinned full-mesh fit without rebasing its bias",async()=>{
   const [{pinnedPositionFit,positionFit},{captureReference},{CitySimulation},{decodeMesh}]=await Promise.all([modulePromise,import("../../docs/assets/simulation/comparison.mjs"),import("../../docs/assets/simulation/city.mjs"),import("../../docs/assets/simulation/mesh.mjs")]);
   const folder=path.join(__dirname,"../../docs/assets/plateau"),scene=JSON.parse(gunzipSync(fs.readFileSync(path.join(folder,"odaiba-scene.json.gz")))),bytes=gunzipSync(fs.readFileSync(path.join(folder,"odaiba-mesh.bin.gz")));
+  // Preserve the original GPS-only numerical regression alongside multi-GNSS tests.
+  scene.navigation = scene.navigation.filter(record => record.id.startsWith("G"));
   const simulation=new CitySimulation(scene,decodeMesh(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength)));
   const low=freeze(simulation.compute({epoch:8000})),high=freeze(simulation.compute({epoch:8000,antenna:20})),masked=freeze(simulation.compute({epoch:8000,mask:30}));
   const before=[low,high,masked].map(value=>structuredClone(value));

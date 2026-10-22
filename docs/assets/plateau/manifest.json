@@ -8,9 +8,9 @@
   },
   "scene": {
     "file": "odaiba-scene.json.gz",
-    "bytes": 210867,
-    "sha256": "60c301f8c4bcaebd295a76bd6676af01fdfd48c387f412691c5055ade1225ed0",
-    "raw_sha256": "e07a2ab456ba007b063d0c6f4518d6474277bcd7e4d1180aca071aae0615cc4b"
+    "bytes": 293325,
+    "sha256": "5d62422ed47417969c374c9a396d4caea373eba6249453fa0ef5640987ad6a61",
+    "raw_sha256": "d943f0d6f59294db47381d29657f38ec5c96c8fc6f3d6507709e54bb258d17f4"
   },
   "stats": {
     "polygons": 107119,
@@ -199,12 +199,12 @@
       }
     ],
     "track_source": "UrbanNav-TK-20181219 / Odaiba, Applanix POS LV620 reference.csv (all epochs)",
-    "navigation_source": "UrbanNav base.nav, DLR/TUM CONGO/MGEX merged RINEX 3.03 GPS broadcast ephemerides",
+    "navigation_source": "UrbanNav base.nav, DLR/TUM CONGO/MGEX merged RINEX 3.03 GPS/Galileo/BeiDou/QZSS broadcast ephemerides",
     "urbannav_url": "https://github.com/IPNL-POLYU/UrbanNavDataset",
     "reference_sha256": "fbf3f0054df8e68d7552d1e930221a80bfba45ea37703b64c7abf148750c301d",
     "navigation_sha256": "c58bd7ecaf7c7a0766fa9bc23ba7b0666172c28c95a13c35ac973f88b2645b35",
     "geoid": {
-      "name": "GSIGEO2011 ver.2.1, bilinear, 1 arc-minute × 1.5 arc-minute",
+      "name": "GSIGEO2011 ver.2.1, bilinear, 1 arc-minute \u00d7 1.5 arc-minute",
       "source": "https://web1.gsi.go.jp/common/000275010.zip",
       "sha256": "0d3681ae15459433cf07fb4a65b128b1f74b2bf5a9e377c566d45952b96019c8",
       "min_m": 36.10553436622479,

@@ -73,6 +73,8 @@ test("reflection points, shared-edge deduplication and contact limits match the 
 test("all full-city snapshot fields and reflection paths match the pre-optimization predicate",async()=>{
   const [{decodeMesh},{CitySimulation}]=await modules,folder=path.join(__dirname,"../../docs/assets/plateau");
   const scene=JSON.parse(gunzipSync(fs.readFileSync(path.join(folder,"odaiba-scene.json.gz")))),bytes=gunzipSync(fs.readFileSync(path.join(folder,"odaiba-mesh.bin.gz")));
+  // Preserve the original GPS-only numerical regression alongside multi-GNSS tests.
+  scene.navigation = scene.navigation.filter(record => record.id.startsWith("G"));
   const geometry=decodeMesh(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength));
   const current=new CitySimulation(scene,geometry),reference=new CitySimulation(scene,geometry);reference.bvh.containsXYZ=originalContains;
   reference.bvh.reflectionsBatch=function(receiver,sources){return sources.map(source=>this.reflections(receiver,source));};

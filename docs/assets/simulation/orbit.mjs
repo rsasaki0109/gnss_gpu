@@ -1,4 +1,5 @@
-// GPS broadcast orbits (IS-GPS-200), all state computation in binary64.
+// Broadcast Kepler orbits; all state computation remains binary64.
+// RINEX 3.03 Appendix A; Galileo OS SIS ICD; BDS B1I ICD (GEO rotation).
 export const C = 299792458;
 export const WEEK = 604800;
 export const OMEGA_E = 7.2921151467e-5;
@@ -10,13 +11,33 @@ export const mul = (a, k) => a.map(v => v * k);
 export const dot = (a, b) => a.reduce((sum, v, i) => sum + v * b[i], 0);
 export const norm = a => Math.hypot(...a);
 const weekDelta = t => t > WEEK / 2 ? t - WEEK : t < -WEEK / 2 ? t + WEEK : t;
+export const GNSS_SYSTEMS = "GECJ";
+export function validateSystems(systems) {
+  if (![GNSS_SYSTEMS, "G", "E", "C", "J"].includes(systems)) throw new RangeError("Invalid GNSS systems");
+  return systems;
+}
+function systemTime(record, time, week) {
+  if (record.id[0] === "C") return { time: time - 14, week: week - 1356 };
+  if (record.id[0] === "E") {
+    if (!Array.isArray(record.gpga) || record.gpga.length !== 4 || !record.gpga.every(Number.isFinite) || Math.abs(record.gpga[1]) >= 1) throw new RangeError("Invalid Galileo time correction");
+    const [a0, a1, tow, referenceWeek] = record.gpga;
+    // GST - GPST = A0G + A1G*(GST-reference). Solve the affine equation.
+    time += (a0 + a1 * ((week - referenceWeek) * WEEK + time - tow)) / (1 - a1);
+  }
+  return { time, week };
+}
 
 // Keep GPS week and seconds-of-week separate to retain sub-microsecond time.
-export function orbit(record, time, week = record.parameters[18]) {
+export function orbit(record, time, week = record.parameters[18] + (record.id[0] === "C" ? 1356 : 0)) {
   const p = record.parameters;
-  if (p.length < 26 || !p.every(Number.isFinite) || !(p[5] >= 0 && p[5] < 1) || p[7] < 1000 || !Number.isFinite(time)) throw new RangeError("Invalid broadcast orbit");
+  const system = record.id[0];
+  if (!GNSS_SYSTEMS.includes(system) || p.length < 26 || !p.every(Number.isFinite) || !(p[5] >= 0 && p[5] < 1) || p[7] < 1000 || !Number.isFinite(time) || !Number.isInteger(week)) throw new RangeError("Invalid broadcast orbit");
+  ({time, week} = systemTime(record, time, week));
+  const mu = system === "E" || system === "C" ? 3.986004418e14 : MU;
+  const omega = system === "C" ? 7.292115e-5 : OMEGA_E;
+  const relativity = system === "E" || system === "C" ? -4.442807309e-10 : RELATIVITY;
   const tk = weekDelta((week - p[18]) * WEEK + time - p[8]);
-  const a = p[7] ** 2, motion = Math.sqrt(MU / a ** 3) + p[2];
+  const a = p[7] ** 2, motion = Math.sqrt(mu / a ** 3) + p[2];
   const mean = p[3] + motion * tk;
   let eccentric = mean, converged = false;
   for (let i = 0; i < 20; i++) {
@@ -32,29 +53,43 @@ export function orbit(record, time, week = record.parameters[18]) {
   const radius = a * denominator + p[13] * cos2 + p[1] * sin2;
   const inclination = p[12] + p[16] * tk + p[9] * cos2 + p[11] * sin2;
   const x = radius * Math.cos(u), y = radius * Math.sin(u);
-  const node = p[10] + (p[15] - OMEGA_E) * tk - OMEGA_E * p[8];
-  const position = [x * Math.cos(node) - y * Math.cos(inclination) * Math.sin(node), x * Math.sin(node) + y * Math.cos(inclination) * Math.cos(node), y * Math.sin(inclination)];
-  const dt = weekDelta((week - Math.floor(record.toc / WEEK)) * WEEK + time - record.toc % WEEK), f = record.clock;
-  const clock = f[0] + f[1] * dt + f[2] * dt * dt + RELATIVITY * p[5] * p[7] * sinE - p[22];
+  // This fixture contains BDS-2 GEO C01..C05; other BDS records are MEO/IGSO.
+  const geo = system === "C" && Number(record.id.slice(1)) <= 5;
+  const node = p[10] + (p[15] - (geo ? 0 : omega)) * tk - omega * p[8];
+  let position = [x * Math.cos(node) - y * Math.cos(inclination) * Math.sin(node), x * Math.sin(node) + y * Math.cos(inclination) * Math.cos(node), y * Math.sin(inclination)];
+  if (geo) {
+    const [gx, gy, gz] = position, angle = omega * tk, tilt = -5 * Math.PI / 180;
+    position = [gx * Math.cos(angle) + (gy * Math.cos(tilt) + gz * Math.sin(tilt)) * Math.sin(angle),
+      -gx * Math.sin(angle) + (gy * Math.cos(tilt) + gz * Math.sin(tilt)) * Math.cos(angle), -gy * Math.sin(tilt) + gz * Math.cos(tilt)];
+  }
+  // TOC is stored as calendar seconds from the GPS epoch in its native scale.
+  const tocWeek = Math.floor(record.toc / WEEK) - (system === "C" ? 1356 : 0);
+  const dt = weekDelta((week - tocWeek) * WEEK + time - record.toc % WEEK), f = record.clock;
+  const groupDelay = system === "E" && (p[17] & 512) ? p[23] : p[22];
+  const clock = f[0] + f[1] * dt + f[2] * dt * dt + relativity * p[5] * p[7] * sinE - groupDelay;
   return { position, clock };
 }
 
 export function selectNavigation(records, time, week) {
   const selected = new Map();
   for (const record of records) {
-    const p = record.parameters, toe = (p[18] - week) * WEEK + p[8];
-    const age = Math.abs(time - toe), fit = (p[25] > 1 ? p[25] : 4) * 1800;
-    let transmission = (p[18] - week) * WEEK + p[24];
+    const system = record.id[0];
+    if (!GNSS_SYSTEMS.includes(system)) continue;
+    const native = systemTime(record, time, week), p = record.parameters, toe = (p[18] - native.week) * WEEK + p[8];
+    const age = Math.abs(native.time - toe), fit = system === "E" ? 14400 : system === "C" ? 3600 : (p[25] > 1 ? p[25] : 4) * 1800;
+    let transmission = (p[18] - native.week) * WEEK + p[24];
     if (transmission - toe > WEEK / 2) transmission -= WEEK;
     if (transmission - toe < -WEEK / 2) transmission += WEEK;
-    if (p[21] !== 0 || age > fit || transmission > time + 1e-6) continue;
+    // E1 needs an I/NAV source and valid/healthy E1B, not unused E5 health bits.
+    const healthy = system === "E" ? (p[17] & 5) !== 0 && (p[17] & 512) !== 0 && (p[21] & 7) === 0 && p[20] >= 0 : p[21] === 0;
+    if (!healthy || age > fit || p[24] === 0.9999e9 || transmission > native.time + 1e-6) continue;
     const previous = selected.get(record.id);
     if (!previous || age < previous.age || (age === previous.age && record.toc > previous.record.toc)) selected.set(record.id, { record, age });
   }
   return [...selected.values()].map(item => item.record).sort((a, b) => a.id.localeCompare(b.id));
 }
 
-export function receivedSatellite(record, time, receiver, week = record.parameters[18]) {
+export function receivedSatellite(record, time, receiver, week = record.parameters[18] + (record.id[0] === "C" ? 1356 : 0)) {
   let tau = 0.075, state;
   for (let i = 0; i < 8; i++) {
     const raw = orbit(record, time - tau, week), theta = OMEGA_E * tau;

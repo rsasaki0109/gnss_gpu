@@ -69,6 +69,8 @@ test("real full-mesh reflections satisfy the law without modifying any original 
   const {reflectionGeometry}=await modulePromise;
   const [{CitySimulation},{decodeMesh}]=await Promise.all([import("../../docs/assets/simulation/city.mjs"),import("../../docs/assets/simulation/mesh.mjs")]);
   const folder=path.join(__dirname,"../../docs/assets/plateau"),scene=JSON.parse(gunzipSync(fs.readFileSync(path.join(folder,"odaiba-scene.json.gz")))),bytes=gunzipSync(fs.readFileSync(path.join(folder,"odaiba-mesh.bin.gz")));
+  // Preserve the original GPS-only numerical regression alongside multi-GNSS tests.
+  scene.navigation = scene.navigation.filter(record => record.id.startsWith("G"));
   const simulation=new CitySimulation(scene,decodeMesh(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength)));
   for(const settings of [{epoch:8000},{epoch:8000,antenna:20},{epoch:3890,mask:12}]){
     const snapshot=simulation.compute(settings),before=structuredClone(snapshot),signal=snapshot.satellites.find(s=>s.id===(settings.antenna?"G10":"G12")),result=reflectionGeometry(snapshot,signal);
