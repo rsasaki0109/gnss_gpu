@@ -42,6 +42,10 @@ test("recorded strength loads verified raw observations lazily, aligns time and 
   await expect(page.locator("#recorded-value")).toContainText(`${expected[1]} dB-Hz`);await expect(page.locator("#recorded-value")).toContainText("units inferred");
   await expect(canvas).toHaveAttribute("data-trace-id",trace);await expect(page.locator("#spp-all")).toHaveText(bias);
   const download=page.waitForEvent("download");await page.locator("#recorded-export").click();const csv=fs.readFileSync(await(await download).path(),"utf8");expect(csv).toContain(`${expected[0]},trimble,${id},S1C,${expected[1]},inferred-rtkconv`);
+  await page.locator("#play").click();await expect.poll(async()=>Number(await root.getAttribute("data-epoch"))).toBeGreaterThan(8000);
+  await page.locator("#play").click();await expect(page.locator("#route-trace")).toHaveAttribute("data-ready","true");
+  await expect(root).toHaveAttribute("data-epoch",await canvas.getAttribute("data-epoch"));
+  await page.locator("#preset").selectOption("8000");await expect(root).toHaveAttribute("data-epoch","8000");
   await page.locator("#recorded-receiver").selectOption("ublox");await expect(root).toHaveAttribute("data-receiver","ublox");await expect(root).toHaveAttribute("data-state","ready");
   const u=JSON.parse(gunzipSync(fs.readFileSync(path.join(__dirname,"../../docs/assets/plateau/odaiba-strength-ublox.json.gz"))));
   const has=u.signals[id]?.samples.some(s=>Math.abs(s[0]-time)<.002)??false;await expect(root).toHaveAttribute("data-matched",String(has));
