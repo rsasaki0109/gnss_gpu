@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "sceneSha256": "930f2aecb9d6fae40a585886b0ad480b37dd3ef98d484212da5803df245da54b",
+  "referenceSha256": "fbf3f0054df8e68d7552d1e930221a80bfba45ea37703b64c7abf148750c301d",
+  "sourceURL": "https://github.com/IPNL-POLYU/UrbanNavDataset",
+  "license": "UrbanNav-LICENSE.txt",
+  "receivers": {
+    "trimble": {
+      "file": "odaiba-strength-trimble.json.gz",
+      "bytes": 855173,
+      "sha256": "e69b7e56138f56b4c5c05d0a17a7238b7abab767823cfd0239f377f40a593987",
+      "samples": 276988,
+      "unitStatus": "inferred-rtkconv",
+      "source": {
+        "file": "rover_trimble.obs",
+        "sha256": "3ebb5c4f95a7a399900109a6b1086f7f359c593abdeb07a453e18f5b2f7e0ee8",
+        "bytes": 71151487
+      }
+    },
+    "ublox": {
+      "file": "odaiba-strength-ublox.json.gz",
+      "bytes": 502094,
+      "sha256": "d10a2ae6c29adaa4e3b48e749b1485a9af21b753dbebe6bedd7864975367039e",
+      "samples": 177225,
+      "unitStatus": "inferred-rtkconv",
+      "source": {
+        "file": "rover_ublox.obs",
+        "sha256": "7541282f75349063dadb2338c921ac80f11eb9aa28d181d43692387279c2837f",
+        "bytes": 27699610
+      }
+    }
+  }
+}

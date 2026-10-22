@@ -1,3 +1,4 @@
+import { RecordedStrength } from "./recorded-strength.mjs?v=recorded-1";
 import { SignalHistoryPlot, historyCSV } from "./signal-history.mjs?v=analysis-1";
 import { AnalysisView, download } from "./analysis-view.mjs?v=route-summary-1";
 import { C, GNSS_SYSTEMS } from "./orbit.mjs?v=glonass-1";
@@ -21,6 +22,7 @@ let routeNavigator, controlsReady = false;
 let linkAssets, pendingReplay;
 let reference, referenceURL, comparisonReference, comparisonSnapshot;
 const signalPlot = new SignalHistoryPlot($("signal-history"));
+const recordedPlot = new RecordedStrength($("recorded-strength"));
 const powerOptions=()=>({material:$("power-material").value,polarization:$("power-polarization").value,antenna:$("power-antenna").value});
 const analysisView=new AnalysisView($("route-analysis"),{settings:()=>({...settings}),power:powerOptions,send:item=>worker?.postMessage(item),pause:()=>setPlaying(false),seek:seekEpoch});
 $("history-metric").addEventListener("change",()=>signalPlot.render(selected));
@@ -124,7 +126,7 @@ function selectSatellite(id) {
   pendingReplay = null; if (selected !== id) clearSurfaceFocus(); selected = id; inspect(); dirty = true;
 }
 function inspect() {
-  signalPlot.render(selected);
+  signalPlot.render(selected); recordedPlot.update(snapshot,selected,linkAssets);
   for (const button of document.querySelectorAll("[data-satellite]")) button.setAttribute("aria-pressed", String(button.dataset.satellite === selected));
   const signal = snapshot.satellites.find(s => s.id === selected); $("selected-id").textContent = signal?.id ?? "—";
   syncFocusUI();

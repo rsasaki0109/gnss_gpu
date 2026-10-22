@@ -10,4 +10,5 @@ python3 experiments/build_paper_assets.py
 python3 experiments/build_githubio_summary.py
 npm run site:simulation:model
 python3 -m unittest discover -s tests -p test_plateau_browser_scene.py
+python3 -m unittest discover -s tests -p test_browser_recorded_strength.py
 npm run site:smoke
