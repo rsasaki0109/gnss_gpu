@@ -52,6 +52,7 @@ test("selected ground path renders, changes assumed power and exports coherent f
   await page.locator("#forest-scene").screenshot({path:testInfo.outputPath("ground-reflection.png")});
   const pending=page.waitForEvent("download");await page.locator("#forest-export").click();const data=JSON.parse(fs.readFileSync(await (await pending).path(),"utf8")),packet=data.selectedReflection;
   expect(packet.model).toBe("finite-terrain-reflection-v1");expect(packet.options.completeSegments).toBe(true);expect(packet.options.bounceLoss).toBe(30);expect(packet.tow).toBe(data.tow);
+  expect(packet.satelliteStateConvention).toContain("no reflected-flight-time orbit iteration");
   const signal=data.signals.find(s=>s.id===packet.satellite);
   for(const p of packet.paths){
     expect(p.reason).toBe(null);expect(p.relativePowerDb).not.toBe(null);expect(p.sourceRange).toBeGreaterThan(1e6);

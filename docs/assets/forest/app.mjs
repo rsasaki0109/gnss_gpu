@@ -15,7 +15,7 @@ function updateGroundReflection(){
   if(!signal){reflectionPacket=null;}
   else if(reflectionCache?.model!==groundModel||reflectionCache.signal!==signal||reflectionCache.key!==key){
     const started=performance.now(),result=groundModel.paths(receiver,signal.sourceENU,assumptions);
-    reflectionPacket={...result,satellite:signal.id,week:scene.week,tow:scene.track[0][0]+completedSeconds};
+    reflectionPacket={...result,satellite:signal.id,week:scene.week,tow:scene.track[0][0]+completedSeconds,satelliteStateConvention:"direct-flight-time broadcast state held fixed across geometric alternatives; no reflected-flight-time orbit iteration"};
     reflectionCache={model:groundModel,signal,key};$("forest-ground-cost").textContent=`${(performance.now()-started).toFixed(1)} ms · selected-signal reflection query`;
   }
   const first=reflectionPacket?.paths[0],readout=$("forest-ground");
