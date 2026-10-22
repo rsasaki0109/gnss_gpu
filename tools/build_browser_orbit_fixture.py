@@ -36,15 +36,21 @@ def build(root: Path, navigation: Path, scene_path: Path, output: Path, systems=
         records = [r for r in scene["navigation"] if r["id"] == satellite]
         if not records:
             continue
-        record = min(records, key=lambda r: abs(r["parameters"][8] - 273600))
-        nav = next(
-            n
-            for n in navs[satellite]
-            if n.toe == record["parameters"][8]
-            and n.af0 == record["clock"][0]
-            and n.week == record["parameters"][18]
-        )
-        for time in (273375.025, 273975.1, 274615.925):
+        record = min(records, key=lambda r: abs((r["toc"] % 604800 if satellite[0] == "R" else r["parameters"][8]) - 273600))
+        if satellite[0] == "R":
+            nav = next(n for n in navs[satellite] if n.toe == record["toc"] % 604800 and n.glo_tau_n == -record["clock"][0])
+        else:
+            nav = next(
+                n
+                for n in navs[satellite]
+                if n.toe == record["parameters"][8]
+                and n.af0 == record["clock"][0]
+                and n.week == record["parameters"][18]
+            )
+        times = (273375.025, 273975.1, 274615.925)
+        if satellite[0] == "R":
+            times = [record["toc"] % 604800 + record["utcOffset"] + dt for dt in (-900, -899.925, -60.1, 0, 60.1, 899.925, 900)]
+        for time in times:
             native_time = time
             if nav.system == "E":
                 a0, a1, tow, reference_week = record["gpga"]
@@ -61,20 +67,25 @@ def build(root: Path, navigation: Path, scene_path: Path, output: Path, systems=
                 tilt = math.radians(5)
                 rx = np.array([[1, 0, 0], [0, math.cos(tilt), -math.sin(tilt)], [0, math.sin(tilt), math.cos(tilt)]])
                 position = rz(-angle) @ rx @ rz(angle) @ position
-            cases.append(
-                {
+            case = {
                     "record": record,
                     "week": scene["week"],
                     "time": time,
                     "position": position.tolist(),
                     "clock": float(clock),
                 }
-            )
+            if nav.system == "R":
+                from gnss_gpu.ephemeris import _glonass_state_from_nav
+                from gnss_gpu.orbit_glonass import glonass_position_clock
+                refined, _ = glonass_position_clock(_glonass_state_from_nav(nav), time, step_s=1)
+                case["refined_position"] = refined.tolist()
+            cases.append(case)
     fixture = {
-        "method": "gnss_gpu.ephemeris.Ephemeris._compute_single_cpu (L1/E1/B1; GPGA alignment; BDS GEO independent frame-matrix composition; no GPU)",
+        "method": "gnss_gpu.ephemeris.Ephemeris._compute_single_cpu (L1/E1/B1/GLONASS L1; GPGA alignment; BDS GEO independent frame-matrix composition; no GPU)",
         "source_sha256": hashlib.sha256(
             (root / "python/gnss_gpu/ephemeris.py").read_bytes()
         ).hexdigest(),
+        "glonass_source_sha256": hashlib.sha256((root / "python/gnss_gpu/orbit_glonass.py").read_bytes()).hexdigest(),
         "navigation_sha256": hashlib.sha256(navigation.read_bytes()).hexdigest(),
         "cases": cases,
     }
@@ -99,6 +110,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output", type=Path, default=Path("tests/site/fixtures/gps-orbits.json")
     )
-    parser.add_argument("--systems", default="G", choices=("G", "GECJ"))
+    parser.add_argument("--systems", default="G", choices=("G", "GECJ", "R", "GECJR"))
     args = parser.parse_args()
     build(args.root, args.nav, args.scene, args.output, args.systems)

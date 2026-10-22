@@ -13,7 +13,7 @@ Trajectory and navigation: UrbanNav-TK-20181219 Odaiba, IPNL-POLYU UrbanNavDatas
 https://github.com/IPNL-POLYU/UrbanNavDataset
 MIT license and copyright notice: UrbanNav-LICENSE.txt in this directory.
 Reference: Applanix POS LV620 reference.csv. All 12,410 ECEF poses retained.
-Navigation: DLR/TUM CONGO/MGEX merged broadcast RINEX base.nav; GPS, Galileo E1, BeiDou B1 (including GEO), and QZSS used here.
+Navigation: DLR/TUM CONGO/MGEX merged broadcast RINEX base.nav; GPS, Galileo E1, BeiDou B1 (including GEO), QZSS, and GLONASS L1 used here.
 Time conventions and fields: https://files.igs.org/pub/data/format/rinex303.pdf
 Galileo orbit/time: https://www.gsc-europa.eu/sites/default/files/sites/all/files/Galileo_OS_SIS_ICD_v2.1.pdf
 BDS orbit: BDS-SIS-ICD-B1I-3.0, section 5.2.4.1 (GEO and MEO/IGSO).
@@ -36,3 +36,7 @@ OSM Standard raster tiles are requested only for the displayed camera view,
 with normal browser caching and visible attribution. They are not bundled
 or downloaded for offline use. OSM supplies display context only; the PLATEAU
 signal geometry and reference trajectory are not modified using OSM data.
+
+GLONASS: RINEX 3.03 Appendix A10; Float64 RK4 with J2 and broadcast acceleration.
+UTC to GPST uses the recorded 2018 offset of 18 seconds; nominal PZ-90.11/WGS84 alignment.
+Orbit equations: https://github.com/tomojitakasu/RTKLIB/blob/master/src/ephemeris.c

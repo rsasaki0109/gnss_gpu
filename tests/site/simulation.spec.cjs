@@ -1,6 +1,6 @@
 const { test, expect } = require("@playwright/test");
 const { deflateSync } = require("node:zlib");
-const { gunzipSync } = require("node:zlib");
+const { gunzipSync, gzipSync } = require("node:zlib");
 const fs = require("node:fs");
 const path = require("node:path");
 const SCENE = JSON.parse(gunzipSync(fs.readFileSync(path.join(__dirname, "../../docs/assets/plateau/odaiba-scene.json.gz"))));
@@ -443,7 +443,7 @@ test("incompatible links and unavailable signals or surfaces show explicit messa
   await expect(canvas).toHaveAttribute("data-antenna","0");
   await expect(page.locator("#scene-link-notice-text")).toHaveText("Scene link uses a different dataset. Showing the default scene.");
   await expect(page.locator("#scene-link-notice")).toHaveAttribute("data-warning","true");
-  await expect(page.locator("#gnss-systems")).toHaveValue("GECJ");
+  await expect(page.locator("#gnss-systems")).toHaveValue("GECJR");
   await page.goto("simulation.html"+sceneHash({sat:"G01"}));
   await expect(page.locator("#scene-link-notice-text")).toHaveText("G01 is unavailable at this epoch and mask. Showing G12.");
   await expect(page.locator("#selected-id")).toHaveText("G12");
@@ -963,9 +963,9 @@ test("pinned fit clears pending, focused, different-pose, missing and failed com
 });
 
 
-test("default multi-GNSS traces four systems, switches modes and restores a non-GPS scene link",async({page})=>{
+test("four-system multi-GNSS traces four systems, switches modes and restores a non-GPS scene link",async({page})=>{
  const errors=[];page.on("pageerror",e=>errors.push(e.message));
- await page.goto("simulation.html");
+ await page.goto("simulation.html"+sceneHash({systems:"GECJ"}));
  const canvas=page.locator("#scene");
  await expect(canvas).toHaveAttribute("data-ready","true",{timeout:45000});
  await expect(canvas).toHaveAttribute("data-systems","GECJ");
@@ -993,4 +993,53 @@ test("default multi-GNSS traces four systems, switches modes and restores a non-
  await expect(page.locator(".satellite")).toHaveCount(27);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2)).toBe(true);
  expect(errors).toEqual([]);
+});
+
+
+test("default GLONASS support traces five systems and shares GLONASS-only selections",async({page})=>{
+ const errors=[];page.on("pageerror",e=>errors.push(e.message));
+ await page.goto("simulation.html");
+ const canvas=page.locator("#scene");
+ await expect(canvas).toHaveAttribute("data-ready","true",{timeout:45000});
+ await expect(canvas).toHaveAttribute("data-systems","GECJR");
+ await expect(page.locator("#gnss-systems")).toHaveValue("GECJR");
+ await expect(page.locator(".satellite")).toHaveCount(34);
+ await expect(page.locator(".metrics strong")).toHaveText(["21","4","9"]);
+ await expect(page.locator("#spp-all")).toHaveText("23.37 m");
+ expect(await page.locator('[data-satellite^="R"]').count()).toBe(7);
+ await page.locator("#gnss-systems").selectOption("R");
+ await expect(canvas).toHaveAttribute("data-systems","R");
+ await expect(page.locator(".satellite")).toHaveCount(7);
+ await expect(page.locator(".metrics strong")).toHaveText(["3","3","1"]);
+ await page.locator('[data-satellite="R06"]').click();
+ await page.locator("#share-panel > summary").click();
+ await expect(page.locator("#scene-link")).toBeEnabled();
+ const link=await page.locator("#scene-link").inputValue();
+ const fields=new URLSearchParams(new URL(link).hash.slice(1));
+ expect(fields.get("systems")).toBe("R");expect(fields.get("sat")).toBe("R06");
+ await page.goto(link);
+ await expect(canvas).toHaveAttribute("data-ready","true",{timeout:45000});
+ await expect(canvas).toHaveAttribute("data-systems","R");
+ await expect(page.locator("#selected-id")).toHaveText("R06");
+ await page.locator("#reset").click();
+ await expect(canvas).toHaveAttribute("data-systems","GECJR");
+ await expect(page.locator(".satellite")).toHaveCount(34);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2)).toBe(true);
+ expect(errors).toEqual([]);
+});
+
+
+test("versioned scene requests avoid a stale four-system asset",async({page})=>{
+ const stale=gzipSync(Buffer.from(JSON.stringify({...SCENE,navigation:SCENE.navigation.filter(r=>r.id[0]!=="R")})));
+ const staleRequests=[];
+ await page.route("**/plateau/odaiba-scene.json.gz*",route=>{
+  if(new URL(route.request().url()).searchParams.get("sha256")===MANIFEST.scene.sha256) return route.continue();
+  staleRequests.push(route.request().url());
+  return route.fulfill({status:200,contentType:"application/gzip",body:stale,headers:{"Cache-Control":"public, max-age=600"}});
+ });
+ await page.goto("simulation.html");
+ await expect(page.locator("#scene")).toHaveAttribute("data-ready","true",{timeout:45000});
+ await expect(page.locator("#scene")).toHaveAttribute("data-systems","GECJR");
+ await expect(page.locator(".satellite")).toHaveCount(34);
+ expect(staleRequests).toEqual([]);
 });

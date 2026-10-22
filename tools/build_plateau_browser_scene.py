@@ -210,13 +210,16 @@ def triangulate(rings, stats=None):
     return triangles
 
 
-def read_navigation(path, start, stop, week, systems="GECJ"):
+def read_navigation(path, start, stop, week, systems="GECJR"):
     with allowed(path).open(encoding="ascii") as stream:
         lines = iter(stream)
         gpga = None
+        leap_seconds = None
         for line in lines:
             if line.startswith("GPGA") and "TIME SYSTEM CORR" in line:
                 gpga = [float(line[5:22].replace("D", "E")), float(line[22:38].replace("D", "E")), int(line[38:45]), int(line[45:50])]
+            if "LEAP SECONDS" in line:
+                leap_seconds = int(line[:6])
             if "END OF HEADER" in line:
                 break
         records = []
@@ -238,6 +241,28 @@ def read_navigation(path, start, stop, week, systems="GECJ"):
             toc_abs = (
                 datetime(*stamp, tzinfo=timezone.utc) - GPS_EPOCH
             ).total_seconds()
+            clocks = [float(line[23 + 19 * i:23 + 19 * (i + 1)].replace("D", "E")) for i in range(3)]
+            if system == "R":
+                # This archive has no LEAP SECONDS header. Its 2018 UTC epochs
+                # have GPST-UTC=18 s; other dates require explicit file metadata.
+                if leap_seconds is None and stamp[0] != 2018:
+                    raise ValueError("GLONASS outside the 2018 fixture requires LEAP SECONDS")
+                offset = 18 if leap_seconds is None else leap_seconds
+                if not 0 <= offset <= 64 or (stamp[0] == 2018 and offset != 18):
+                    raise ValueError("Invalid GLONASS UTC offset for the recorded epoch")
+                transmission = math.floor(toc_abs / 604800) * 604800 + clocks[2]
+                if transmission - toc_abs > 302400:
+                    transmission -= 604800
+                if transmission - toc_abs < -302400:
+                    transmission += 604800
+                if (not all(math.isfinite(v) for v in fields + clocks) or fields[3] != 0 or clocks[2] == 0.9999e9
+                    or toc_abs + offset < week * 604800 + start - 900 or toc_abs + offset > week * 604800 + stop + 900):
+                    continue
+                records.append({"id": line[:3], "toc": toc_abs, "week": int(toc_abs // 604800), "utcOffset": offset,
+                    "clock": clocks, "position": [fields[k] * 1000 for k in (0, 4, 8)],
+                    "velocity": [fields[k] * 1000 for k in (1, 5, 9)], "acceleration": [fields[k] * 1000 for k in (2, 6, 10)],
+                    "health": fields[3], "frequencyChannel": int(fields[7]), "transmission": transmission})
+                continue
             toe_abs = (int(fields[18]) + (1356 if system == "C" else 0)) * 604800 + fields[8] + (14 if system == "C" else 0)
             healthy = (int(fields[17]) & 5 and int(fields[17]) & 512 and int(fields[21]) & 7 == 0 and fields[20] >= 0) if system == "E" else fields[21] == 0
             maximum_age = 14400 if system == "E" else 3600 if system == "C" else 7200
@@ -424,7 +449,7 @@ def build(gml_dir, reference, nav, geoid, output):
             "city_license": "CC BY 4.0",
             "files": sources,
             "track_source": "UrbanNav-TK-20181219 / Odaiba, Applanix POS LV620 reference.csv (all epochs)",
-            "navigation_source": "UrbanNav base.nav, DLR/TUM CONGO/MGEX merged RINEX 3.03 GPS/Galileo/BeiDou/QZSS broadcast ephemerides",
+            "navigation_source": "UrbanNav base.nav, DLR/TUM CONGO/MGEX merged RINEX 3.03 GPS/Galileo/BeiDou/QZSS/GLONASS broadcast ephemerides",
             "urbannav_url": "https://github.com/IPNL-POLYU/UrbanNavDataset",
             "reference_sha256": sha(reference),
             "navigation_sha256": sha(nav),
@@ -471,7 +496,7 @@ def update_navigation(nav, output):
         raise ValueError("Existing scene checksum differs")
     scene = json.loads(gzip.decompress(path.read_bytes()))
     scene["navigation"] = read_navigation(nav, scene["track"][0][0], scene["track"][-1][0], scene["week"])
-    scene["provenance"]["navigation_source"] = "UrbanNav base.nav, DLR/TUM CONGO/MGEX merged RINEX 3.03 GPS/Galileo/BeiDou/QZSS broadcast ephemerides"
+    scene["provenance"]["navigation_source"] = "UrbanNav base.nav, DLR/TUM CONGO/MGEX merged RINEX 3.03 GPS/Galileo/BeiDou/QZSS/GLONASS broadcast ephemerides"
     scene["provenance"]["navigation_sha256"] = sha(nav)
     manifest["scene"] = compress(path, json.dumps(scene, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode())
     manifest["provenance"] = scene["provenance"]

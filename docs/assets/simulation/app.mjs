@@ -1,14 +1,14 @@
-import { C, GNSS_SYSTEMS } from "./orbit.mjs?v=multi-gnss-1";
-import { decodeMesh } from "./mesh.mjs?v=multi-gnss-1";
+import { C, GNSS_SYSTEMS } from "./orbit.mjs?v=glonass-1";
+import { decodeMesh } from "./mesh.mjs?v=glonass-1";
 import { CityRenderer } from "./renderer.mjs?v=surface-1";
 import { RouteNavigator, stepEpoch } from "./route-navigation.mjs?v=route-1";
 import { clampViewPitch } from "./view-geometry.mjs";
-import { DEFAULT_SCENE, readSceneLink, writeSceneLink } from "./scene-link.mjs?v=multi-gnss-1";
-import { captureReference, compareReceiver } from "./comparison.mjs?v=multi-gnss-1";
-import { SkyPlot } from "./sky-plot.mjs?v=multi-gnss-1";
+import { DEFAULT_SCENE, readSceneLink, writeSceneLink } from "./scene-link.mjs?v=glonass-1";
+import { captureReference, compareReceiver } from "./comparison.mjs?v=glonass-1";
+import { SkyPlot } from "./sky-plot.mjs?v=glonass-1";
 import { ReflectionGeometry } from "./reflection-geometry.mjs";
 import { RangeFit } from "./range-fit.mjs";
-import { PositionFit } from "./position-fit.mjs?v=multi-gnss-1";
+import { PositionFit } from "./position-fit.mjs?v=glonass-1";
 
 const $ = id => document.getElementById(id);
 const canvas = $("scene"), settings = { epoch: 8000, antenna: 0, mask: 10, systems: GNSS_SYSTEMS };
@@ -361,7 +361,9 @@ canvas.addEventListener("webglcontextlost", event => { event.preventDefault(); f
 document.addEventListener("visibilitychange", () => { if (document.hidden) setPlaying(false); });
 
 async function asset(entry) {
-  const response = await fetch(new URL(`../plateau/${entry.file}`, import.meta.url));
+  const url = new URL(`../plateau/${entry.file}`, import.meta.url);
+  url.searchParams.set("sha256", entry.sha256);
+  const response = await fetch(url);
   if (!response.ok) throw new Error(`Unable to load ${entry.file}: HTTP ${response.status}`);
   const bytes = await response.arrayBuffer();
   const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map(v => v.toString(16).padStart(2, "0")).join("");
@@ -371,7 +373,7 @@ async function asset(entry) {
 }
 async function initialize() {
   status("Loading verified PLATEAU data · 4.9 MB…");
-  const response = await fetch(new URL("../plateau/manifest.json", import.meta.url));
+  const response = await fetch(new URL("../plateau/manifest.json", import.meta.url), {cache:"no-cache"});
   if (!response.ok) throw new Error(`Unable to load data manifest: HTTP ${response.status}`);
   const manifest = await response.json();
   const [meshBuffer, sceneBuffer] = await Promise.all([asset(manifest.mesh), asset(manifest.scene)]);
@@ -386,7 +388,7 @@ async function initialize() {
   $("geometry-readout").textContent = `${scene.stats.buildings.toLocaleString("en-US")} building components · ${scene.stats.bridges} bridge components · ${scene.stats.holes} interior rings preserved`;
   $("repair-readout").textContent = `${scene.stats.topology_repaired_faces} source face repaired with GEOS linework; ${scene.stats.inserted_boundary_vertices} boundary-intersection vertices inserted. No mesh decimation or coordinate quantization.`;
   status("Indexing all 320,932 triangles…");
-  worker = new Worker(new URL("./city-worker.mjs?v=multi-gnss-1", import.meta.url), { type: "module" });
+  worker = new Worker(new URL("./city-worker.mjs?v=glonass-1", import.meta.url), { type: "module" });
   worker.onerror = event => fail(new Error(event.message || "The simulation worker stopped."));
   worker.onmessage = ({ data }) => {
     if (data.type === "error") { fail(new Error(data.error)); return; }
