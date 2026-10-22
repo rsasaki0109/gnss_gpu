@@ -1,3 +1,5 @@
+import { createReflectionKernel } from "./reflection-kernel.mjs?v=reflection-wasm-1";
+
 // Full-resolution Float64 triangle geometry. Rendering precision is separate.
 export function decodeMesh(buffer) {
   const view = new DataView(buffer);
@@ -14,13 +16,17 @@ export function decodeMesh(buffer) {
 const CONTACT = 1e-5; // 10 micrometres; below the source model's millimetre scale.
 
 export class MeshBVH {
-  constructor(mesh) {
+  constructor(mesh, {reflectionBackend = "auto", reflectionCapacity = 4096} = {}) {
+    if (!["auto","js","wasm"].includes(reflectionBackend) || !Number.isInteger(reflectionCapacity) || reflectionCapacity < 0 || reflectionCapacity > 65536) throw new RangeError("Invalid reflection backend or capacity");
     this.mesh = mesh;
     const count = mesh.triangleCount;
-    this.edges = new Float64Array(count * 9);
-    this.planes = new Float64Array(count * 4);
+    this.reflectionKernel = reflectionBackend === "js" || (reflectionBackend === "auto" && count < 128) ? null : createReflectionKernel(count,reflectionCapacity);
+    if (reflectionBackend === "wasm" && !this.reflectionKernel) throw new Error("Float64 WebAssembly reflection backend unavailable");
+    this.reflectionBackend = this.reflectionKernel ? "wasm" : "js";
+    this.edges = this.reflectionKernel?.edges ?? new Float64Array(count * 9);
+    this.planes = this.reflectionKernel?.planes ?? new Float64Array(count * 4);
     this.areas = new Float64Array(count);
-    this.projection = new Uint8Array(count);
+    this.projection = this.reflectionKernel?.projection ?? new Uint8Array(count);
     this.order = Uint32Array.from({ length: count }, (_, i) => i);
     const boxes = new Float64Array(count * 6), centers = new Float64Array(count * 3);
     for (let t = 0; t < count; t++) {
@@ -153,6 +159,29 @@ export class MeshBVH {
   }
 
   reflectionsBatch(receiver, sources) {
+    if (sources.length < 2) return sources.map(source => this.reflections(receiver, source));
+    if (!this.reflectionKernel) return this.reflectionsBatchJS(receiver, sources);
+    const count = this.reflectionKernel.scan(receiver, sources);
+    // Overflow reruns the complete JavaScript scan, preserving every candidate.
+    if (count === null) return this.reflectionsBatchJS(receiver, sources);
+    const results = sources.map(() => []), direct = sources.map(source => Math.hypot(...source.map((v, i) => v - receiver[i])));
+    const { words, values } = this.reflectionKernel;
+    // Keep visibility checks, deduplication and distances in their original order.
+    for (let index = 0; index < count; index++) {
+      const t = words[index * 8], s = words[index * 8 + 1], source = sources[s], result = results[s];
+      const q = [values[index * 4 + 1], values[index * 4 + 2], values[index * 4 + 3]];
+      if (result.some(path => Math.hypot(...path.point.map((v, i) => v - q[i])) < 1e-7)) continue;
+      if (!this.clearSegment(receiver, q) || !this.clearSegment(q, source)) continue;
+      const distance = Math.hypot(...q.map((v, i) => v - receiver[i])) + Math.hypot(...source.map((v, i) => v - q[i]));
+      const extra = distance - direct[s];
+      if (extra < -1e-7) throw new Error("Reflection violated triangle inequality");
+      result.push({ point: q, triangle: t, object: this.mesh.owners[t], distance, extra: Math.max(0, extra) });
+    }
+    for (const result of results) result.sort((a, b) => a.distance - b.distance || a.triangle - b.triangle);
+    return results;
+  }
+
+  reflectionsBatchJS(receiver, sources) {
     if (sources.length < 2) return sources.map(source => this.reflections(receiver, source));
     const results = sources.map(() => []), p = this.planes;
     const direct = sources.map(source => Math.hypot(...source.map((v, i) => v - receiver[i])));

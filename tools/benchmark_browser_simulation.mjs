@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import {execFileSync} from "node:child_process";
-import {existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync} from "node:fs";
+import {existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {basename, dirname, join, resolve} from "node:path";
 import {performance} from "node:perf_hooks";
@@ -47,7 +47,7 @@ async function worker(config) {
     checks++;
     if(round>=0)times[i].push(milliseconds);
   }
-  process.stdout.write(JSON.stringify({indexMs,times,checks}));
+  process.stdout.write(JSON.stringify({indexMs,times,checks,reflectionBackend:simulation.bvh.reflectionBackend??"js",kernelScans:simulation.bvh.reflectionKernel?.scans??0,kernelFallbacks:simulation.bvh.reflectionKernel?.fallbacks??0}));
 }
 
 async function main() {
@@ -86,7 +86,8 @@ async function main() {
       revision=execFileSync("git",["rev-parse","--verify","--end-of-options",baseline+"^{commit}"],{cwd:root,encoding:"utf8",windowsHide:true}).trim();
       assert.match(revision,/^[0-9a-f]{40,64}$/);
       const directory=join(scratch,"baseline");mkdirSync(directory);
-      for(const name of ["city.mjs","mesh.mjs","orbit.mjs"]){
+      const files=execFileSync("git",["ls-tree","--name-only",revision+":docs/assets/simulation"],{cwd:root,encoding:"utf8",windowsHide:true}).trim().split(/\r?\n/).filter(name=>name.endsWith(".mjs")&&!name.includes("/")&&!name.includes("\\"));
+      for(const name of files){
         writeFileSync(join(directory,name),execFileSync("git",["show",revision+":docs/assets/simulation/"+name],{cwd:root,maxBuffer:2*1024*1024,windowsHide:true}));
       }
       baselineModule=join(directory,"city.mjs");
@@ -106,15 +107,16 @@ async function main() {
       return {settings:value,baselineMs,currentMs,speedup:baseline?baselineMs/currentMs:null};
     });
     const currentTotalMs=cases.reduce((sum,item)=>sum+item.currentMs,0),baselineTotalMs=baseline?cases.reduce((sum,item)=>sum+item.baselineMs,0):null;
-    const sources=Object.fromEntries(["city.mjs","mesh.mjs","orbit.mjs"].map(name=>[name,sha(readFileSync(join(dirname(module),name)))]));
+    const sources=Object.fromEntries(readdirSync(dirname(module)).filter(name=>name.endsWith(".mjs")).sort().map(name=>[name,sha(readFileSync(join(dirname(module),name)))]));
     const report={
-      schema:1,engine:process.version,scope:"CPU CitySimulation.compute only; excludes rendering, transfer and native/GPU engines",
+      schema:2,engine:process.version,scope:"CPU CitySimulation.compute only; excludes rendering, transfer and native/GPU engines",
       baselineRevision:revision,currentSources:sources,meshSha256:manifest.mesh.sha256,sceneSha256:manifest.scene.sha256,
       roundsPerProcess:rounds,warmupRounds:2,processOrder:order,cases:cases.length,
       exactReference:baseline?"baseline snapshot including signed zero":"current snapshot (determinism only)",
       exactChecks:Object.values(runs).flat().reduce((sum,run)=>sum+run.checks,0),
       baselineTotalMs,currentTotalMs,speedup:baseline?baselineTotalMs/currentTotalMs:null,
       timeReductionPercent:baseline?100*(1-currentTotalMs/baselineTotalMs):null,
+      backends:Object.fromEntries(Object.entries(runs).filter(([,value])=>value.length).map(([key,value])=>[key,value.map(({reflectionBackend,kernelScans,kernelFallbacks})=>({reflectionBackend,kernelScans,kernelFallbacks}))])),
       indexMs:Object.fromEntries(Object.entries(runs).filter(([,value])=>value.length).map(([key,value])=>[key,value.map(run=>run.indexMs)])),
       results:cases,
     };

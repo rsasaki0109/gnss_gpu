@@ -1,5 +1,5 @@
-import { CitySimulation } from "./city.mjs?v=reflection-batch-1";
-import { decodeMesh } from "./mesh.mjs?v=reflection-batch-1";
+import { CitySimulation } from "./city.mjs?v=reflection-wasm-1";
+import { decodeMesh } from "./mesh.mjs?v=reflection-wasm-1";
 
 let simulation;
 self.onmessage = ({ data }) => {

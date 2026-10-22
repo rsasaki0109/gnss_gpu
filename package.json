@@ -2,11 +2,12 @@
   "name": "gnss-gpu-site-smoke",
   "private": true,
   "devDependencies": {
-    "@playwright/test": "1.58.2"
+    "@playwright/test": "1.58.2",
+    "wabt": "1.0.39"
   },
   "scripts": {
     "site:preview": "python tools/serve_site_preview.py",
     "site:smoke": "playwright test -c tests/site/playwright.config.cjs",
-    "site:simulation:model": "node --test tests/site/simulation-model.test.cjs tests/site/map-geometry.test.cjs tests/site/route-navigation.test.cjs tests/site/view-geometry.test.cjs tests/site/scene-link.test.cjs tests/site/comparison.test.cjs tests/site/sky-plot.test.cjs tests/site/arrival-direction.test.cjs tests/site/reflection-geometry.test.cjs tests/site/range-fit.test.cjs tests/site/position-fit.test.cjs tests/site/reflection-predicate.test.cjs tests/site/reflection-batch.test.cjs"
+    "site:simulation:model": "node tools/build_browser_reflection_kernel.mjs --check && node --test tests/site/simulation-model.test.cjs tests/site/map-geometry.test.cjs tests/site/route-navigation.test.cjs tests/site/view-geometry.test.cjs tests/site/scene-link.test.cjs tests/site/comparison.test.cjs tests/site/sky-plot.test.cjs tests/site/arrival-direction.test.cjs tests/site/reflection-geometry.test.cjs tests/site/range-fit.test.cjs tests/site/position-fit.test.cjs tests/site/reflection-predicate.test.cjs tests/site/reflection-batch.test.cjs tests/site/reflection-wasm.test.cjs"
   }
 }
