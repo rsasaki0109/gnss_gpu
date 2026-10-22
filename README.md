@@ -17,7 +17,7 @@
 </p>
 <p align="center"><sub>Left: GPU particle filter on a real UrbanNav Odaiba drive. Right: ray-traced LOS/NLOS over PLATEAU 3D buildings.</sub></p>
 
-[**v0.3 release audit**](https://rsasaki0109.github.io/gnss_gpu/v0.3.0.html) · [Live results snapshot](https://rsasaki0109.github.io/gnss_gpu/) · [Technical report](docs/technical_report_v0.3.0.md) · [Benchmarks](benchmarks/RESULTS.md) · [Examples](examples/) · [Input shapes](docs/common_input_shapes.md) · [GSDC2023 solution](docs/gsdc2023_solution.md) · [Experiment log](docs/experiments.md) · [Decisions](docs/decisions.md) · [How it's built](internal_docs/plan.md)
+[**v0.4 release notes**](RELEASE_NOTES_v0.4.0.md) · [**v0.3 release audit**](https://rsasaki0109.github.io/gnss_gpu/v0.3.0.html) · [Live results snapshot](https://rsasaki0109.github.io/gnss_gpu/) · [Technical report](docs/technical_report_v0.3.0.md) · [Benchmarks](benchmarks/RESULTS.md) · [Examples](examples/) · [Input shapes](docs/common_input_shapes.md) · [GSDC2023 solution](docs/gsdc2023_solution.md) · [Experiment log](docs/experiments.md) · [Decisions](docs/decisions.md) · [How it's built](internal_docs/plan.md)
 
 </div>
 
@@ -31,10 +31,10 @@ filters, double-difference carrier tracking, ray tracing against 3D city
 meshes and factor-graph optimization, scored against RTKLIB and EKF baselines
 on public data (UrbanNav, PLATEAU, PPC, GSDC2023).
 
-Rebuild and verify the v0.3 reproducibility archive:
+Rebuild the v0.4 reproducibility archive (including the historical v0.3 audit evidence):
 
 ```bash
-python tools/build_release_bundle.py --output dist/reproducibility --archive dist/gnss_gpu-v0.3.0-reproducibility.zip
+python tools/build_release_bundle.py --output dist/reproducibility --archive dist/gnss_gpu-v0.4.0-reproducibility.zip
 ```
 
 ## Why you might care

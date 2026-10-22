@@ -19,8 +19,15 @@ def test_release_bundle_builds_and_verifies(tmp_path: Path) -> None:
     output = tmp_path / "bundle"
     manifest = build_bundle(REPO_ROOT, output)
     result = verify_bundle(output)
-    assert manifest["version"] == VERSION == "0.3.0"
+    assert manifest["version"] == VERSION == "0.4.0"
     assert result["passed"] is True
+    assert f"gnss_gpu-v{VERSION}-reproducibility.zip" in manifest["entrypoint"]
+    assert (output / "RELEASE_NOTES.md").read_bytes() == (
+        REPO_ROOT / f"RELEASE_NOTES_v{VERSION}.md"
+    ).read_bytes()
+    assert "historical v0.3 audit evidence" in (
+        output / "TECHNICAL_REPORT.md"
+    ).read_text(encoding="utf-8")
     assert result["file_count"] >= 38
     benchmark = json.loads((output / "benchmark.json").read_text(encoding="utf-8"))
     assert benchmark["runtime"]["normal_latency_max_ms"] <= 100.0

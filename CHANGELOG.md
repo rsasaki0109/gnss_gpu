@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## v0.4.0
+
+- Added the interactive PLATEAU/UrbanNav browser simulation with OpenStreetMap,
+  default GPS/Galileo/BeiDou/QZSS/GLONASS, path inspection and signal history.
+- Added route A/B evaluation, missing-aware summaries, CSV/JSON/GeoJSON exports
+  and original-epoch, receiver-specific recorded signal-strength comparison.
+- Consolidated exact-output native PF/ray/simulation/RB-FGO-PF optimizations and
+  strict Float64 browser WebAssembly SIMD tracing with shared geometry.
+- Updated package and release assets to 0.4.0, guarded release tags against
+  package-version mismatches, and labelled archived v0.3 audit results historical.
+- See [release notes](RELEASE_NOTES_v0.4.0.md) for scope and accuracy limitations.
+
+The research entries below record work included since v0.3.0, including rejected
+methods and experimental configurations; they are not all production defaults.
+
 - **RB-FGO-PF WP61, negative** (`experiments/rbpf_fgo/wp61_3dma.py`,
   `plateau_reflect.py`): scoring candidate positions by their PLATEAU
   LOS / NLOS states, C/N0 and single-bounce wall-reflection delays does not

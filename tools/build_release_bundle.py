@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build and verify the deterministic gnss_gpu v0.3 reproducibility bundle."""
+"""Build and verify the deterministic gnss_gpu release reproducibility bundle."""
 
 from __future__ import annotations
 
@@ -16,13 +16,13 @@ from typing import Any, Mapping
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "python"))
 
+from gnss_gpu._version import __version__ as VERSION  # noqa: E402
 from gnss_gpu.evaluation_contract import (  # noqa: E402
     MANDATORY_NEGATIVE_HOLDOUTS,
     verify_locked_contract,
 )
 
 
-VERSION = "0.3.0"
 BUNDLE_SCHEMA = "gnss_gpu_reproducibility_bundle_v1"
 MANIFEST_SCHEMA = "gnss_gpu_release_manifest_v1"
 
@@ -223,6 +223,10 @@ def _report(
 
 ## Scope
 
+This report preserves the historical v0.3 audit evidence (July 2026). It is
+not a fresh benchmark or positioning-accuracy audit of the current release.
+See RELEASE_NOTES.md for the current release scope.
+
 v0.3 turns the urban-navigation research workspace into a guarded GNSS/IMU/map/GPU
 platform with immutable negative controls, truth-free acceptance evidence,
 multi-hypothesis outage recovery, enforced real-time budgets, cross-domain
@@ -353,6 +357,8 @@ def build_bundle(repo_root: Path, output: Path) -> dict[str, Any]:
         newline="\n",
     )
 
+    shutil.copyfile(repo_root / f"RELEASE_NOTES_v{VERSION}.md", output / "RELEASE_NOTES.md")
+
     tracked_status = _git(repo_root, "status", "--porcelain", "--untracked-files=no")
     files = []
     for path in sorted(
@@ -376,7 +382,7 @@ def build_bundle(repo_root: Path, output: Path) -> dict[str, Any]:
         "python": sys.version.split()[0],
         "entrypoint": (
             "python tools/build_release_bundle.py --output dist/reproducibility "
-            "--archive dist/gnss_gpu-v0.3.0-reproducibility.zip"
+            f"--archive dist/gnss_gpu-v{VERSION}-reproducibility.zip"
         ),
         "files": files,
     }
