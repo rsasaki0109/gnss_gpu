@@ -119,11 +119,16 @@ test("SIMD compilation failure keeps scalar Wasm, then JavaScript if both fail",
 
 test("projection changes within one scan retain triangle order for every packet count",async()=>{
   const [{MeshBVH}]=await modules;
-  const triangles=[0,1,2,2,0,1,0,2,1].flatMap(axis=>wall.map(t=>t.map(p=>rotate(p,axis))));
+  const translated=(point,axis)=>rotate(point,axis).map(v=>v+axis*100);
+  // Keep each orientation in a separate region. Interleaved copies of each
+  // wall exercise deduplication and first-triangle selection across branches.
+  const triangles=[0,1,2,2,0,1,0,2,1].flatMap(axis=>wall.map(t=>t.map(p=>translated(p,axis))));
   const bvh=new MeshBVH(meshOf(triangles),{reflectionBackend:"wasm"});
-  for(let count=2;count<=18;count++) {
-    const sources=Array.from({length:count},(_,i)=>rotate([6,4,6],i%3));
-    for(const axis of [0,1,2])compare(bvh,rotate([4,-2,1.5],axis),sources);
+  for(let count=2;count<=18;count++)for(const axis of [0,1,2]) {
+    const receiver=translated([4,-2,1.5],axis);
+    const sources=Array.from({length:count},(_,i)=>translated([6+(i%3)*.01,4,6],axis));
+    compare(bvh,receiver,sources);
+    assert(bvh.reflectionsBatch(receiver,sources).every(paths=>paths.length>0),"Accepted paths must exercise every projection");
   }
   assert.equal(bvh.reflectionKernel.fallbacks,0);
 });
