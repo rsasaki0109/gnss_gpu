@@ -1,6 +1,6 @@
 import { CitySimulation } from "./city.mjs?v=glonass-1";
 import { decodeMesh } from "./mesh.mjs?v=glonass-1";
-import { RouteEvaluation } from "./route-analysis.mjs?v=analysis-1";
+import { RouteEvaluation } from "./route-analysis.mjs?v=route-summary-1";
 
 let simulation, evaluation;
 self.onmessage = ({ data }) => {
