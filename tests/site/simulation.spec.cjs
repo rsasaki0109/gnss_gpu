@@ -88,10 +88,14 @@ test("PLATEAU full-mesh simulation responds to exact epochs and receiver control
   expect(layout.scroll).toBeLessThanOrEqual(layout.client + 2); expect(errors).toEqual([]);
 });
 
-test("the public scene keeps exact results when WebAssembly is unavailable in its Worker",async({page})=>{
+for(const [backend,prefix] of [
+  ["JavaScript","self.WebAssembly=undefined;\n"],
+  ["scalar Wasm","{const NativeModule=WebAssembly.Module;let first=true;WebAssembly.Module=new Proxy(NativeModule,{construct(target,args){if(first){first=false;throw new WebAssembly.CompileError('SIMD unavailable');}return Reflect.construct(target,args);}}); }\n"],
+]) {
+test(`the public scene keeps exact results using ${backend} in its Worker`,async({page})=>{
   await page.route("**/simulation/city-worker.mjs*",async route=>{
     const response=await route.fetch(),source=await response.text();
-    await route.fulfill({response,body:'self.WebAssembly=undefined;\n'+source});
+    await route.fulfill({response,body:prefix+source});
   });
   await page.goto("simulation.html");
   await expect(page.locator("#scene")).toHaveAttribute("data-ready","true",{timeout:45000});
@@ -103,6 +107,7 @@ test("the public scene keeps exact results when WebAssembly is unavailable in it
   await expect(page.locator(".metrics strong")).toHaveText(["7","0","1"]);
   await expect(page.locator("#spp-all")).toHaveText("0.00 m");
 });
+}
 
 test("results page links to PLATEAU simulation within the Pages project prefix", async ({ page }) => {
   await page.goto("./");

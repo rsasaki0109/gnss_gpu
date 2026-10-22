@@ -1,4 +1,4 @@
-import { createReflectionKernel } from "./reflection-kernel.mjs?v=reflection-wasm-1";
+import { createReflectionKernel } from "./reflection-kernel.mjs?v=reflection-simd-1";
 
 // Full-resolution Float64 triangle geometry. Rendering precision is separate.
 export function decodeMesh(buffer) {
