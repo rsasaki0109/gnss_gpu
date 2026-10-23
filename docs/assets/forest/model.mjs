@@ -1,3 +1,4 @@
+import {checkDensityProfile,crownIntegral} from "./density.mjs?v=density-route-1";
 // Synthetic ENU forest. Geometry and integrals use binary64; mesh is display only.
 const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0);
 const sub=(a,b)=>a.map((v,i)=>v-b[i]);
@@ -131,13 +132,18 @@ export class ForestOcclusion {
     return this.wood.some(shape=>preparedCylinderInterval(origin,direction,shape,maximum)!==null);
   }
 }
-export function traceForest(forest,origin,rawDirection,{specificLoss=.2,foliage=1,maximum=400}={}) {
+export function traceForest(forest,origin,rawDirection,{specificLoss=.2,foliage=1,maximum=400,densityProfile="uniform"}={}) {
   if(!Number.isFinite(specificLoss)||specificLoss<0||specificLoss>2||!Number.isFinite(foliage)||foliage<0||foliage>2)throw new RangeError("Invalid attenuation assumptions");
+  checkDensityProfile(densityProfile);
   const direction=unit(rawDirection);checkedRay(origin,direction,maximum);
   const ground=terrainDistance(origin,direction,forest.terrain,maximum),limit=ground??maximum,crowns=[],wood=[];
   for(const tree of forest.trees){
     const span=ellipsoidInterval(origin,direction,tree.crown,limit);
-    if(span)crowns.push({tree:tree.id,enter:span[0],exit:span[1],density:tree.density});
+    if(span){
+      const crown={tree:tree.id,enter:span[0],exit:span[1],density:tree.density};
+      if(densityProfile!=="uniform")crown.densityIntegral=crownIntegral(origin,direction,tree.crown,span,tree.density,densityProfile);
+      crowns.push(crown);
+    }
     for(const [index,shape] of [tree.trunk,...tree.branches].entries()){
       const span=cylinderInterval(origin,direction,shape,limit);
       if(span)wood.push({tree:tree.id,part:index===0?"trunk":"branch",enter:span[0],exit:span[1]});
@@ -148,7 +154,7 @@ export function traceForest(forest,origin,rawDirection,{specificLoss=.2,foliage=
   let canopyPath=0,end=-Infinity;
   for(const [a,b] of intervals){canopyPath+=Math.max(0,b-Math.max(a,end));end=Math.max(end,b);}
   // Densities add in overlapping crowns; union length is reported separately.
-  const opticalPath=crowns.reduce((sum,c)=>sum+(c.exit-c.enter)*c.density,0)*foliage,canopyLoss=specificLoss*opticalPath;
+  const opticalPath=(densityProfile==="uniform"?crowns.reduce((sum,c)=>sum+(c.exit-c.enter)*c.density,0):crowns.reduce((sum,c)=>sum+c.densityIntegral,0))*foliage,canopyLoss=specificLoss*opticalPath;
   return {direction,crowns,wood,ground,canopyPath,opticalPath,canopyLoss,
     classification:ground!==null?"TERRAIN":wood.length?"WOOD":opticalPath>0?"CANOPY":"CLEAR",
     directRelativeDb:ground!==null||wood.length?null:-canopyLoss};
