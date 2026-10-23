@@ -1,6 +1,6 @@
 // Controlled single-arrival ranging experiment, not a receiver tracking model.
-import {randomSequence,traceForest,terrainHeight} from "./model.mjs?v=ground-1";
-import {GroundReflectionModel} from "./ground-reflections.mjs?v=ground-1";
+import {randomSequence,terrainHeight} from "./model.mjs?v=prepared-1";
+import {GroundReflectionModel} from "./ground-reflections.mjs?v=prepared-1";
 const distance=(a,b)=>Math.hypot(...a.map((v,i)=>v-b[i]));
 const vector=a=>Array.isArray(a)&&a.length===3&&a.every(Number.isFinite);
 export const METHODS=["straight","robust","paths"];
@@ -34,12 +34,8 @@ export function profileClock(rows,sigmas,method="paths"){
 }
 
 export function pathRanges(forest,model,receiver,source){
-  const direct=distance(receiver,source),direction=source.map((v,i)=>(v-receiver[i])/direct);
-  const trace=traceForest(forest,receiver,direction,{maximum:direct});
-  const ranges=[];
-  if(trace.ground===null&&!trace.wood.length)ranges.push(direct);
-  for(const p of model.paths(receiver,source).paths)ranges.push(p.totalRange);
-  return ranges;
+  if(model.forest!==forest)throw new RangeError("Range model must match the supplied static forest");
+  return model.ranges(receiver,source);
 }
 
 export function generateObservations(forest,receiver,signals,{seed=7,sigma=.3,clock=23.4}={}){

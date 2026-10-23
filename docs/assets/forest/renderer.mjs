@@ -1,4 +1,4 @@
-import { forestMesh, rayPoint } from "./model.mjs?v=ground-1";
+import { forestMesh, rayPoint } from "./model.mjs?v=prepared-1";
 export class ForestRenderer {
   constructor(canvas,forest){
     this.canvas=canvas;this.camera={yaw:-.7,pitch:.85,zoom:1,target:[0,0,5]};

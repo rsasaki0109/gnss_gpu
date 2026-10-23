@@ -67,12 +67,18 @@ export function ellipsoidInterval(origin,direction,shape,maximum=400) {
 }
 export function cylinderInterval(origin,direction,cylinder,maximum=400) {
   checkedRay(origin,direction,maximum);
+  return preparedCylinderInterval(origin,direction,prepareCylinder(cylinder),maximum);
+}
+function prepareCylinder(cylinder) {
   if(!cylinder.a?.every(Number.isFinite)||cylinder.a.length!==3||!cylinder.b?.every(Number.isFinite)||cylinder.b.length!==3||!Number.isFinite(cylinder.radius)||cylinder.radius<=0)throw new RangeError("Invalid wood cylinder");
   const axis=sub(cylinder.b,cylinder.a),length=Math.hypot(...axis);
   if(length===0)throw new RangeError("Zero-length wood cylinder");
-  const n=axis.map(v=>v/length),o=sub(origin,cylinder.a),z=dot(o,n),dz=dot(direction,n);
+  return {a:cylinder.a,n:axis.map(v=>v/length),length,radiusSquared:cylinder.radius**2};
+}
+function preparedCylinderInterval(origin,direction,{a,n,length,radiusSquared},maximum) {
+  const o=sub(origin,a),z=dot(o,n),dz=dot(direction,n);
   const radialO=o.map((v,i)=>v-z*n[i]),radialD=direction.map((v,i)=>v-dz*n[i]);
-  const span=quadraticInterval(dot(radialD,radialD),2*dot(radialO,radialD),dot(radialO,radialO)-cylinder.radius**2);
+  const span=quadraticInterval(dot(radialD,radialD),2*dot(radialO,radialD),dot(radialO,radialO)-radiusSquared);
   if(!span)return null;
   let lo=Math.max(0,span[0]),hi=Math.min(maximum,span[1]);
   if(Math.abs(dz)<1e-14){if(z<0||z>length)return null;}
@@ -80,9 +86,13 @@ export function cylinderInterval(origin,direction,cylinder,maximum=400) {
   return hi>lo?[lo,hi]:null;
 }
 export function terrainDistance(origin,direction,triangles,maximum) {
+  return terrainDistanceImpl(origin,direction,triangles,maximum,false);
+}
+function terrainDistanceImpl(origin,direction,triangles,maximum,prepared) {
   let nearest=maximum;
-  for(const [a,b,c] of triangles){
-    const e=sub(b,a),f=sub(c,a),p=[direction[1]*f[2]-direction[2]*f[1],direction[2]*f[0]-direction[0]*f[2],direction[0]*f[1]-direction[1]*f[0]],det=dot(e,p);
+  for(const triangle of triangles){
+    const a=prepared?triangle.a:triangle[0],e=prepared?triangle.e:sub(triangle[1],a),f=prepared?triangle.f:sub(triangle[2],a);
+    const p=[direction[1]*f[2]-direction[2]*f[1],direction[2]*f[0]-direction[0]*f[2],direction[0]*f[1]-direction[1]*f[0]],det=dot(e,p);
     if(Math.abs(det)<1e-12)continue;
     const s=sub(origin,a),u=dot(s,p)/det;if(u<0||u>1)continue;
     const q=[s[1]*e[2]-s[2]*e[1],s[2]*e[0]-s[0]*e[2],s[0]*e[1]-s[1]*e[0]],v=dot(direction,q)/det;
@@ -90,6 +100,28 @@ export function terrainDistance(origin,direction,triangles,maximum) {
     const t=dot(f,q)/det;if(t>1e-6&&t<nearest)nearest=t;
   }
   return nearest<maximum?nearest:null;
+}
+// Static-scene Boolean occlusion only. Rebuild after changing geometry. This
+// shares the binary64 intersection kernels with the detailed propagation model;
+// crowns attenuate but do not block, so their density integrals are unnecessary.
+export class ForestOcclusion {
+  constructor(forest){
+    this.terrain=forest.terrain.map(([a,b,c])=>{
+      if(![a,b,c].every(p=>Array.isArray(p)&&p.length===3&&p.every(Number.isFinite)))throw new RangeError("Invalid ground triangle");
+      return {a,e:sub(b,a),f:sub(c,a)};
+    });
+    this.wood=forest.trees.flatMap(t=>[t.trunk,...t.branches].map(prepareCylinder));
+  }
+  blocked(origin,rawDirection,maximum,{groundMaximum=maximum,terrainDirection}={}){
+    const direction=unit(rawDirection);
+    checkedRay(origin,direction,maximum);
+    if(!Number.isFinite(groundMaximum)||groundMaximum<=0||groundMaximum>maximum)throw new RangeError("Invalid terrain endpoint bound");
+    // Detailed ground reflection checks terrain with its original geometric ray
+    // but normalizes volume rays in traceForest. Preserve both rounding paths.
+    const groundDirection=terrainDirection??direction;checkedRay(origin,groundDirection,groundMaximum);
+    if(terrainDistanceImpl(origin,groundDirection,this.terrain,groundMaximum,true)!==null)return true;
+    return this.wood.some(shape=>preparedCylinderInterval(origin,direction,shape,maximum)!==null);
+  }
 }
 export function traceForest(forest,origin,rawDirection,{specificLoss=.2,foliage=1,maximum=400}={}) {
   if(!Number.isFinite(specificLoss)||specificLoss<0||specificLoss>2||!Number.isFinite(foliage)||foliage<0||foliage>2)throw new RangeError("Invalid attenuation assumptions");

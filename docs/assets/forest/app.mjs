@@ -1,7 +1,7 @@
-import { generateForest,forestReceiver,traceForest } from "./model.mjs?v=ground-1";
-import { ForestRenderer } from "./renderer.mjs?v=ground-1";
-import { GroundReflectionModel } from "./ground-reflections.mjs?v=ground-1";
-import { setupPositioning } from "./positioning-ui.mjs?v=position-1";
+import { generateForest,forestReceiver,traceForest } from "./model.mjs?v=prepared-1";
+import { ForestRenderer } from "./renderer.mjs?v=prepared-1";
+import { GroundReflectionModel } from "./ground-reflections.mjs?v=prepared-1";
+import { setupPositioning } from "./positioning-ui.mjs?v=prepared-1";
 import { selectNavigation,receivedSatellite,sub,mul,norm,dot,geodetic,enuRotation } from "../simulation/orbit.mjs?v=glonass-1";
 import { skyLayout } from "../simulation/sky-plot.mjs?v=glonass-1";
 const $=id=>document.getElementById(id),root=$("forest-lab"),canvas=$("forest-scene");
