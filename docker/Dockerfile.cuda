@@ -23,7 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       python3 python3-pip \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /wheelhouse /wheelhouse
-RUN python3 -m pip install --no-cache-dir /wheelhouse/gnss_gpu-0.3.0-*.whl \
-    && python3 -c "import gnss_gpu; assert gnss_gpu.__version__ == '0.3.0'"
+RUN python3 -m pip install --no-cache-dir /wheelhouse/gnss_gpu-*.whl \
+    && python3 -c "import gnss_gpu; from importlib.metadata import version; assert gnss_gpu.__version__ == version('gnss_gpu')"
 ENTRYPOINT ["python3"]
 CMD ["-c", "import gnss_gpu; print('gnss_gpu', gnss_gpu.__version__)"]

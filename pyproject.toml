@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "gnss-gpu"
-version = "0.3.0"
+version = "0.4.0"
 description = "GPU-accelerated GNSS signal processing with CUDA"
 readme = "README.md"
 requires-python = ">=3.9"

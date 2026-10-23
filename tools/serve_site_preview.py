@@ -54,8 +54,12 @@ def main():
             self.path = self.path[len(prefix) - 1 :]
             super().do_HEAD()
 
+    class PreviewServer(ThreadingHTTPServer):
+        # Module imports can open a burst of connections during browser tests.
+        request_queue_size = 128
+
     handler = partial(Handler, directory=str(docs))
-    with ThreadingHTTPServer(("127.0.0.1", args.port), handler) as server:
+    with PreviewServer(("127.0.0.1", args.port), handler) as server:
         print(
             f"Preview: http://127.0.0.1:{args.port}{prefix}simulation.html", flush=True
         )

@@ -722,6 +722,41 @@ test("sky plot preserves real directions and selects the same signal without rec
   expect(errors).toEqual([]);
 });
 
+test("opening the live sky keeps time advancing and moves GPS and GLONASS at their completed epochs",async({page},testInfo)=>{
+  const errors=[];page.on("pageerror",error=>errors.push(error.message));
+  await page.goto("simulation.html"+sceneHash({systems:"GECJR"}));
+  const plot=page.locator("#sky-plot"),canvas=page.locator("#scene");
+  await expect(canvas).toHaveAttribute("data-ready","true",{timeout:45000});
+  const read=()=>plot.evaluate(root=>({epoch:Number(root.dataset.epoch),time:root.querySelector(".sky-source").textContent,
+    points:["G12","R07"].map(id=>{const p=root.querySelector(`[data-sky-satellite="${id}"]`),dot=p.querySelector(".sky-dot");return {id,az:Number(p.dataset.azimuth),el:Number(p.dataset.elevation),x:Number(dot.getAttribute("cx")),y:Number(dot.getAttribute("cy"))};})}));
+  const before=await read();
+  await page.locator("#play").click();
+  await page.locator("#sky-panel > summary").click();
+  await expect(page.locator("#play")).toHaveAttribute("aria-pressed","true");
+  await expect(page.locator("#sky-pause")).toBeVisible();
+  await expect.poll(async()=>Number(await plot.getAttribute("data-epoch"))).toBeGreaterThanOrEqual(before.epoch+10);
+  await page.locator("#sky-pause").click();
+  await expect(plot).toHaveAttribute("data-state","ready");
+  const after=await read();
+  expect(after.epoch).toBeGreaterThan(before.epoch);expect(after.time).not.toBe(before.time);
+  expect(after.epoch).toBe(Number(await canvas.getAttribute("data-epoch")));
+  expect(after.epoch).toBe(Number(await page.locator("#progress").inputValue()));
+  for(let i=0;i<after.points.length;i++){
+    const p=after.points[i],previous=before.points[i],radius=110*(90-p.el)/90,angle=p.az*Math.PI/180;
+    expect(Math.hypot(p.az-previous.az,p.el-previous.el)).toBeGreaterThan(1e-5);
+    expect(Math.hypot(p.x-previous.x,p.y-previous.y)).toBeGreaterThan(1e-6);
+    expect(Math.abs(p.x-(150+radius*Math.sin(angle)))).toBeLessThan(1e-10);
+    expect(Math.abs(p.y-(150-radius*Math.cos(angle)))).toBeLessThan(1e-10);
+  }
+  await page.locator("#progress").press("End");
+  await expect(plot).toHaveAttribute("data-epoch",String(SCENE.track.length-1));
+  await expect(plot).toHaveAttribute("data-state","ready");
+  const end=await read();
+  expect(Math.hypot(end.points[0].x-before.points[0].x,end.points[0].y-before.points[0].y)).toBeGreaterThan(.1);
+  await page.locator("#sky-panel").screenshot({path:testInfo.outputPath("live-sky.png")});
+  expect(errors).toEqual([]);
+});
+
 test("pending sky keeps its completed mask, blocks stale selection and can pause live playback",async({page})=>{
   await page.route("**/simulation/city-worker.mjs*",async route=>{
     const response=await route.fetch(),source=await response.text();
@@ -753,6 +788,8 @@ test("pending sky keeps its completed mask, blocks stale selection and can pause
   await page.locator("#sky-panel > summary").click();await page.locator("#play").click();
   await expect(page.locator("#play")).toHaveAttribute("aria-pressed","true");
   await page.locator("#sky-panel > summary").click();
+  await expect(page.locator("#play")).toHaveAttribute("aria-pressed","true");
+  await page.locator("#sky-pause").click();
   await expect(page.locator("#play")).toHaveAttribute("aria-pressed","false");await expect(plot).toHaveAttribute("data-state","ready");
   const point=page.locator(".sky-point").first(),id=await point.getAttribute("data-sky-satellite"),trace=await canvas.getAttribute("data-trace-id");
   await point.press("Enter");await expect(page.locator("#selected-id")).toHaveText(id);await expect(canvas).toHaveAttribute("data-trace-id",trace);
@@ -1128,6 +1165,8 @@ test("default GLONASS support traces five systems and shares GLONASS-only select
  await page.locator('[data-satellite="R06"]').click();
  await page.locator("#share-panel > summary").click();
  await expect(page.locator("#scene-link")).toBeEnabled();
+ // details toggle populates the URL asynchronously; enabled alone can precede it.
+ await expect(page.locator("#scene-link")).toHaveValue(/^https?:\/\/.+#/);
  const link=await page.locator("#scene-link").inputValue();
  const fields=new URLSearchParams(new URL(link).hash.slice(1));
  expect(fields.get("systems")).toBe("R");expect(fields.get("sat")).toBe("R06");
