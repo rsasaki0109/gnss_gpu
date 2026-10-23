@@ -104,3 +104,46 @@ test("real-scale generated terrain paths obey specular geometry and remain deter
   }
   assert.ok(count>0);assert.deepEqual(forest,saved);
 });
+
+// Independent vector form of the original binary64 cylinder kernel. Keep it
+// allocation-heavy here to catch changes in scalar accumulation/rounding order.
+function vectorCylinder(origin,direction,cylinder,maximum){
+  const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0),sub=(a,b)=>a.map((v,i)=>v-b[i]);
+  const axis=sub(cylinder.b,cylinder.a),length=Math.hypot(...axis),n=axis.map(v=>v/length);
+  const o=sub(origin,cylinder.a),z=dot(o,n),dz=dot(direction,n);
+  const radialO=o.map((v,i)=>v-z*n[i]),radialD=direction.map((v,i)=>v-dz*n[i]);
+  const a=dot(radialD,radialD),b=2*dot(radialO,radialD),c=dot(radialO,radialO)-cylinder.radius**2;
+  let span;
+  if(a<1e-15)span=c<=0?[-Infinity,Infinity]:null;
+  else {const disc=b*b-4*a*c;if(disc<=0)return null;const q=-.5*(b+Math.sign(b||1)*Math.sqrt(disc)),t0=q/a,t1=c/q;span=[Math.min(t0,t1),Math.max(t0,t1)];}
+  if(!span)return null;
+  let lo=Math.max(0,span[0]),hi=Math.min(maximum,span[1]);
+  if(Math.abs(dz)<1e-14){if(z<0||z>length)return null;}
+  else {const a=-z/dz,b=(length-z)/dz;lo=Math.max(lo,Math.min(a,b));hi=Math.min(hi,Math.max(a,b));}
+  return hi>lo?[lo,hi]:null;
+}
+
+test("scalar cylinder intervals exactly match vector oracle over near-axis, tangent and far-field rays",async()=>{
+  const {cylinderInterval,randomSequence}=await modelPromise,random=randomSequence(9173);
+  let hits=0,misses=0;
+  const check=(o,raw,c,maximum)=>{const size=Math.hypot(...raw),d=raw.map(v=>v/size),expected=vectorCylinder(o,d,c,maximum);assert.deepEqual(cylinderInterval(o,d,c,maximum),expected);expected?hits++:misses++;};
+  const upright={a:[0,0,0],b:[0,0,4],radius:.5};
+  for(const x of [0,.5-1e-12,.5,.5+1e-12])for(const dz of [0,1e-16,1e-14,1e-8,1])for(const maximum of [1,400,3e7])check([x,-1,2],[0,1,dz],upright,maximum);
+  for(const dx of [0,1e-16,1e-14,1e-8])check([.1,0,2],[dx,0,1],upright,400);
+  for(let i=0;i<4000;i++){
+    const a=Array.from({length:3},()=>100*(random()-.5)),b=a.map(v=>v+10*(random()-.5)),radius=.05+random()*2,c={a,b,radius};
+    const origin=i%3===0?a.map((v,j)=>(v+b[j])/2):a.map(v=>v+10*(random()-.5));
+    const raw=i%4===0?b.map((v,j)=>v-a[j]+1e-13*(random()-.5)):Array.from({length:3},()=>random()-.5);
+    check(origin,raw,c,i%2?400:3e7);
+  }
+  assert.ok(hits>500);assert.ok(misses>500);
+});
+
+test("Boolean terrain queries retain strict endpoint and near-parallel decisions",async()=>{
+  const {ForestOcclusion,terrainDistance}=await modelPromise;
+  const forest={trees:[],terrain:[[[0,-2,-2],[0,2,-2],[0,0,2]],...ground().terrain]},index=new ForestOcclusion(forest);
+  for(const origin of [[-1,0,0],[0,0,1],[0,0,-1],[0,0,0]])for(const raw of [[1,0,0],[0,0,-1],[1,0,1e-14],[1e-14,0,-1]])for(const maximum of [1e-6,1-1e-12,1,1+1e-12,400,3e7]){
+    const size=Math.hypot(...raw),d=raw.map(v=>v/size);
+    assert.equal(index.blocked(origin,raw,maximum),terrainDistance(origin,d,forest.terrain,maximum)!==null);
+  }
+});
