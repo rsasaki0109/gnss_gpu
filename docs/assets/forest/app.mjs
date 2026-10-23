@@ -1,7 +1,7 @@
-import { generateForest,forestReceiver,traceForest } from "./model.mjs?v=kernels-1";
-import { ForestRenderer } from "./renderer.mjs?v=kernels-1";
-import { GroundReflectionModel } from "./ground-reflections.mjs?v=kernels-1";
-import { setupPositioning } from "./positioning-ui.mjs?v=kernels-1";
+import { generateForest,forestReceiver,traceForest } from "./model.mjs?v=woodland-1";
+import { ForestRenderer } from "./renderer.mjs?v=woodland-1";
+import { GroundReflectionModel } from "./ground-reflections.mjs?v=woodland-1";
+import { setupPositioning } from "./positioning-ui.mjs?v=woodland-1";
 import { selectNavigation,receivedSatellite,sub,mul,norm,dot,geodetic,enuRotation } from "../simulation/orbit.mjs?v=glonass-1";
 import { skyLayout } from "../simulation/sky-plot.mjs?v=glonass-1";
 const $=id=>document.getElementById(id),root=$("forest-lab"),canvas=$("forest-scene");
@@ -69,8 +69,8 @@ function compute(){
 }
 function fail(error){play(false);stopPositioning?.();root.dataset.state="error";$("forest-status").textContent=error.message;for(const input of document.querySelectorAll("[data-control]"))input.disabled=true;}
 function download(){
-  const value={schema:"synthetic-forest-snapshot-v2",simulationOnly:true,assumptions:{canopy:"ellipsoid density volumes; overlapping densities add",wood:"finite cylinders; no calibrated power model",terrain:"piecewise planar finite patch",attenuation:"illustrative linear density integral, not a fitted ITU/GNSS model",reflections:"selected satellite, finite terrain single bounce only; constant uncalibrated bounce loss, no coherent combination or polarization model",diffraction:false,receiverTracking:false},
-    options:{...options(),maximumDirectRayM:400,elevationMaskDeg:10,receiverHeightM:1.6,routeDurationSeconds:1200},scene:forest,receiverENU:receiver,anchor:{originECEF:scene.origin,rotation:scene.rotation},week:scene.week,startTow:scene.track[0][0],elapsedSeconds:completedSeconds,tow:scene.track[0][0]+completedSeconds,source:{file:"odaiba-scene.json.gz",sha256:sourceHash},signals,selectedReflection:reflectionPacket};
+  const value={schema:"synthetic-forest-snapshot-v2",simulationOnly:true,assumptions:{appearance:"deterministic foliage lobes inside density envelopes; soft sun shadows, bark, litter and ground cover are display only, not additional RF geometry",canopy:"ellipsoid density volumes; overlapping densities add",wood:"finite cylinders; no calibrated power model",terrain:"piecewise planar finite patch",attenuation:"illustrative linear density integral, not a fitted ITU/GNSS model",reflections:"selected satellite, finite terrain single bounce only; constant uncalibrated bounce loss, no coherent combination or polarization model",diffraction:false,receiverTracking:false},
+    options:{...options(),maximumDirectRayM:400,elevationMaskDeg:10,receiverHeightM:1.6,routeDurationSeconds:1200},scene:forest,view:structuredClone(renderer.camera),receiverENU:receiver,anchor:{originECEF:scene.origin,rotation:scene.rotation},week:scene.week,startTow:scene.track[0][0],elapsedSeconds:completedSeconds,tow:scene.track[0][0]+completedSeconds,source:{file:"odaiba-scene.json.gz",sha256:sourceHash},signals,selectedReflection:reflectionPacket};
   const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)+"\n"],{type:"application/json"})),link=document.createElement("a");link.href=url;link.download="gnss-forest-snapshot.json";link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 async function init(){
@@ -79,7 +79,7 @@ async function init(){
   const response2=await fetch(new URL(`${asset.file}?sha256=${asset.sha256}`,base));if(!response2.ok)throw new Error("Orbit data unavailable");const bytes=await response2.arrayBuffer();
   const hash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes)),b=>b.toString(16).padStart(2,"0")).join("");if(bytes.byteLength!==asset.bytes||hash!==asset.sha256)throw new Error("Orbit data checksum mismatch");
   scene=await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).json();sourceHash=hash;
-  forest=generateForest();groundModel=new GroundReflectionModel(forest);renderer=new ForestRenderer(canvas,forest);compute();$("forest-status").textContent="Synthetic forest · real broadcast orbits";
+  forest=generateForest({count:Number($("forest-count").value)});groundModel=new GroundReflectionModel(forest);renderer=new ForestRenderer(canvas,forest);compute();$("forest-status").textContent="Synthetic forest · real broadcast orbits";
   for(const input of document.querySelectorAll("[data-control]"))input.disabled=false;
   $("forest-focus-reflection").disabled=!reflectionPacket?.paths.length;
   stopPositioning=setupPositioning(()=>{
@@ -94,7 +94,8 @@ async function init(){
   $("forest-systems").addEventListener("change",compute);
   for(const id of ["forest-count","forest-seed"])$(id).addEventListener("change",()=>{if(!$("forest-seed").reportValidity())return;try{play(false);forest=generateForest({seed:Number($("forest-seed").value),count:Number($("forest-count").value)});groundModel=new GroundReflectionModel(forest);renderer.setForest(forest);compute();}catch(error){fail(error);}});
   $("forest-export").addEventListener("click",download);$("forest-zoom-in").addEventListener("click",()=>renderer.zoom(1.25));$("forest-zoom-out").addEventListener("click",()=>renderer.zoom(.8));
-  $("forest-reset-view").addEventListener("click",()=>{Object.assign(renderer.camera,{yaw:-.7,pitch:.85,zoom:1,target:[0,0,5]});renderer.redraw();});
+  $("forest-trail-view").addEventListener("click",()=>renderer.trailView());
+  $("forest-reset-view").addEventListener("click",()=>renderer.resetView());
   new ResizeObserver(()=>renderer.redraw()).observe(canvas);
   const frame=time=>{if(playing){if(last){seconds=Math.min(1200,seconds+Math.min(time-last,250)/100);elapsed+=time-last;if(elapsed>=100||seconds===1200){elapsed=0;compute();}}if(seconds===1200)play(false);}last=time;requestAnimationFrame(frame);};requestAnimationFrame(frame);
 }

@@ -21,7 +21,7 @@ test("controlled positioning captures a fixed epoch, runs blindly and exports ev
   await expect(page.locator("#position-results tr")).toHaveCount(3);
   const pending=page.waitForEvent("download");await page.locator("#position-export").click();const download=await pending;
   const data=JSON.parse(fs.readFileSync(await download.path(),"utf8"));
-  expect(data.schema).toBe("synthetic-forest-positioning-v1");expect(data.scene.count).toBe(64);expect(data.context.elapsedSeconds).toBe(captured);
+  expect(data.schema).toBe("synthetic-forest-positioning-v1");expect(data.scene.count).toBe(128);expect(data.context.elapsedSeconds).toBe(captured);
   expect(data.context.source.sha256).toMatch(/^[a-f0-9]{64}$/);expect(data.search.globalSpatialOptimum).toBe(false);expect(data.search.clockGridAdditiveNllBound).toBe(1/32);
   expect(data.observations.length).toBeGreaterThanOrEqual(3);expect(data.observations.every(o=>o.id.startsWith("G")&&!('index' in o))).toBe(true);
   expect(data.results.map(r=>r.method)).toEqual(["straight","robust","paths"]);
@@ -37,7 +37,7 @@ test("controlled positioning captures a fixed epoch, runs blindly and exports ev
 test("forest ray geometry, live sky, assumptions and exported snapshot remain consistent",async({page},testInfo)=>{
   const errors=[],requests=[];page.on("pageerror",e=>errors.push(e.message));page.on("request",r=>requests.push(r.url()));
   await page.goto("forest.html");const root=page.locator("#forest-lab");
-  await expect(root).toHaveAttribute("data-state","ready",{timeout:45000});await expect(root).toHaveAttribute("data-count","64");
+  await expect(root).toHaveAttribute("data-state","ready",{timeout:45000});await expect(root).toHaveAttribute("data-count","128");
   const drawing=await page.locator("#forest-scene").evaluate(canvas=>{
     document.getElementById("forest-reset-view").click();const gl=canvas.getContext("webgl2"),size=120,pixels=new Uint8Array(size*size*4);
     gl.readPixels(Math.floor(canvas.width/2-size/2),Math.floor(canvas.height/2-size/2),size,size,gl.RGBA,gl.UNSIGNED_BYTE,pixels);
@@ -78,10 +78,10 @@ test("selected ground path renders, changes assumed power and exports coherent f
   const extra=Number(await readout.getAttribute("data-extra")),delay=Number(await readout.getAttribute("data-delay-ns")),power=Number(await readout.getAttribute("data-power-db"));
   expect(extra).toBeGreaterThan(0);expect(Math.abs(delay-extra/299792458*1e9)).toBeLessThan(1e-10);
   await page.locator("#bounce-loss").press("End");expect(Number(await readout.getAttribute("data-extra"))).toBe(extra);expect(Math.abs(Number(await readout.getAttribute("data-power-db"))-power+24)).toBeLessThan(1e-10);
-  const time=await root.getAttribute("data-seconds");await page.locator("#forest-focus-reflection").click();expect(await root.getAttribute("data-seconds")).toBe(time);
+  const time=await root.getAttribute("data-seconds");await page.locator("#forest-trail-view").click();await page.locator("#forest-focus-reflection").click();await expect(page.locator("#forest-scene")).toHaveAttribute("data-view","overview");expect(await root.getAttribute("data-seconds")).toBe(time);
   await page.locator("#forest-scene").screenshot({path:testInfo.outputPath("ground-reflection.png")});
   const pending=page.waitForEvent("download");await page.locator("#forest-export").click();const data=JSON.parse(fs.readFileSync(await (await pending).path(),"utf8")),packet=data.selectedReflection;
-  expect(packet.model).toBe("finite-terrain-reflection-v1");expect(packet.options.completeSegments).toBe(true);expect(packet.options.bounceLoss).toBe(30);expect(packet.tow).toBe(data.tow);
+  expect(data.view.follow).toBe(false);expect(data.view.pitch).toBeGreaterThan(.5);expect(packet.model).toBe("finite-terrain-reflection-v1");expect(packet.options.completeSegments).toBe(true);expect(packet.options.bounceLoss).toBe(30);expect(packet.tow).toBe(data.tow);
   expect(packet.satelliteStateConvention).toContain("no reflected-flight-time orbit iteration");
   const signal=data.signals.find(s=>s.id===packet.satellite);
   for(const p of packet.paths){
@@ -113,4 +113,21 @@ test("corrupted orbit source fails visibly without enabling a plausible forest r
   await page.route("**/odaiba-scene.json.gz*",route=>route.fulfill({status:200,body:Buffer.from("bad orbit bytes"),contentType:"application/gzip"}));
   await page.goto("forest.html");await expect(page.locator("#forest-lab")).toHaveAttribute("data-state","error");
   await expect(page.locator("#forest-status")).toContainText("checksum mismatch");await expect(page.locator("#forest-play")).toBeDisabled();await expect(page.locator("#forest-export")).toBeDisabled();
+});
+
+test("trail perspective follows the completed receiver and keeps appearance out of RF assumptions",async({page},testInfo)=>{
+  const errors=[];page.on("pageerror",e=>errors.push(e.message));
+  await page.goto("forest.html");await expect(page.locator("#forest-lab")).toHaveAttribute("data-state","ready",{timeout:45000});
+  const canvas=page.locator("#forest-scene");await expect(canvas).toHaveAttribute("data-view","overview");
+  expect(Number(await canvas.getAttribute("data-vertices"))).toBeLessThan(800000);
+  await page.locator("#forest-trail-view").click();await expect(canvas).toHaveAttribute("data-view","trail");
+  await canvas.screenshot({path:testInfo.outputPath("forest-trail.png")});
+  for(const end of [false,true]){
+    if(end)await page.locator("#forest-progress").press("End");
+    const pending=page.waitForEvent("download");await page.locator("#forest-export").click();const data=JSON.parse(fs.readFileSync(await (await pending).path(),"utf8"));
+    expect(data.view.follow).toBe(true);expect(data.view.target).toEqual(data.receiverENU);expect(data.assumptions.appearance).toContain("display only");expect(data.scene.count).toBe(128);
+  }
+  const drawing=await canvas.evaluate(c=>{document.getElementById("forest-trail-view").click();const gl=c.getContext("webgl2"),pixels=new Uint8Array(64*64*4);gl.readPixels(Math.floor(c.width/2)-32,Math.floor(c.height*.2),64,64,gl.RGBA,gl.UNSIGNED_BYTE,pixels);const colors=new Set();for(let i=0;i<pixels.length;i+=16)colors.add(`${pixels[i]},${pixels[i+1]},${pixels[i+2]}`);return {lost:gl.isContextLost(),error:gl.getError(),colors:colors.size};});
+  expect(drawing.lost).toBe(false);expect(drawing.error).toBe(0);expect(drawing.colors).toBeGreaterThan(10);
+  await page.locator("#forest-reset-view").click();await expect(canvas).toHaveAttribute("data-view","overview");expect(errors).toEqual([]);
 });
