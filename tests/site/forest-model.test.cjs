@@ -72,3 +72,19 @@ test("generated forest optical depth agrees with independent spatial quadrature"
     assert.ok(Math.abs(result.opticalPath-integral)<=bound,`${result.opticalPath} != ${integral}`);
   }
 });
+
+test("leaf geometry stays in the unchanged density envelope with finite unit normals",async()=>{
+  const {generateForest,forestMesh}=await model,forest=generateForest({count:1}),saved=structuredClone(forest),mesh=forestMesh(forest),c=forest.trees[0].crown;let leaves=0;
+  assert.deepEqual(mesh,forestMesh(forest));
+  for(let i=0;i<mesh.length;i+=9){
+    const n=Math.hypot(mesh[i+3],mesh[i+4],mesh[i+5]);assert.ok(Math.abs(n-1)<2e-6);
+    if(mesh[i+7]<1.9*mesh[i+6])continue;
+    const q=[0,1,2].reduce((sum,j)=>sum+((mesh[i+j]-c.center[j])/c.radii[j])**2,0);assert.ok(q<=1.00001);leaves++;
+  }
+  assert.ok(leaves>1000);assert.deepEqual(forest,saved);
+});
+
+test("dense forest display remains within a bounded vertex buffer",async()=>{
+  const {generateForest,forestMesh}=await model,forest=generateForest({count:128}),mesh=forestMesh(forest);
+  assert.ok(mesh.byteLength<28*1024*1024);assert.equal(mesh.length%27,0);assert.ok(mesh.every(Number.isFinite));
+});

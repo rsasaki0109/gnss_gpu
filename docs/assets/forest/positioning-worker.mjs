@@ -1,4 +1,4 @@
-import {generateObservations,solvePosition} from "./positioning.mjs?v=kernels-1";
+import {generateObservations,solvePosition} from "./positioning.mjs?v=woodland-1";
 self.onmessage=({data})=>{
   try{
     const {forest,receiver,signals,seed,sigma,mapBias,context}=data;

@@ -155,30 +155,98 @@ export function traceForest(forest,origin,rawDirection,{specificLoss=.2,foliage=
 }
 export function forestMesh(forest,{foliage=1}={}) {
   if(!Number.isFinite(foliage)||foliage<0||foliage>2)throw new RangeError("Invalid display foliage");
-  const data=[],tri=(a,b,c,color)=>{
-    const u=sub(b,a),v=sub(c,a),n=unit([u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]]);
-    for(const p of [a,b,c])data.push(...p,...n,...color);
+  const data=[],random=randomSequence((forest.seed??0)>>>0),tri=(a,b,c,color,normals)=>{
+    const u=sub(b,a),v=sub(c,a),flat=unit([u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]]);
+    [a,b,c].forEach((p,i)=>data.push(...p,...(normals?.[i]??flat),...color));
   };
-  for(const [a,b,c] of forest.terrain)tri(a,b,c,[.18,.25,.19]);
-  for(let y=-68;y<68;y+=2){
-    const road=(y,side)=>{const x=trailX(y)+side*2;return [x,y,terrainHeight(x,y)+.035];};
-    tri(road(y,-1),road(y,1),road(y+2,-1),[.48,.43,.32]);tri(road(y,1),road(y+2,1),road(y+2,-1),[.48,.43,.32]);
+  // Render subdivision stays on the same planar terrain. Soft sun shadows are
+  // appearance only; GNSS occlusion continues to use the original triangles.
+  const floorColors=new Map(),floorColor=p=>{
+    const key=`${p[0]},${p[1]}`;if(floorColors.has(key))return floorColors.get(key);
+    let shade=1;
+    for(const tree of forest.trees){
+      const {center,radii}=tree.crown,h=center[2]-p[2];
+      const x=(p[0]-center[0]+.375*h)/(radii[0]+.375*radii[2]),y=(p[1]-center[1]-.625*h)/(radii[1]+.625*radii[2]);
+      shade*=1-.42*Math.min(foliage,1)*Math.exp(-1.6*(x*x+y*y));
+    }
+    const variation=.94+.06*Math.sin(p[0]*.61+p[1]*.37),color=[.30,.33,.21].map(v=>v*variation*(.45+.55*shade));
+    floorColors.set(key,color);return color;
+  };
+  const groundTriangle=(a,b,c)=>{
+    // Each subdivided face is contained in one original triangle, including
+    // arbitrary imported terrain; interpolation cannot invent a new surface.
+    const n=8,point=(u,v)=>a.map((x,i)=>x+u*(b[i]-x)/n+v*(c[i]-x)/n);
+    for(let i=0;i<n;i++)for(let j=0;j<n-i;j++){
+      const p=point(i,j),q=point(i+1,j),r=point(i,j+1),color=[p,q,r].map(floorColor);
+      const e=sub(q,p),f=sub(r,p),normal=unit([e[1]*f[2]-e[2]*f[1],e[2]*f[0]-e[0]*f[2],e[0]*f[1]-e[1]*f[0]]);
+      [p,q,r].forEach((v,k)=>data.push(...v,...normal,...color[k]));
+      if(i+j<n-1){const s=point(i+1,j+1);[q,s,r].forEach(v=>data.push(...v,...normal,...floorColor(v)));}
+    }
+  };
+  for(const [a,b,c] of forest.terrain)groundTriangle(a,b,c);
+  for(let y=-68;y<68;y+=1){
+    const road=(y,side)=>{const x=trailX(y)+side*(1.6+.12*Math.sin(y*.7));return [x,y,terrainHeight(x,y)+.035];};
+    tri(road(y,-1),road(y,1),road(y+1,-1),[.48,.43,.32]);tri(road(y,1),road(y+1,1),road(y+1,-1),[.48,.43,.32]);
   }
   for(const tree of forest.trees){
     for(const shape of [tree.trunk,...tree.branches]){
       const n=unit(sub(shape.b,shape.a)),axis=Math.abs(n[2])<.9?[0,0,1]:[1,0,0];
       const u=unit([n[1]*axis[2]-n[2]*axis[1],n[2]*axis[0]-n[0]*axis[2],n[0]*axis[1]-n[1]*axis[0]]),v=[n[1]*u[2]-n[2]*u[1],n[2]*u[0]-n[0]*u[2],n[0]*u[1]-n[1]*u[0]];
-      const ring=(center,j)=>center.map((x,i)=>x+shape.radius*(Math.cos(j*Math.PI/4)*u[i]+Math.sin(j*Math.PI/4)*v[i]));
-      for(let j=0;j<8;j++){const a=ring(shape.a,j),b=ring(shape.a,j+1),c=ring(shape.b,j),d=ring(shape.b,j+1);tri(a,b,c,[.32,.23,.15]);tri(b,d,c,[.32,.23,.15]);tri(shape.a,b,a,[.32,.23,.15]);tri(shape.b,c,d,[.32,.23,.15]);}
+      const radial=j=>u.map((x,i)=>Math.cos(j*Math.PI/5)*x+Math.sin(j*Math.PI/5)*v[i]),ring=(center,j)=>center.map((x,i)=>x+shape.radius*radial(j)[i]);
+      for(let j=0;j<10;j++){
+        const a=ring(shape.a,j),b=ring(shape.a,j+1),c=ring(shape.b,j),d=ring(shape.b,j+1),na=radial(j),nb=radial(j+1);
+        tri(a,b,c,[.32,.23,.15],[na,nb,na]);tri(b,d,c,[.32,.23,.15],[nb,nb,na]);tri(shape.a,b,a,[.32,.23,.15]);tri(shape.b,c,d,[.32,.23,.15]);
+      }
     }
+    // Consume the same random sequence even with foliage hidden. Display lobes
+    // are contained in the physical density ellipsoid; they are not new RF volumes.
+    const lobes=[{center:[0,0,0],radius:.58},{center:[0,0,.55],radius:.43},{center:[0,0,-.5],radius:.42}];
+    for(let i=0;i<18;i++){
+      const z=2*random()-1,angle=2*Math.PI*random(),radius=.46+.12*random(),r=Math.sqrt(1-z*z);
+      const center=[r*Math.cos(angle)*radius,r*Math.sin(angle)*radius,z*radius];
+      lobes.push({center,radius:Math.min(.32+.09*random(),.98-radius)});
+    }
+    const tint=random(),crown=tree.crown;
     if(foliage===0)continue;
-    const crown=tree.crown,p=(i,j)=>crown.center.map((c,k)=>c+crown.radii[k]*[Math.sin(i*Math.PI/8)*Math.cos(j*Math.PI/7),Math.sin(i*Math.PI/8)*Math.sin(j*Math.PI/7),Math.cos(i*Math.PI/8)][k]);
-    const color=[.10+.03*Math.min(foliage,1),.24+tree.density*.065+.06*Math.min(foliage,1),.15+.04*Math.min(foliage,1)];
-    for(let i=0;i<8;i++)for(let j=0;j<14;j++){
-      if(i>0)tri(p(i,j),p(i+1,j),p(i,j+1),color);
-      if(i<7)tri(p(i,j+1),p(i+1,j),p(i+1,j+1),color);
+    for(const lobe of lobes){
+      const center=crown.center.map((v,i)=>v+lobe.center[i]*crown.radii[i]),radii=crown.radii.map(v=>v*lobe.radius);
+      const sample=(i,j)=>{
+        const u=[Math.sin(i*Math.PI/4)*Math.cos(j*Math.PI/4),Math.sin(i*Math.PI/4)*Math.sin(j*Math.PI/4),Math.cos(i*Math.PI/4)];
+        return {p:center.map((v,k)=>v+u[k]*radii[k]),n:unit(u.map((v,k)=>v/radii[k]))};
+      };
+      const color=[.12+.055*tint,.31+.08*tint+.025*Math.min(foliage,1),.105+.035*tint].map(v=>v*(.80+.20*(lobe.center[2]+.6)/1.2));
+      const face=(a,b,c)=>tri(a.p,b.p,c.p,color,[a.n,b.n,c.n]);
+      for(let i=0;i<4;i++)for(let j=0;j<8;j++){
+        if(i>0)face(sample(i,j),sample(i+1,j),sample(i,j+1));
+        if(i<3)face(sample(i,j+1),sample(i+1,j),sample(i+1,j+1));
+      }
+    }
+  }
+  // Low ground cover is decorative, not an uncalibrated new attenuation term.
+  for(let i=0;i<1250;i++){
+    const fern=i<500,tree=forest.trees.length?forest.trees[Math.floor(random()*forest.trees.length)]:null;
+    const x=fern&&tree?tree.x+(random()-.5)*11:(random()-.5)*152,y=fern&&tree?tree.y+(random()-.5)*11:(random()-.5)*152,h=.22+.45*random();
+    if(Math.abs(x)>77||Math.abs(y)>77||Math.abs(x-trailX(y))<2.3)continue;
+    const z=terrainHeight(x,y)+.025,angle=random()*Math.PI,color=[.21,.30+.07*random(),.105];
+    if(fern){
+      for(let j=0;j<4;j++){
+        const a=angle+j*Math.PI/2,along=[Math.cos(a),Math.sin(a)],side=[-along[1],along[0]];
+        for(let k=1;k<=4;k++){
+          const t=k/5,reach=h*t,stem=[x+along[0]*reach,y+along[1]*reach,z+h*(1.6*t-.8*t*t)],width=h*.32*(1-t);
+          for(const sign of [-1,1]){
+            const base=[stem[0]-along[0]*.08,stem[1]-along[1]*.08,stem[2]-.04],tip=[stem[0]+side[0]*sign*width,stem[1]+side[1]*sign*width,stem[2]+.025],end=[stem[0]+along[0]*.09,stem[1]+along[1]*.09,stem[2]+.015];
+            tri(base,tip,end,color);
+          }
+        }
+      }
+    }else{
+      for(let j=0;j<7;j++){
+        const a=angle+j*2.4,dx=Math.cos(a),dy=Math.sin(a),height=h*(.5+.5*random()),base=[x,y,z],left=[x-.018*dy,y+.018*dx,z],bend=[x+.12*dx,y+.12*dy,z+height*.65],tip=[x+.24*dx,y+.24*dy,z+height];
+        tri(base,left,bend,color);tri(left,bend,tip,color);
+      }
     }
   }
   return new Float32Array(data); // Visualization only, never read by traceForest.
 }
+
 export const rayPoint=point;
