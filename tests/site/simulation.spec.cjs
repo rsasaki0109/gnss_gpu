@@ -28,6 +28,40 @@ function tileFixture() {
 }
 const TILE = tileFixture();
 
+test("recorded strength loads verified raw observations lazily, aligns time and excludes virtual height",async({page},testInfo)=>{
+  const data=JSON.parse(gunzipSync(fs.readFileSync(path.join(__dirname,"../../docs/assets/plateau/odaiba-strength-trimble.json.gz"))));
+  const requests=[];page.on("request",r=>{if(r.url().includes("strength-"))requests.push(r.url());});
+  await page.goto("simulation.html");const canvas=page.locator("#scene");await expect(canvas).toHaveAttribute("data-ready","true",{timeout:45000});
+  expect(requests).toHaveLength(0);
+  const ids=await page.locator("[data-satellite]").evaluateAll(nodes=>nodes.map(n=>n.dataset.satellite));
+  const time=SCENE.track[8000][0],id=ids.find(id=>id[0]==="G"&&data.signals[id]?.samples.some(s=>Math.abs(s[0]-time)<.002));expect(id).toBeTruthy();
+  const expected=data.signals[id].samples.find(s=>Math.abs(s[0]-time)<.002);
+  await page.locator(`[data-satellite="${id}"]`).click();const trace=await canvas.getAttribute("data-trace-id"),bias=await page.locator("#spp-all").textContent();
+  const root=page.locator("#recorded-strength");await root.locator(":scope > summary").click();
+  await expect(root).toHaveAttribute("data-state","ready");await expect(root).toHaveAttribute("data-matched","true");
+  await expect(page.locator("#recorded-value")).toContainText(`${expected[1]} dB-Hz`);await expect(page.locator("#recorded-value")).toContainText("units inferred");
+  await expect(canvas).toHaveAttribute("data-trace-id",trace);await expect(page.locator("#spp-all")).toHaveText(bias);
+  const download=page.waitForEvent("download");await page.locator("#recorded-export").click();const csv=fs.readFileSync(await(await download).path(),"utf8");expect(csv).toContain(`${expected[0]},trimble,${id},S1C,${expected[1]},inferred-rtkconv`);
+  await page.locator("#play").click();await expect.poll(async()=>Number(await root.getAttribute("data-epoch"))).toBeGreaterThan(8000);
+  await page.locator("#play").click();await expect(page.locator("#route-trace")).toHaveAttribute("data-ready","true");
+  await expect(root).toHaveAttribute("data-epoch",await canvas.getAttribute("data-epoch"));
+  await page.locator("#preset").selectOption("8000");await expect(root).toHaveAttribute("data-epoch","8000");
+  await page.locator("#recorded-receiver").selectOption("ublox");await expect(root).toHaveAttribute("data-receiver","ublox");await expect(root).toHaveAttribute("data-state","ready");
+  const u=JSON.parse(gunzipSync(fs.readFileSync(path.join(__dirname,"../../docs/assets/plateau/odaiba-strength-ublox.json.gz"))));
+  const has=u.signals[id]?.samples.some(s=>Math.abs(s[0]-time)<.002)??false;await expect(root).toHaveAttribute("data-matched",String(has));
+  await page.locator("#antenna").focus();await page.locator("#antenna").press("ArrowRight");await expect(root).toHaveAttribute("data-state","virtual-height");await expect(page.locator("#recorded-export")).toBeDisabled();await expect(page.locator("#recorded-plot path")).toHaveCount(0);
+  await page.locator("#reset").click();await expect(root).toHaveAttribute("data-state","ready");await expect(root).toHaveAttribute("data-epoch","8000");
+  await root.screenshot({path:testInfo.outputPath("recorded-strength.png")});
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test("corrupt recorded observations show an isolated error while geometric simulation stays exact",async({page})=>{
+  await page.route("**/odaiba-strength-trimble.json.gz*",async route=>{const response=await route.fetch(),bytes=Buffer.from(await response.body());bytes[bytes.length-1]^=1;await route.fulfill({response,body:bytes});});
+  await page.goto("simulation.html");const canvas=page.locator("#scene");await expect(canvas).toHaveAttribute("data-ready","true",{timeout:45000});const bias=await page.locator("#spp-all").textContent();
+  await page.locator("#recorded-strength > summary").click();await expect(page.locator("#recorded-strength")).toHaveAttribute("data-state","error");await expect(page.locator("#recorded-value")).toContainText("integrity check failed");
+  await expect(page.locator("#spp-all")).toHaveText(bias);await expect(canvas).toHaveAttribute("data-ready","true");await expect(page.locator("#play")).toBeEnabled();
+});
+
 test("route evaluation compares exact completed poses, exports assumptions and inspects a map result",async({page},testInfo)=>{
   const errors=[];page.on("pageerror",e=>errors.push(e.message));
   await page.goto("simulation.html");const canvas=page.locator("#scene");
@@ -35,7 +69,7 @@ test("route evaluation compares exact completed poses, exports assumptions and i
   const trace=await canvas.getAttribute("data-trace-id"),bias=await page.locator("#spp-all").textContent();
   await page.locator("#history-metric").selectOption("bias");
   await expect(page.locator("#signal-history")).toHaveAttribute("data-selected","FIT");
-  await page.locator("#signal-history details > summary").click();
+  await page.locator("#signal-history > details.tool-help > summary").click();
   await page.locator("#power-material").selectOption("glass");
   await page.locator("#power-antenna").selectOption("zenith");
   await expect(page.locator("#spp-all")).toHaveText(bias);await expect(canvas).toHaveAttribute("data-trace-id",trace);
@@ -95,7 +129,7 @@ test("signal history streams completed five-system samples and resets on seek/se
   await expect(page.locator("#route-trace")).toHaveAttribute("data-ready","true");
   await page.locator('[data-satellite="R06"]').click();
   await expect(history).toHaveAttribute("data-selected","R06");
-  await expect(history.locator("output")).toContainText("R06");
+  await expect(history.locator(".signal-history-heading > output")).toContainText("R06");
   await page.locator("#preset").selectOption("0");
   await expect(history).toHaveAttribute("data-epoch","0");
   await expect(history).toHaveAttribute("data-samples","1");

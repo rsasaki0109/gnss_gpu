@@ -40,3 +40,5 @@ signal geometry and reference trajectory are not modified using OSM data.
 GLONASS: RINEX 3.03 Appendix A10; Float64 RK4 with J2 and broadcast acceleration.
 UTC to GPST uses the recorded 2018 offset of 18 seconds; nominal PZ-90.11/WGS84 alignment.
 Orbit equations: https://github.com/tomojitakasu/RTKLIB/blob/master/src/ephemeris.c
+
+Recorded strength: UrbanNav Odaiba rover_trimble.obs and rover_ublox.obs, first-band numeric Sxx fields only, original GPS timestamps and values without resampling. Source and exported-file hashes are in strength-manifest.json. Missing/zero fields are omitted, never converted to zero reception. The source RINEX 3.02 headers omit SIGNAL STRENGTH UNIT; dB-Hz is inferred from RTKCONV 2.4.3 b31 producer convention, not independently calibrated. BeiDou S1I is the legacy 3.02 B1I code (3.03 S2I). Galileo tracking differs: Trimble S1X versus u-blox S1C. These observations do not calibrate the geometric/relative-power model or positioning. UrbanNav MIT attribution above applies. Rebuild: python tools/build_browser_recorded_strength.py.
