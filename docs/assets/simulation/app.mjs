@@ -1,5 +1,5 @@
 import { SignalHistoryPlot, historyCSV } from "./signal-history.mjs?v=analysis-1";
-import { AnalysisView, download } from "./analysis-view.mjs?v=analysis-1";
+import { AnalysisView, download } from "./analysis-view.mjs?v=route-summary-1";
 import { C, GNSS_SYSTEMS } from "./orbit.mjs?v=glonass-1";
 import { decodeMesh } from "./mesh.mjs?v=glonass-1";
 import { CityRenderer } from "./renderer.mjs?v=surface-1";
@@ -397,7 +397,7 @@ async function initialize() {
   $("geometry-readout").textContent = `${scene.stats.buildings.toLocaleString("en-US")} building components · ${scene.stats.bridges} bridge components · ${scene.stats.holes} interior rings preserved`;
   $("repair-readout").textContent = `${scene.stats.topology_repaired_faces} source face repaired with GEOS linework; ${scene.stats.inserted_boundary_vertices} boundary-intersection vertices inserted. No mesh decimation or coordinate quantization.`;
   status("Indexing all 320,932 triangles…");
-  worker = new Worker(new URL("./city-worker.mjs?v=analysis-1", import.meta.url), { type: "module" });
+  worker = new Worker(new URL("./city-worker.mjs?v=route-summary-1", import.meta.url), { type: "module" });
   worker.onerror = event => fail(new Error(event.message || "The simulation worker stopped."));
   worker.onmessage = ({ data }) => {
     if (data.type === "analysis" || data.type === "analysis-error") { analysisView.receive(data); return; }

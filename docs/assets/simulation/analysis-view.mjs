@@ -1,6 +1,7 @@
+import { summarizeRoute, routeGeoJSON } from "./route-summary.mjs?v=route-summary-1";
 import { routeLayout, nearestRecordedEpoch } from "./route-navigation.mjs?v=route-1";
 import { localPoint } from "./orbit.mjs?v=glonass-1";
-import { analysisCSV } from "./route-analysis.mjs?v=analysis-1";
+import { analysisCSV } from "./route-analysis.mjs?v=route-summary-1";
 
 export function download(name,text,type="text/csv;charset=utf-8") {
   const url=URL.createObjectURL(new Blob([text],{type})), a=document.createElement("a");
@@ -14,7 +15,8 @@ export class AnalysisView {
     this.$("analysis-pause").onclick=()=>{if(this.state==="paused"){this.pause();this.send({type:"analysis-resume"});}else this.send({type:"analysis-pause"});};
     this.$("analysis-stop").onclick=()=>this.send({type:"analysis-cancel"});
     this.$("analysis-csv").onclick=()=>download("gnss-route-analysis.csv",analysisCSV(this.rows,this.metadata));
-    this.$("analysis-json").onclick=()=>download("gnss-route-analysis.json",JSON.stringify({schema:1,...this.metadata,state:this.state,completed:this.rows.length,total:this.total,results:this.rows},null,2),"application/json");
+    this.$("analysis-json").onclick=()=>download("gnss-route-analysis.json",JSON.stringify({schema:1,...this.metadata,state:this.state,summary:summarizeRoute(this.rows),completed:this.rows.length,total:this.total,results:this.rows},null,2),"application/json");
+    this.$("analysis-geojson").onclick=()=>download("gnss-route-analysis.geojson",JSON.stringify(routeGeoJSON(this.rows,{...this.metadata,state:this.state,completed:this.rows.length,total:this.total})),"application/geo+json");
     this.$("analysis-position").oninput=()=>{this.selected=Number(this.$("analysis-position").value);this.draw();};
     this.$("analysis-jump").onclick=()=>{const row=this.rows[this.selected??0];if(row)this.seek(row.epoch);};
     for(const id of ["analysis-condition","analysis-metric"])this.$(id).onchange=()=>this.draw();
@@ -27,7 +29,7 @@ export class AnalysisView {
     });
     new ResizeObserver(()=>this.draw()).observe(this.canvas);
   }
-  init(scene,assets) { this.scene=scene;this.assets=assets;this.positions=scene.track.map(row=>localPoint(row.slice(1),scene));this.$("analysis-start").disabled=false;this.draw(); }
+  init(scene,assets) { this.scene=scene;this.assets=assets;this.positions=scene.track.map(row=>localPoint(row.slice(1),scene));this.$("analysis-start").disabled=false;this.updateSummary();this.draw(); }
   start() {
     if(!this.scene)return;this.pause();
     const a=this.settings(), radius=Number(this.$("analysis-range").value), start=radius?Math.max(0,a.epoch-radius):0,end=radius?Math.min(this.scene.track.length-1,a.epoch+radius):this.scene.track.length-1;
@@ -36,7 +38,7 @@ export class AnalysisView {
     this.metadata={assets:this.assets,start,end,step:Number(this.$("analysis-step").value),conditions,power:this.power(),model:"Earliest-path zero-noise geometric fit; RF is display-only",sampling:"Original recorded poses only; unsampled epochs are not evaluated"};
     this.rows=[];this.selected=0;this.total=0;this.state="running";this.root.dataset.completed="0";
     this.$("analysis-settings").textContent=`A: ${a.systems} · +${a.antenna} m · ${a.mask}° / B: ${conditions[1].systems} · +${conditions[1].antenna} m · ${conditions[1].mask}° · RF: ${this.metadata.power.material}, ${this.metadata.power.polarization}, ${this.metadata.power.antenna}`;
-    this.send({type:"analysis-start",id:++this.id,...this.metadata});this.controls();this.draw();
+    this.send({type:"analysis-start",id:++this.id,...this.metadata});this.controls();this.updateSummary();this.draw();
   }
   receive(data) {
     if(data.id!==this.id)return;
@@ -45,13 +47,23 @@ export class AnalysisView {
     this.root.dataset.completed=this.rows.length;this.root.dataset.state=this.state;
     const average=this.rows.length?data.milliseconds/this.rows.length:0;
     this.$("analysis-status").textContent=data.error??`${this.state} · ${this.rows.length}/${this.total} sampled poses · ${average.toFixed(1)} ms/pose · ${data.traces??0} geometric traces`;
-    this.controls();this.draw();
+    this.controls();if(this.state!=="running"||this.rows.length===1||this.rows.length%20===0)this.updateSummary();this.draw();
+  }
+  updateSummary() {
+    const stats=summarizeRoute(this.rows);
+    const formatted=v=>v===null?"—":`${v.toFixed(2)} m`;
+    this.$("analysis-statistics").replaceChildren(...stats.conditions.map((c,i)=>{
+      const row=document.createElement("tr");
+      for(const value of [i===0?"A":"B",`${c.available}/${stats.sampledPoses}`,formatted(c.median),formatted(c.p95),formatted(c.maximum)]){const cell=document.createElement("td");cell.textContent=value;row.append(cell);}
+      return row;
+    }));
+    this.$("analysis-paired").textContent=`Paired poses: ${stats.paired.count} · median(A − B) ${formatted(stats.paired.median)}`;
   }
   controls() {
     const active=["running","paused"].includes(this.state);
     this.$("analysis-pause").disabled=!active;this.$("analysis-stop").disabled=!active;
     this.$("analysis-pause").textContent=this.state==="paused"?"Resume":"Pause";
-    for(const id of ["analysis-csv","analysis-json","analysis-jump","analysis-position"])this.$(id).disabled=!this.rows.length;
+    for(const id of ["analysis-csv","analysis-json","analysis-geojson","analysis-jump","analysis-position"])this.$(id).disabled=!this.rows.length;
     this.$("analysis-position").max=Math.max(0,this.rows.length-1);
   }
   draw() {

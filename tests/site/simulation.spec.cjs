@@ -53,6 +53,13 @@ test("route evaluation compares exact completed poses, exports assumptions and i
   expect(output.results[0].epoch).toBe(7950);expect(output.results.at(-1).epoch).toBe(8050);
   expect(output.results.every(row=>row.traces===1)).toBe(true);expect(output.power.material).toBe("glass");
   expect(output.conditions.map(c=>c.systems)).toEqual(["GECJR","G"]);
+  expect(output.summary.sampledPoses).toBe(11);
+  await expect(page.locator("#analysis-statistics tr")).toHaveCount(2);
+  const geoDownload=page.waitForEvent("download");await page.locator("#analysis-geojson").click();
+  const geo=JSON.parse(fs.readFileSync(await(await geoDownload).path(),"utf8"));
+  expect(geo.type).toBe("FeatureCollection");expect(geo.features).toHaveLength(22);expect(geo.summary).toEqual(output.summary);
+  expect(geo.features[0].geometry.coordinates).toEqual([output.results[0].conditions[0].geodetic.longitude,output.results[0].conditions[0].geodetic.latitude,output.results[0].conditions[0].geodetic.height]);
+  expect(geo.features[0].properties.coordinate_role).toBe("reference receiver");
   const csvDownload=page.waitForEvent("download");await page.locator("#analysis-csv").click();
   const csv=fs.readFileSync(await(await csvDownload).path(),"utf8");expect(csv).toContain("horizontal_geometric_bias_m");expect(csv).toContain("glass,rhcp,zenith");
   await page.locator("#analysis-condition").selectOption("2");await page.locator("#analysis-metric").selectOption("blocked");
@@ -71,7 +78,7 @@ test("long route evaluation pauses, resumes, stops and preserves partial exports
   await page.locator("#analysis-pause").click();await expect.poll(async()=>Number(await root.getAttribute("data-completed"))).toBeGreaterThan(completed);
   await page.locator("#analysis-stop").click();await expect(root).toHaveAttribute("data-state","cancelled");await expect(page.locator("#analysis-csv")).toBeEnabled();
   const download=page.waitForEvent("download");await page.locator("#analysis-json").click();const output=JSON.parse(fs.readFileSync(await(await download).path(),"utf8"));
-  expect(output.state).toBe("cancelled");expect(output.completed).toBeGreaterThan(0);expect(output.completed).toBeLessThan(output.total);
+  expect(output.state).toBe("cancelled");expect(output.summary.sampledPoses).toBe(output.completed);expect(output.completed).toBeGreaterThan(0);expect(output.completed).toBeLessThan(output.total);
 });
 
 test("signal history streams completed five-system samples and resets on seek/settings", async ({page}, testInfo) => {

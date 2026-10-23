@@ -12,7 +12,7 @@ const b=gunzipSync(readFileSync(new URL("../docs/assets/plateau/odaiba-mesh.bin.
 const simulation=new CitySimulation(scene,decodeMesh(b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength)));
 const conditions=[{antenna:0,mask:10,systems:"GECJR"},{antenna:0,mask:10,systems:"G"}];
 const epochs=[0,2000,4000,6000,8000,12409];
-function independent(epoch){return conditions.map(c=>{const s=simulation.compute({epoch,...c});return {...c,counts:s.counts,bias:s.spp.all?.horizontal??null,signals:signalMetrics(s,scene,DEFAULT_POWER)};});}
+function independent(epoch){return conditions.map(c=>{const s=simulation.compute({epoch,...c});return {...c,geodetic:{latitude:s.latitude,longitude:s.longitude,height:s.height},counts:s.counts,bias:s.spp.all?.horizontal??null,signals:signalMetrics(s,scene,DEFAULT_POWER)};});}
 const expected=epochs.map(independent),times={independent:[],shared:[]};let checks=0;
 for(let round=-2;round<7;round++)for(const name of ["independent","shared","shared","independent"]){
   const results=[],started=performance.now();

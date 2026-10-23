@@ -34,7 +34,7 @@ export function compareEpoch(simulation,epoch,conditions,power) {
       const counts={LOS:0,NLOS:0,BLOCKED:0};satellites.forEach(s=>counts[s.status]++);
       const fit=geometricSPP(base.receiver,satellites);
       const summary={...base,...condition,satellites};
-      snapshots[i]={...condition,counts,bias:fit?.horizontal??null,signals:signalMetrics(summary,simulation.scene,power)};
+      snapshots[i]={...condition,geodetic:{latitude:base.latitude,longitude:base.longitude,height:base.height},counts,bias:fit?.horizontal??null,signals:signalMetrics(summary,simulation.scene,power)};
     }
   }
   const row=simulation.scene.track[epoch];
@@ -75,11 +75,11 @@ export class RouteEvaluation {
 
 const cell=value=>value===null||value===undefined?"":String(value);
 export function analysisCSV(rows,metadata) {
-  const header=["epoch","gps_week","gps_tow_s","condition","systems","antenna_offset_m","mask_deg","horizontal_geometric_bias_m","satellite","path","elevation_deg","earliest_excess_m","modeled_relative_power_db","power_state","frequency_hz","material_assumption","polarization","antenna_pattern"];
+  const header=["epoch","gps_week","gps_tow_s","condition","systems","antenna_offset_m","mask_deg","horizontal_geometric_bias_m","satellite","path","elevation_deg","earliest_excess_m","modeled_relative_power_db","power_state","frequency_hz","material_assumption","polarization","antenna_pattern","latitude_deg","longitude_deg","ellipsoidal_height_m"];
   const lines=[header.join(",")];
   for(const row of rows)for(const [i,condition]of row.conditions.entries()) {
     const signals=condition.signals.length?condition.signals:[{}];
-    for(const signal of signals)lines.push([row.epoch,row.week,row.tow,i===0?"A":"B",condition.systems,condition.antenna,condition.mask,condition.bias,signal.id,signal.status,signal.elevation,signal.extra,signal.power,signal.powerState,signal.frequency,metadata.power.material,metadata.power.polarization,metadata.power.antenna].map(cell).join(","));
+    for(const signal of signals)lines.push([row.epoch,row.week,row.tow,i===0?"A":"B",condition.systems,condition.antenna,condition.mask,condition.bias,signal.id,signal.status,signal.elevation,signal.extra,signal.power,signal.powerState,signal.frequency,metadata.power.material,metadata.power.polarization,metadata.power.antenna,condition.geodetic?.latitude,condition.geodetic?.longitude,condition.geodetic?.height].map(cell).join(","));
   }
   return lines.join("\r\n")+"\r\n";
 }

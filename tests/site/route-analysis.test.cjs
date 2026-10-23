@@ -26,6 +26,7 @@ test("union tracing preserves full satellite paths and fits exactly against inde
       assert.deepEqual(captured.satellites.filter(v=>conditions[i].systems.includes(v.id[0])&&v.elevation>=conditions[i].mask),independent[i].satellites);
       assert.deepEqual(actual.conditions[i].counts,independent[i].counts);
       assert.equal(actual.conditions[i].bias,independent[i].spp.all?.horizontal??null);
+      assert.deepEqual(actual.conditions[i].geodetic,{latitude:independent[i].latitude,longitude:independent[i].longitude,height:independent[i].height});
       assert.deepEqual(actual.conditions[i].signals,signalMetrics(independent[i],scene));
     }
   }
