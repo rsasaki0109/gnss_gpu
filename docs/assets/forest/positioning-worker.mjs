@@ -1,6 +1,7 @@
-import {PHENOLOGY_ASSUMPTION} from "./model.mjs?v=species-season-1";
-import {routeExperiment} from "./route.mjs?v=species-season-1";
-import {generateObservations,solvePosition} from "./positioning.mjs?v=species-season-1";
+import {attenuationDescription} from "./attenuation.mjs?v=extinction-reference-1";
+import {PHENOLOGY_ASSUMPTION} from "./model.mjs?v=extinction-reference-1";
+import {routeExperiment} from "./route.mjs?v=extinction-reference-1";
+import {generateObservations,solvePosition} from "./positioning.mjs?v=extinction-reference-1";
 self.onmessage=({data})=>{
   try{
     if(data.mode==="route"){self.postMessage({result:routeExperiment(data,progress=>self.postMessage({progress}))});return;}
@@ -11,6 +12,6 @@ self.onmessage=({data})=>{
     const solution=solvePosition(generated.observations,prior,forest,{mapBias,onProgress:progress=>self.postMessage({progress})});
     const results=solution.results.map(r=>({...r,horizontalErrorM:r.receiverENU?Math.hypot(r.receiverENU[0]-receiver[0],r.receiverENU[1]-receiver[1]):null,clockErrorM:r.clock===undefined?null:r.clock-generated.truth.clock}));
     self.postMessage({result:{schema:"synthetic-forest-positioning-v1",simulationOnly:true,context,scene:forest,...generated,prior,results,search:solution.search,
-      assumptions:{phenology:PHENOLOGY_ASSUMPTION,measurement:"artificial single-arrival range plus common clock and Gaussian noise; not coherent multipath/code tracking",sources:"GPS only; direct-flight-time broadcast endpoints held fixed for every candidate",height:"terrain plus known 1.6 m receiver height; 2D horizontal search",map:"same synthetic geometry family for generation and inference; mapBias shifts solver terrain, wood, crowns and height aiding",initialization:"synthetic prior offset [+7.37,-5.13] m from truth; bounded local search, no global guarantee",pathWeights:"equal normalized feasible paths; no RF or truth association weights",limitations:"matched-map inverse crime; no real-data accuracy claim; candidate grid may miss other modes"}}});
+      assumptions:{vegetationModel:attenuationDescription(data.attenuationModel,data.materialPreset),phenology:PHENOLOGY_ASSUMPTION,measurement:"artificial single-arrival range plus common clock and Gaussian noise; not coherent multipath/code tracking",sources:"GPS only; direct-flight-time broadcast endpoints held fixed for every candidate",height:"terrain plus known 1.6 m receiver height; 2D horizontal search",map:"same synthetic geometry family for generation and inference; mapBias shifts solver terrain, wood, crowns and height aiding",initialization:"synthetic prior offset [+7.37,-5.13] m from truth; bounded local search, no global guarantee",pathWeights:"equal normalized feasible paths; no RF or truth association weights",limitations:"matched-map inverse crime; no real-data accuracy claim; candidate grid may miss other modes"}}});
   }catch(error){self.postMessage({error:error.message});}
 };

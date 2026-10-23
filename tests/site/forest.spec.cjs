@@ -202,3 +202,31 @@ test("tree type and season rebuild shared geometry, RF, exports and captured wor
   const pending=page.waitForEvent("download");await page.locator("#position-export").click();const result=JSON.parse(fs.readFileSync(await (await pending).path(),"utf8"));
   expect(result.scene).toEqual(mixed.scene);expect(result.results).toHaveLength(3);expect(result.results.every(r=>r.status==="solution")).toBe(true);expect(errors).toEqual([]);
 });
+
+test("published extinction reference retains bare-crown loss and survives a captured route study",async({page},testInfo)=>{
+  test.setTimeout(240000);const errors=[];page.on("pageerror",e=>errors.push(e.message));
+  await page.goto("forest.html");await expect(page.locator("#forest-lab")).toHaveAttribute("data-state","ready",{timeout:45000});await page.locator("#forest-count").selectOption("32");
+  const download=async button=>{const pending=page.waitForEvent("download");await page.locator(button).click();return JSON.parse(fs.readFileSync(await (await pending).path(),"utf8"));};
+  await page.locator("#attenuation-model").selectOption("itu-extinction-v1");
+  for(const id of ["#specific-loss","#foliage"])await expect(page.locator(id)).toBeDisabled();await expect(page.locator("#material-preset")).toBeEnabled();
+  const summer=await download("#forest-export");await page.locator("#forest-season").selectOption("leaf-off");const winter=await download("#forest-export");
+  expect(winter.assumptions.vegetationModel.source.calibratedToScene).toBe(false);expect(winter.assumptions.vegetationModel.source.frequencyPolicy).toContain("No interpolation");
+  expect(winter.signals.some(s=>s.trace.canopyLoss>0)).toBe(true);
+  for(const s of winter.signals){const a=summer.signals.find(a=>a.id===s.id);expect(s.trace.wood).toEqual(a.trace.wood);expect(s.trace.ground).toBe(a.trace.ground);expect(s.trace.canopyPath).toBe(a.trace.canopyPath);expect(s.trace.canopyLoss).toBeCloseTo(a.trace.canopyLoss*.139/.241,9);expect(s.trace.crowns.every(c=>c.material.leafState==="out-of-leaf"&&c.material.anchorGHz===1.3)).toBe(true);}
+  expect(winter.selectedReflection.options.attenuationModel).toBe("itu-extinction-v1");
+  await page.screenshot({path:testInfo.outputPath("reference-leaf-off.png"),fullPage:true});
+  await page.locator("#forest-stand").selectOption("conifer");const pine=await download("#forest-export");await page.locator("#material-preset").selectOption("maple-cedar");const cedar=await download("#forest-export");
+  expect(pine.signals.some(s=>s.trace.canopyLoss>0)).toBe(true);
+  for(const s of cedar.signals){const a=pine.signals.find(a=>a.id===s.id);expect(s.trace.canopyLoss).toBeCloseTo(a.trace.canopyLoss*.271/.215,9);expect(s.trace.wood).toEqual(a.trace.wood);expect(s.trace.crowns.every(c=>c.material.reference==="himalayan-cedar"&&c.material.anchorGHz===1.5)).toBe(true);}
+  await page.locator("#forest-stand").selectOption("mixed");await page.locator("#position-experiment summary").click();await page.locator("#position-route-run").click();
+  await page.locator("#attenuation-model").selectOption("linear-v1");await expect(page.locator("#foliage")).toBeEnabled();await expect(page.locator("#material-preset")).toBeDisabled();
+  await expect(page.locator("#position-experiment")).toHaveAttribute("data-state","ready",{timeout:180000});const route=await download("#position-export");
+  await expect(page.locator("#position-status")).toContainText("captured mixed / leaf-off");await expect(page.locator("#position-status")).toContainText("extinction reference (maple / Himalayan cedar)");expect(route.settings.attenuationModel).toBe("itu-extinction-v1");expect(route.settings.materialPreset).toBe("maple-cedar");expect(route.scene.season).toBe("leaf-off");expect(route.cases).toHaveLength(5);expect(route.assumptions.vegetationModel.source.scope).toContain("Ballistic");
+  const {traceForest}=await import("../../docs/assets/forest/model.mjs");let hits=0;
+  for(const c of route.cases)for(const s of c.channels)for(const densityProfile of ["uniform","radial-height-v1"]){
+    const maximum=Math.hypot(...s.sourceENU.map((v,i)=>v-c.receiverENU[i])),tr=traceForest(route.scene,c.receiverENU,s.directionENU,{...route.settings,maximum,densityProfile});
+    expect(s.profiles[densityProfile].canopyLossDb).toBeCloseTo(tr.canopyLoss,9);if(tr.canopyLoss>0)hits++;
+  }
+  expect(hits).toBeGreaterThan(0);expect(route.cases.every(c=>c.observations.every(o=>o.sigma===route.settings.sigma))).toBe(true);
+  await page.locator("#route-results").screenshot({path:testInfo.outputPath("reference-route-plots.png")});  await page.screenshot({path:testInfo.outputPath("reference-route.png"),fullPage:true});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(errors).toEqual([]);
+});

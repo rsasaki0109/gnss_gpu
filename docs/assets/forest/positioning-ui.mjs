@@ -1,4 +1,4 @@
-import {drawRoute} from "./route-plots.mjs?v=species-season-1";
+import {drawRoute} from "./route-plots.mjs?v=extinction-reference-1";
 export function setupPositioning(capture){
   const $=id=>document.getElementById(id),panel=$("position-experiment"),status=$("position-status"),run=$("position-run"),routeRun=$("position-route-run"),cancel=$("position-cancel"),save=$("position-export"),table=$("position-results"),routePanel=$("route-results"),satellite=$("route-satellite");
   let worker,result;
@@ -11,7 +11,7 @@ export function setupPositioning(capture){
     const input=capture();Object.assign(input,{mode,seed:Number($("position-seed").value),sigma:Number($("position-noise").value),mapBias:Number($("position-bias").value),stepSeconds:Number($("position-route-step").value)});
     panel.dataset.mode=mode;panel.dataset.state="running";run.disabled=true;routeRun.disabled=true;cancel.disabled=false;status.textContent=mode==="route"?`Preparing ${1200/input.stepSeconds+1} route epochs…`:"Generating synthetic GPS ranges…";
     try{
-      worker=new Worker(new URL("./positioning-worker.mjs?v=species-season-1",import.meta.url),{type:"module"});
+      worker=new Worker(new URL("./positioning-worker.mjs?v=extinction-reference-1",import.meta.url),{type:"module"});
       const failure=message=>{stop();panel.dataset.state="error";status.textContent=message;};
       const active=worker;
       worker.onerror=()=>{if(worker===active)failure("Positioning worker failed. Reload or try another epoch.");};
@@ -28,7 +28,9 @@ export function setupPositioning(capture){
           satellite.value=ids.find(id=>result.cases.some(c=>c.channels.some(s=>s.id===id&&!s.directBlocked&&s.canopyPathM>0)))??ids[0]??"";
           routePanel.hidden=false;drawRoute(result,satellite.value);
           const failed=result.cases.filter(c=>!c.positioning.results.every(r=>r.status==="solution")).length;
-          status.textContent=`${result.cases.length} epochs · both density profiles / all 5 GNSS · ${failed} epochs without a full solution. GPS positioning uses fixed σ; density is not a receiver-noise model.`;
+          const reference=result.settings.attenuationModel==="itu-extinction-v1",pair=result.settings.materialPreset==="maple-cedar"?"maple / Himalayan cedar":"maple / Korean pine";
+          const captured=`${result.scene.stand} / ${result.scene.season} · ${reference?`extinction reference (${pair})`:"linear loss"}`;
+          status.textContent=`${result.cases.length} epochs · captured ${captured} · ${failed} incomplete epochs · fixed-σ GPS.`;
         }else{
           rows(result.results);status.textContent=`${result.observations.length} GPS ranges · +${result.context.elapsedSeconds.toFixed(1)} s snapshot · map bias ${input.mapBias} m. Errors use held-out generation truth; costs across methods are not comparable.`;
         }
