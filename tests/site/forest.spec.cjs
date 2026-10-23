@@ -131,3 +131,39 @@ test("trail perspective follows the completed receiver and keeps appearance out 
   expect(drawing.lost).toBe(false);expect(drawing.error).toBe(0);expect(drawing.colors).toBeGreaterThan(10);
   await page.locator("#forest-reset-view").click();await expect(canvas).toHaveAttribute("data-view","overview");expect(errors).toEqual([]);
 });
+
+test("density control changes both-leg attenuation while preserving geometry and snapshot time",async({page})=>{
+  await page.goto("forest.html");await expect(page.locator("#forest-lab")).toHaveAttribute("data-state","ready",{timeout:45000});
+  const snapshot=async()=>{const pending=page.waitForEvent("download");await page.locator("#forest-export").click();return JSON.parse(fs.readFileSync(await (await pending).path(),"utf8"));};
+  await page.locator("#density-profile").selectOption("uniform");const uniform=await snapshot();
+  await page.locator("#density-profile").selectOption("radial-height-v1");const structured=await snapshot();
+  expect(uniform.elapsedSeconds).toBe(structured.elapsedSeconds);expect(structured.options.densityProfile).toBe("radial-height-v1");
+  let different=0;
+  for(const s of structured.signals){const a=uniform.signals.find(a=>a.id===s.id);expect(s.sourceENU).toEqual(a.sourceENU);expect(s.trace.wood).toEqual(a.trace.wood);expect(s.trace.ground).toBe(a.trace.ground);expect(s.trace.canopyPath).toBe(a.trace.canopyPath);if(Math.abs(s.trace.canopyLoss-a.trace.canopyLoss)>1e-8)different++;}
+  expect(different).toBeGreaterThan(0);expect(structured.selectedReflection.options.densityProfile).toBe("radial-height-v1");expect(uniform.selectedReflection.options.densityProfile).toBe("uniform");
+  expect(structured.selectedReflection.paths.map(p=>p.point)).toEqual(uniform.selectedReflection.paths.map(p=>p.point));
+});
+
+test("route worker compares both profiles, retains fixed-sigma baseline and exports all epochs",async({page},testInfo)=>{
+  test.setTimeout(240000);const errors=[];page.on("pageerror",e=>errors.push(e.message));
+  await page.goto("forest.html");await expect(page.locator("#forest-lab")).toHaveAttribute("data-state","ready",{timeout:45000});
+  await page.locator("#forest-count").selectOption("32");await page.locator("#position-experiment summary").click();await page.locator("#position-route-step").selectOption("60");
+  await page.locator("#position-route-run").click();await page.locator("#position-cancel").click();await expect(page.locator("#position-experiment")).toHaveAttribute("data-state","cancelled");await expect(page.locator("#position-export")).toBeDisabled();
+  await page.locator("#position-route-step").selectOption("300");  await page.locator("#forest-play").click();await page.locator("#position-route-run").click();await expect(page.locator("#forest-play")).toHaveAttribute("aria-pressed","false");
+  await page.locator("#forest-count").selectOption("64");
+  await expect(page.locator("#position-experiment")).toHaveAttribute("data-state","ready",{timeout:180000});
+  await expect(page.locator("#route-results")).toBeVisible();await expect(page.locator("#position-results tr")).toHaveCount(15);
+  const pending=page.waitForEvent("download");await page.locator("#position-export").click();const data=JSON.parse(fs.readFileSync(await (await pending).path(),"utf8"));
+  expect(data.schema).toBe("synthetic-forest-route-v1");expect(data.scene.count).toBe(32);expect(data.settings.stepSeconds).toBe(300);expect(data.cases.map(c=>c.seconds)).toEqual([0,300,600,900,1200]);expect(data.assumptions.positioning).toContain("NOT used");
+  expect(data.cases.some(c=>c.positioning.results.some(r=>r.status==="solution"))).toBe(true);
+  for(const c of data.cases){expect(c.tow).toBe(data.context.startTow+c.seconds);expect(c.observations.every(o=>o.sigma===data.settings.sigma)).toBe(true);expect(c.channels.every(s=>Number.isInteger(s.feasiblePaths)&&s.feasiblePaths>=0)).toBe(true);}
+  const ids=await page.locator("#route-satellite option").evaluateAll(nodes=>nodes.map(n=>n.value));expect(ids.some(id=>id.startsWith("G"))).toBe(true);expect(ids.some(id=>id.startsWith("R"))).toBe(true);
+  const crossing=ids.find(id=>data.cases.some(c=>c.channels.some(s=>s.id===id&&!s.directBlocked&&s.canopyPathM>0)));if(crossing)await expect(page.locator("#route-satellite")).toHaveValue(crossing);
+  const selected=ids.find(id=>id.startsWith("R"));await page.locator("#route-satellite").selectOption(selected);await expect(page.locator("#route-loss")).toHaveAttribute("aria-label",`${selected} · direct canopy attenuation`);
+  await expect(page.locator('#route-loss path[data-series="Uniform"]')).toHaveCount(1);await expect(page.locator('#route-position path[data-series="paths"]')).toHaveCount(1);
+  const {traceForest}=await import("../../docs/assets/forest/model.mjs");
+  for(const c of data.cases){const s=c.channels.find(s=>s.id===selected);if(!s)continue;const maximum=Math.hypot(...s.sourceENU.map((v,i)=>v-c.receiverENU[i]));for(const profile of ["uniform","radial-height-v1"]){const trace=traceForest(data.scene,c.receiverENU,s.directionENU,{maximum,specificLoss:data.settings.specificLoss,foliage:data.settings.foliage,densityProfile:profile});expect(trace.canopyLoss).toBeCloseTo(s.profiles[profile].canopyLossDb,9);}}
+  if(crossing)await page.locator("#route-satellite").selectOption(crossing);
+  await page.locator("#route-results").screenshot({path:testInfo.outputPath("route-profiles.png")});expect(errors).toEqual([]);
+  const layout=await page.evaluate(()=>({client:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth}));expect(layout.scroll).toBeLessThanOrEqual(layout.client+2);
+});

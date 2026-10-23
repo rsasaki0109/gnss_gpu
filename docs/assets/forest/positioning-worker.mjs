@@ -1,6 +1,8 @@
-import {generateObservations,solvePosition} from "./positioning.mjs?v=woodland-1";
+import {routeExperiment} from "./route.mjs?v=density-route-1";
+import {generateObservations,solvePosition} from "./positioning.mjs?v=density-route-1";
 self.onmessage=({data})=>{
   try{
+    if(data.mode==="route"){self.postMessage({result:routeExperiment(data,progress=>self.postMessage({progress}))});return;}
     const {forest,receiver,signals,seed,sigma,mapBias,context}=data;
     const generated=generateObservations(forest,receiver,signals,{seed,sigma});
     // Solver searches horizontal coordinates only; prior z is unused.
