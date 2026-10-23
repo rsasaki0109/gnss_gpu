@@ -76,9 +76,13 @@ function prepareCylinder(cylinder) {
   return {a:cylinder.a,n:axis.map(v=>v/length),length,radiusSquared:cylinder.radius**2};
 }
 function preparedCylinderInterval(origin,direction,{a,n,length,radiusSquared},maximum) {
-  const o=sub(origin,a),z=dot(o,n),dz=dot(direction,n);
-  const radialO=o.map((v,i)=>v-z*n[i]),radialD=direction.map((v,i)=>v-dz*n[i]);
-  const span=quadraticInterval(dot(radialD,radialD),2*dot(radialO,radialD),dot(radialO,radialO)-radiusSquared);
+  // Keep the original subtraction, multiply and left-to-right accumulation
+  // order (including the initial zero); avoid per-cylinder temporary vectors.
+  const ox=origin[0]-a[0],oy=origin[1]-a[1],oz=origin[2]-a[2];
+  const z=0+ox*n[0]+oy*n[1]+oz*n[2],dz=0+direction[0]*n[0]+direction[1]*n[1]+direction[2]*n[2];
+  const rx=ox-z*n[0],ry=oy-z*n[1],rz=oz-z*n[2];
+  const dx=direction[0]-dz*n[0],dy=direction[1]-dz*n[1],dzr=direction[2]-dz*n[2];
+  const span=quadraticInterval(0+dx*dx+dy*dy+dzr*dzr,2*(0+rx*dx+ry*dy+rz*dzr),0+rx*rx+ry*ry+rz*rz-radiusSquared);
   if(!span)return null;
   let lo=Math.max(0,span[0]),hi=Math.min(maximum,span[1]);
   if(Math.abs(dz)<1e-14){if(z<0||z>length)return null;}
@@ -88,7 +92,7 @@ function preparedCylinderInterval(origin,direction,{a,n,length,radiusSquared},ma
 export function terrainDistance(origin,direction,triangles,maximum) {
   return terrainDistanceImpl(origin,direction,triangles,maximum,false);
 }
-function terrainDistanceImpl(origin,direction,triangles,maximum,prepared) {
+function terrainDistanceImpl(origin,direction,triangles,maximum,prepared,any=false) {
   let nearest=maximum;
   for(const triangle of triangles){
     const a=prepared?triangle.a:triangle[0],e=prepared?triangle.e:sub(triangle[1],a),f=prepared?triangle.f:sub(triangle[2],a);
@@ -97,7 +101,11 @@ function terrainDistanceImpl(origin,direction,triangles,maximum,prepared) {
     const s=sub(origin,a),u=dot(s,p)/det;if(u<0||u>1)continue;
     const q=[s[1]*e[2]-s[2]*e[1],s[2]*e[0]-s[0]*e[2],s[0]*e[1]-s[1]*e[0]],v=dot(direction,q)/det;
     if(v<0||u+v>1)continue;
-    const t=dot(f,q)/det;if(t>1e-6&&t<nearest)nearest=t;
+    const t=dot(f,q)/det;
+    if(t>1e-6&&t<nearest){
+      if(any)return t; // Boolean callers need one blocker, not the nearest.
+      nearest=t;
+    }
   }
   return nearest<maximum?nearest:null;
 }
@@ -119,7 +127,7 @@ export class ForestOcclusion {
     // Detailed ground reflection checks terrain with its original geometric ray
     // but normalizes volume rays in traceForest. Preserve both rounding paths.
     const groundDirection=terrainDirection??direction;checkedRay(origin,groundDirection,groundMaximum);
-    if(terrainDistanceImpl(origin,groundDirection,this.terrain,groundMaximum,true)!==null)return true;
+    if(terrainDistanceImpl(origin,groundDirection,this.terrain,groundMaximum,true,true)!==null)return true;
     return this.wood.some(shape=>preparedCylinderInterval(origin,direction,shape,maximum)!==null);
   }
 }
