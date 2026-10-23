@@ -79,7 +79,7 @@ export function cylinderInterval(origin,direction,cylinder,maximum=400) {
   else {const a=-z/dz,b=(length-z)/dz;lo=Math.max(lo,Math.min(a,b));hi=Math.min(hi,Math.max(a,b));}
   return hi>lo?[lo,hi]:null;
 }
-function terrainDistance(origin,direction,triangles,maximum) {
+export function terrainDistance(origin,direction,triangles,maximum) {
   let nearest=maximum;
   for(const [a,b,c] of triangles){
     const e=sub(b,a),f=sub(c,a),p=[direction[1]*f[2]-direction[2]*f[1],direction[2]*f[0]-direction[0]*f[2],direction[0]*f[1]-direction[1]*f[0]],det=dot(e,p);
