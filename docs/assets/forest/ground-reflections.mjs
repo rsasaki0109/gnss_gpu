@@ -1,6 +1,7 @@
-import {checkDensityProfile} from "./density.mjs?v=species-season-1";
+import {checkAttenuation} from "./attenuation.mjs?v=extinction-reference-1";
+import {checkDensityProfile} from "./density.mjs?v=extinction-reference-1";
 // Finite, single-bounce terrain paths. No receiver/tracking or coherent RF model.
-import { traceForest,terrainDistance,ForestOcclusion } from "./model.mjs?v=species-season-1";
+import { traceForest,terrainDistance,ForestOcclusion } from "./model.mjs?v=extinction-reference-1";
 import { C } from "../simulation/orbit.mjs?v=glonass-1";
 const dot=(a,b)=>a.reduce((sum,v,i)=>sum+v*b[i],0),sub=(a,b)=>a.map((v,i)=>v-b[i]);
 const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
@@ -22,8 +23,8 @@ export class GroundReflectionModel {
     });
   }
 
-  paths(receiver,source,{specificLoss=.2,foliage=1,bounceLoss=6,densityProfile="uniform"}={}){
-    return this.#query(receiver,source,{specificLoss,foliage,bounceLoss,densityProfile},true);
+  paths(receiver,source,{specificLoss=.2,foliage=1,bounceLoss=6,densityProfile="uniform",attenuationModel="linear-v1",materialPreset="maple-pine"}={}){
+    return this.#query(receiver,source,{specificLoss,foliage,bounceLoss,densityProfile,attenuationModel,materialPreset},true);
   }
 
   // Exact feasible ranges for a likelihood that does not consume canopy/RF
@@ -35,8 +36,8 @@ export class GroundReflectionModel {
     return ranges.concat(result.paths.map(p=>p.totalRange));
   }
 
-  #query(receiver,source,{specificLoss,foliage,bounceLoss,densityProfile="uniform"},details){
-    checkDensityProfile(densityProfile);
+  #query(receiver,source,{specificLoss,foliage,bounceLoss,densityProfile="uniform",attenuationModel="linear-v1",materialPreset="maple-pine"},details){
+    checkDensityProfile(densityProfile);checkAttenuation(attenuationModel,materialPreset,foliage);
     if(!finite(receiver)||!finite(source)||!Number.isFinite(length(sub(source,receiver)))||length(sub(source,receiver))<ENDPOINT_TOLERANCE_M)throw new RangeError("Invalid reflection endpoints");
     if(!Number.isFinite(specificLoss)||specificLoss<0||specificLoss>2||!Number.isFinite(foliage)||foliage<0||foliage>2||!Number.isFinite(bounceLoss)||bounceLoss<0||bounceLoss>60)throw new RangeError("Invalid reflection assumptions");
     const paths=[],blocked=[],accepted=[],directDelta=sub(source,receiver),directRange=length(directDelta);
@@ -63,8 +64,8 @@ export class GroundReflectionModel {
       // integrals still include the complete modeled segments, without an offset.
       const receiverGround=terrainDistance(receiver,receiverDirection,this.forest.terrain,receiverRange-ENDPOINT_TOLERANCE_M);
       const sourceGround=terrainDistance(point,sourceDirection,this.forest.terrain,sourceRange-ENDPOINT_TOLERANCE_M);
-      const receiverLeg=traceForest(this.volumes,receiver,receiverDirection,{specificLoss,foliage,densityProfile,maximum:receiverRange});
-      const sourceLeg=traceForest(this.volumes,point,sourceDirection,{specificLoss,foliage,densityProfile,maximum:sourceRange});
+      const receiverLeg=traceForest(this.volumes,receiver,receiverDirection,{specificLoss,foliage,densityProfile,attenuationModel,materialPreset,maximum:receiverRange});
+      const sourceLeg=traceForest(this.volumes,point,sourceDirection,{specificLoss,foliage,densityProfile,attenuationModel,materialPreset,maximum:sourceRange});
       const reason=receiverGround!==null||sourceGround!==null?"terrain":receiverLeg.wood.length||sourceLeg.wood.length?"wood":null;
       const canopyLoss=receiverLeg.canopyLoss+sourceLeg.canopyLoss;
       const result={triangle,point,normal:n,receiverRange,sourceRange,totalRange,extra,delayNs:extra/C*1e9,
@@ -73,6 +74,6 @@ export class GroundReflectionModel {
       (reason?blocked:paths).push(result);
     }
     const order=(a,b)=>a.extra-b.extra||a.triangle-b.triangle;paths.sort(order);blocked.sort(order);
-    return {model:GROUND_MODEL_VERSION,options:{specificLoss,foliage,bounceLoss,densityProfile,completeSegments:true,endpointToleranceM:ENDPOINT_TOLERANCE_M},directRange,paths,blocked};
+    return {model:GROUND_MODEL_VERSION,options:{specificLoss,foliage,bounceLoss,densityProfile,attenuationModel,materialPreset,completeSegments:true,endpointToleranceM:ENDPOINT_TOLERANCE_M},directRange,paths,blocked};
   }
 }

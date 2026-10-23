@@ -1,4 +1,5 @@
-import {checkDensityProfile,crownIntegral} from "./density.mjs?v=species-season-1";
+import {checkAttenuation,extinctionMaterial,extinctionLoss} from "./attenuation.mjs?v=extinction-reference-1";
+import {checkDensityProfile,crownIntegral} from "./density.mjs?v=extinction-reference-1";
 // Synthetic ENU forest. Geometry and integrals use binary64; mesh is display only.
 const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0);
 const sub=(a,b)=>a.map((v,i)=>v-b[i]);
@@ -27,7 +28,7 @@ export function forestReceiver(seconds) {
 }
 // Growth forms, not calibrated botanical species. The component ellipsoids
 // below are shared by rendering and RF; with canopies, crown is a size/shadow proxy.
-export const PHENOLOGY_ASSUMPTION="synthetic deciduous broadleaf and evergreen conifer growth forms; leaf-off removes broadleaf canopy only, retaining wood and evergreen foliage; component volumes are authoritative; densities are not mass-matched across tree types; not calibrated species/season coefficients";
+export const PHENOLOGY_ASSUMPTION="synthetic deciduous broadleaf and evergreen conifer growth forms; leaf-off removes broadleaf leaves while residual crown attenuation depends on the RF model; wood and evergreen foliage remain; component volumes are authoritative; densities are not mass-matched across tree types; not calibrated species/season coefficients";
 export const FOREST_TYPES=Object.freeze(["broadleaf","conifer","mixed"]);
 export const FOREST_SEASONS=Object.freeze(["leaf-on","leaf-off"]);
 export const treeCrowns=tree=>tree.canopies??[tree.crown];
@@ -157,16 +158,18 @@ export class ForestOcclusion {
     return this.wood.some(shape=>preparedCylinderInterval(origin,direction,shape,maximum)!==null);
   }
 }
-export function traceForest(forest,origin,rawDirection,{specificLoss=.2,foliage=1,maximum=400,densityProfile="uniform"}={}) {
+export function traceForest(forest,origin,rawDirection,{specificLoss=.2,foliage=1,maximum=400,densityProfile="uniform",attenuationModel="linear-v1",materialPreset="maple-pine"}={}) {
   if(!Number.isFinite(specificLoss)||specificLoss<0||specificLoss>2||!Number.isFinite(foliage)||foliage<0||foliage>2)throw new RangeError("Invalid attenuation assumptions");
-  checkDensityProfile(densityProfile);
+  checkDensityProfile(densityProfile);checkAttenuation(attenuationModel,materialPreset,foliage);
+  const reference=attenuationModel==="itu-extinction-v1";
   const direction=unit(rawDirection);checkedRay(origin,direction,maximum);
   const ground=terrainDistance(origin,direction,forest.terrain,maximum),limit=ground??maximum,crowns=[],wood=[];
   for(const tree of forest.trees){
-    if(leafRetention(tree)>0)for(const [component,shape]of treeCrowns(tree).entries()){
+    if(reference||leafRetention(tree)>0)for(const [component,shape]of treeCrowns(tree).entries()){
       const span=ellipsoidInterval(origin,direction,shape,limit);
       if(!span)continue;
-      const density=tree.density*leafRetention(tree),crown={tree:tree.id,enter:span[0],exit:span[1],density};
+      const density=tree.density*(reference?1:leafRetention(tree)),crown={tree:tree.id,enter:span[0],exit:span[1],density};
+      if(reference)crown.material=extinctionMaterial(tree,materialPreset);
       if(tree.canopies)crown.component=component;
       if(densityProfile!=="uniform")crown.densityIntegral=crownIntegral(origin,direction,shape,span,density,densityProfile);
       crowns.push(crown);
@@ -181,8 +184,8 @@ export function traceForest(forest,origin,rawDirection,{specificLoss=.2,foliage=
   let canopyPath=0,end=-Infinity;
   for(const [a,b] of intervals){canopyPath+=Math.max(0,b-Math.max(a,end));end=Math.max(end,b);}
   // Densities add in overlapping crowns; union length is reported separately.
-  const opticalPath=(densityProfile==="uniform"?crowns.reduce((sum,c)=>sum+(c.exit-c.enter)*c.density,0):crowns.reduce((sum,c)=>sum+c.densityIntegral,0))*foliage,canopyLoss=specificLoss*opticalPath;
-  return {direction,crowns,wood,ground,canopyPath,opticalPath,canopyLoss,
+  const opticalPath=(densityProfile==="uniform"?crowns.reduce((sum,c)=>sum+(c.exit-c.enter)*c.density,0):crowns.reduce((sum,c)=>sum+c.densityIntegral,0))*foliage,canopyLoss=reference?extinctionLoss(crowns,densityProfile):specificLoss*opticalPath;
+  return {direction,crowns,wood,ground,canopyPath,opticalPath,canopyLoss,...(reference?{attenuation:{model:attenuationModel,materialPreset,uniformLossDb:extinctionLoss(crowns,"uniform")}}:{}),
     classification:ground!==null?"TERRAIN":wood.length?"WOOD":opticalPath>0?"CANOPY":"CLEAR",
     directRelativeDb:ground!==null||wood.length?null:-canopyLoss};
 }

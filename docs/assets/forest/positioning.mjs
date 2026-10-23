@@ -1,6 +1,6 @@
 // Controlled single-arrival ranging experiment, not a receiver tracking model.
-import {randomSequence,terrainHeight} from "./model.mjs?v=species-season-1";
-import {GroundReflectionModel} from "./ground-reflections.mjs?v=species-season-1";
+import {randomSequence,terrainHeight} from "./model.mjs?v=extinction-reference-1";
+import {GroundReflectionModel} from "./ground-reflections.mjs?v=extinction-reference-1";
 const distance=(a,b)=>Math.hypot(...a.map((v,i)=>v-b[i]));
 const vector=a=>Array.isArray(a)&&a.length===3&&a.every(Number.isFinite);
 export const METHODS=["straight","robust","paths"];

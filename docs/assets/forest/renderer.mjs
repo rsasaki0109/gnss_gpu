@@ -1,4 +1,4 @@
-import { forestMesh, rayPoint } from "./model.mjs?v=species-season-1";
+import { forestMesh, rayPoint } from "./model.mjs?v=extinction-reference-1";
 export class ForestRenderer {
   constructor(canvas,forest){
     this.canvas=canvas;this.camera={yaw:-.7,pitch:.62,zoom:1.35,target:[0,0,5],follow:false};

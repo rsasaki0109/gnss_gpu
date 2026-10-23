@@ -1,15 +1,23 @@
-import { generateForest,forestReceiver,traceForest,PHENOLOGY_ASSUMPTION } from "./model.mjs?v=species-season-1";
-import { ForestRenderer } from "./renderer.mjs?v=species-season-1";
-import { GroundReflectionModel } from "./ground-reflections.mjs?v=species-season-1";
-import { setupPositioning } from "./positioning-ui.mjs?v=species-season-1";
-import {forestSignals} from "./signals.mjs?v=species-season-1";
+import {attenuationDescription} from "./attenuation.mjs?v=extinction-reference-1";
+import { generateForest,forestReceiver,traceForest,PHENOLOGY_ASSUMPTION } from "./model.mjs?v=extinction-reference-1";
+import { ForestRenderer } from "./renderer.mjs?v=extinction-reference-1";
+import { GroundReflectionModel } from "./ground-reflections.mjs?v=extinction-reference-1";
+import { setupPositioning } from "./positioning-ui.mjs?v=extinction-reference-1";
+import {forestSignals} from "./signals.mjs?v=extinction-reference-1";
 import { skyLayout } from "../simulation/sky-plot.mjs?v=glonass-1";
 const $=id=>document.getElementById(id),root=$("forest-lab"),canvas=$("forest-scene");
 let scene,sourceHash,forest,renderer,signals=[],receiver,selected,playing=false,seconds=600,last=0,elapsed=0;
 let groundModel,reflectionCache,reflectionPacket,completedSeconds=600;
 let stopPositioning;
 const sceneOptions=()=>({seed:Number($("forest-seed").value),count:Number($("forest-count").value),stand:$("forest-stand").value,season:$("forest-season").value});
-const options=()=>({specificLoss:Number($("specific-loss").value),foliage:Number($("foliage").value),densityProfile:$("density-profile").value});
+const options=()=>({specificLoss:Number($("specific-loss").value),foliage:$("attenuation-model").value==="itu-extinction-v1"?1:Number($("foliage").value),attenuationModel:$("attenuation-model").value,materialPreset:$("material-preset").value,densityProfile:$("density-profile").value});
+let linearFoliage=1;
+function attenuationControls(){
+  const reference=$("attenuation-model").value==="itu-extinction-v1";
+  for(const id of ["specific-loss","foliage"])$(id).disabled=reference;
+  $("material-preset").disabled=!reference;
+  $("attenuation-reference").textContent=reference?"Published anchors: maple 1.3 GHz / conifers 1.5 GHz · ballistic extinction only; GNSS transfer unvalidated":"Illustrative linear leaf-density loss · comparison mode";
+}
 const colors={CLEAR:"#85e4bc",CANOPY:"#efbc79",WOOD:"#ec8f91",TERRAIN:"#b3b7c7"};
 function play(value){playing=value;if(!value)seconds=completedSeconds;$("forest-play").textContent=value?"Pause":"Play · 10×";$("forest-play").setAttribute("aria-pressed",String(value));last=0;}
 function select(id){selected=id;render();}
@@ -52,7 +60,7 @@ function render(){
   const tow=scene.track[0][0]+completedSeconds,time=new Date(Date.UTC(1980,0,6)+(scene.week*604800+tow)*1000).toISOString().slice(11,23);
   $("forest-time").textContent=`${time} GPST · +${completedSeconds.toFixed(1)} s`;$("forest-progress").value=completedSeconds;
   $("forest-stats").textContent=`${forest.count} trees · ${signals.length} satellites · ${signals.filter(s=>s.trace.classification==="CANOPY").length} canopy-only`;
-  $("loss-out").textContent=`${options().specificLoss.toFixed(2)} dB/m`;$("foliage-out").textContent=`${options().foliage.toFixed(2)}×`;
+  $("loss-out").textContent=options().attenuationModel==="itu-extinction-v1"?"reference coefficients":`${options().specificLoss.toFixed(2)} dB/m`;$("foliage-out").textContent=`${options().foliage.toFixed(2)}×`;
   Object.assign(root.dataset,{state:"ready",seconds:completedSeconds,seed:forest.seed,count:forest.count,stand:forest.stand,season:forest.season,satellites:signals.length,selected:selected??""});
 }
 function compute(){
@@ -63,7 +71,7 @@ function compute(){
 }
 function fail(error){play(false);stopPositioning?.();root.dataset.state="error";$("forest-status").textContent=error.message;for(const input of document.querySelectorAll("[data-control]"))input.disabled=true;}
 function download(){
-  const value={schema:"synthetic-forest-snapshot-v2",simulationOnly:true,assumptions:{phenology:PHENOLOGY_ASSUMPTION,appearance:"deterministic foliage lobes inside density envelopes; soft sun shadows, bark, litter and ground cover are display only, not additional RF geometry",canopy:"uniform or normalized radial/height density in ellipsoid volumes; overlapping densities add; structured chords use an analytic cubic integral",wood:"finite cylinders; no calibrated power model",terrain:"piecewise planar finite patch",attenuation:"illustrative linear density integral, not a fitted ITU/GNSS model",reflections:"selected satellite, finite terrain single bounce only; constant uncalibrated bounce loss, no coherent combination or polarization model",diffraction:false,receiverTracking:false},
+  const value={schema:"synthetic-forest-snapshot-v2",simulationOnly:true,assumptions:{vegetationModel:attenuationDescription(options().attenuationModel,options().materialPreset),phenology:PHENOLOGY_ASSUMPTION,appearance:"deterministic foliage lobes inside density envelopes; soft sun shadows, bark, litter and ground cover are display only, not additional RF geometry",canopy:"uniform or normalized radial/height density in ellipsoid volumes; overlapping densities add; structured chords use an analytic cubic integral",wood:"finite cylinders; no calibrated power model",terrain:"piecewise planar finite patch",attenuation:options().attenuationModel==="itu-extinction-v1"?"Ballistic extinction from published RET coefficients; not a full ITU/GNSS model":"illustrative linear density integral, not a fitted ITU/GNSS model",reflections:"selected satellite, finite terrain single bounce only; constant uncalibrated bounce loss, no coherent combination or polarization model",diffraction:false,receiverTracking:false},
     options:{...options(),maximumDirectRayM:400,elevationMaskDeg:10,receiverHeightM:1.6,routeDurationSeconds:1200},scene:forest,view:structuredClone(renderer.camera),receiverENU:receiver,anchor:{originECEF:scene.origin,rotation:scene.rotation},week:scene.week,startTow:scene.track[0][0],elapsedSeconds:completedSeconds,tow:scene.track[0][0]+completedSeconds,source:{file:"odaiba-scene.json.gz",sha256:sourceHash},signals,selectedReflection:reflectionPacket};
   const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)+"\n"],{type:"application/json"})),link=document.createElement("a");link.href=url;link.download="gnss-forest-snapshot.json";link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
@@ -74,7 +82,7 @@ async function init(){
   const hash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes)),b=>b.toString(16).padStart(2,"0")).join("");if(bytes.byteLength!==asset.bytes||hash!==asset.sha256)throw new Error("Orbit data checksum mismatch");
   scene=await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).json();sourceHash=hash;
   forest=generateForest(sceneOptions());groundModel=new GroundReflectionModel(forest);renderer=new ForestRenderer(canvas,forest);compute();$("forest-status").textContent="Synthetic forest · real broadcast orbits";
-  for(const input of document.querySelectorAll("[data-control]"))input.disabled=false;
+  for(const input of document.querySelectorAll("[data-control]"))input.disabled=false;attenuationControls();
   $("forest-focus-reflection").disabled=!reflectionPacket?.paths.length;
   stopPositioning=setupPositioning(()=>{
     play(false);
@@ -83,6 +91,11 @@ async function init(){
   $("forest-play").addEventListener("click",()=>play(!playing));
   $("forest-progress").addEventListener("input",e=>{play(false);seconds=Number(e.target.value);compute();});
   for(const id of ["specific-loss","foliage"])$(id).addEventListener("input",compute);
+  $("attenuation-model").addEventListener("change",()=>{
+    if($("attenuation-model").value==="itu-extinction-v1"){linearFoliage=Number($("foliage").value);$("foliage").value=1;}else $("foliage").value=linearFoliage;
+    attenuationControls();compute();
+  });
+  $("material-preset").addEventListener("change",compute);
   $("bounce-loss").addEventListener("input",render);
   $("forest-focus-reflection").addEventListener("click",()=>{play(false);if(reflectionPacket?.paths[0])renderer.focusReflection(reflectionPacket.paths[0],receiver);});
   $("forest-systems").addEventListener("change",compute);$("density-profile").addEventListener("change",compute);
