@@ -1165,6 +1165,8 @@ test("default GLONASS support traces five systems and shares GLONASS-only select
  await page.locator('[data-satellite="R06"]').click();
  await page.locator("#share-panel > summary").click();
  await expect(page.locator("#scene-link")).toBeEnabled();
+ // details toggle populates the URL asynchronously; enabled alone can precede it.
+ await expect(page.locator("#scene-link")).toHaveValue(/^https?:\/\/.+#/);
  const link=await page.locator("#scene-link").inputValue();
  const fields=new URLSearchParams(new URL(link).hash.slice(1));
  expect(fields.get("systems")).toBe("R");expect(fields.get("sat")).toBe("R06");
