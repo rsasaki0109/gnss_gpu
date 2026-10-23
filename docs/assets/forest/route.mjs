@@ -1,8 +1,8 @@
-import {forestReceiver,traceForest} from "./model.mjs?v=density-route-1";
-import {DENSITY_PROFILES} from "./density.mjs?v=density-route-1";
-import {forestSignals} from "./signals.mjs?v=density-route-1";
-import {GroundReflectionModel} from "./ground-reflections.mjs?v=density-route-1";
-import {generateObservations,solvePosition,METHODS} from "./positioning.mjs?v=density-route-1";
+import {forestReceiver,traceForest,PHENOLOGY_ASSUMPTION} from "./model.mjs?v=species-season-1";
+import {DENSITY_PROFILES} from "./density.mjs?v=species-season-1";
+import {forestSignals} from "./signals.mjs?v=species-season-1";
+import {GroundReflectionModel} from "./ground-reflections.mjs?v=species-season-1";
+import {generateObservations,solvePosition,METHODS} from "./positioning.mjs?v=species-season-1";
 export function routeTimes(stepSeconds=300){
   if(![60,120,300].includes(stepSeconds))throw new RangeError("Route step must be 60, 120 or 300 seconds");
   return Array.from({length:1200/stepSeconds+1},(_,i)=>i*stepSeconds);
@@ -34,5 +34,5 @@ export function routeExperiment({forest,orbitScene,context,seed=7,sigma=.3,mapBi
   }
   return {schema:"synthetic-forest-route-v1",simulationOnly:true,context:{week:orbitScene.week,startTow:orbitScene.startTow,source:context.source,anchorECEF:orbitScene.origin,rotation:orbitScene.rotation},scene:forest,
     settings:{seed,sigma,mapBias,specificLoss,foliage,elevationMaskDeg:10,times,stepSeconds,propagationSystems:"GECJR",positioningSystems:"G"},densityProfiles:DENSITY_PROFILES,cases,
-    assumptions:{sources:"broadcast endpoints evaluated at direct flight time and held fixed; no reflected-flight-time orbit iteration",paths:"direct plus finite-terrain single specular ground paths; complete wood/terrain occlusion; finite synthetic patch only",density:"uncalibrated smooth radial/height surrogate; equal total density mass to uniform; analytic cubic chord integration; overlapping tree densities add",propagation:"both profiles share geometry and complete direct rays; no coherent RF, receiver tracking, C/N0 or calibrated wood power",positioning:"fixed-sigma, artificial single-arrival GPS baseline; RF attenuation is NOT used to alter ranges, sigma, tracking or satellite selection, so density-only changes cannot establish positioning gains",initialization:"synthetic truth-offset prior [+7.37,-5.13] m; height aided, bounded local search, no global guarantee",noise:"deterministic epoch-time-derived seeds; common epochs share random draws across resolutions; no temporal receiver-noise model",limitations:"matched-map inverse crime; failures and unavailable channels retained; no real-data accuracy claim"}};
+    assumptions:{phenology:PHENOLOGY_ASSUMPTION,sources:"broadcast endpoints evaluated at direct flight time and held fixed; no reflected-flight-time orbit iteration",paths:"direct plus finite-terrain single specular ground paths; complete wood/terrain occlusion; finite synthetic patch only",density:"uncalibrated smooth radial/height surrogate; equal total density mass to uniform; analytic cubic chord integration; overlapping tree densities add",propagation:"both profiles share geometry and complete direct rays; no coherent RF, receiver tracking, C/N0 or calibrated wood power",positioning:"fixed-sigma, artificial single-arrival GPS baseline; RF attenuation is NOT used to alter ranges, sigma, tracking or satellite selection, so density-only changes cannot establish positioning gains",initialization:"synthetic truth-offset prior [+7.37,-5.13] m; height aided, bounded local search, no global guarantee",noise:"deterministic epoch-time-derived seeds; common epochs share random draws across resolutions; no temporal receiver-noise model",limitations:"matched-map inverse crime; failures and unavailable channels retained; no real-data accuracy claim"}};
 }

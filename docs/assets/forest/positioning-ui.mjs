@@ -1,4 +1,4 @@
-import {drawRoute} from "./route-plots.mjs?v=density-route-1";
+import {drawRoute} from "./route-plots.mjs?v=species-season-1";
 export function setupPositioning(capture){
   const $=id=>document.getElementById(id),panel=$("position-experiment"),status=$("position-status"),run=$("position-run"),routeRun=$("position-route-run"),cancel=$("position-cancel"),save=$("position-export"),table=$("position-results"),routePanel=$("route-results"),satellite=$("route-satellite");
   let worker,result;
@@ -11,7 +11,7 @@ export function setupPositioning(capture){
     const input=capture();Object.assign(input,{mode,seed:Number($("position-seed").value),sigma:Number($("position-noise").value),mapBias:Number($("position-bias").value),stepSeconds:Number($("position-route-step").value)});
     panel.dataset.mode=mode;panel.dataset.state="running";run.disabled=true;routeRun.disabled=true;cancel.disabled=false;status.textContent=mode==="route"?`Preparing ${1200/input.stepSeconds+1} route epochs…`:"Generating synthetic GPS ranges…";
     try{
-      worker=new Worker(new URL("./positioning-worker.mjs?v=density-route-1",import.meta.url),{type:"module"});
+      worker=new Worker(new URL("./positioning-worker.mjs?v=species-season-1",import.meta.url),{type:"module"});
       const failure=message=>{stop();panel.dataset.state="error";status.textContent=message;};
       const active=worker;
       worker.onerror=()=>{if(worker===active)failure("Positioning worker failed. Reload or try another epoch.");};

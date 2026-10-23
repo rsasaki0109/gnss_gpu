@@ -167,3 +167,38 @@ test("route worker compares both profiles, retains fixed-sigma baseline and expo
   await page.locator("#route-results").screenshot({path:testInfo.outputPath("route-profiles.png")});expect(errors).toEqual([]);
   const layout=await page.evaluate(()=>({client:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth}));expect(layout.scroll).toBeLessThanOrEqual(layout.client+2);
 });
+
+test("tree type and season rebuild shared geometry, RF, exports and captured worker inputs",async({page},testInfo)=>{
+  test.setTimeout(180000);
+  const errors=[];page.on("pageerror",e=>errors.push(e.message));
+  await page.goto("forest.html");const root=page.locator("#forest-lab");await expect(root).toHaveAttribute("data-state","ready");
+  await page.locator("#forest-count").selectOption("32");
+  const snapshot=async()=>{const pending=page.waitForEvent("download");await page.locator("#forest-export").click();return JSON.parse(fs.readFileSync(await (await pending).path(),"utf8"));};
+  const summer=await snapshot(),summerVertices=Number(await page.locator("#forest-scene").getAttribute("data-vertices"));
+  expect(summer.scene.stand).toBe("broadleaf");expect(summer.scene.season).toBe("leaf-on");expect(summer.signals.some(s=>s.trace.canopyLoss>0)).toBe(true);
+  await page.locator("#forest-season").selectOption("leaf-off");await expect(root).toHaveAttribute("data-season","leaf-off");
+  const winter=await snapshot();expect(winter.scene.trees.every(t=>t.leafRetention===0)).toBe(true);expect(winter.signals.every(s=>s.trace.canopyLoss===0&&s.trace.crowns.length===0)).toBe(true);
+  expect(Number(await page.locator("#forest-scene").getAttribute("data-vertices"))).toBeLessThan(summerVertices);
+  for(const s of winter.signals)expect(s.trace.wood).toEqual(summer.signals.find(a=>a.id===s.id).trace.wood);
+  await page.locator("#forest-scene").screenshot({path:testInfo.outputPath("broadleaf-leaf-off.png")});
+  await page.locator("#forest-stand").selectOption("conifer");await expect(root).toHaveAttribute("data-stand","conifer");
+  const evergreenWinter=await snapshot();expect(evergreenWinter.scene.trees.every(t=>t.canopies.length===5&&t.leafRetention===1)).toBe(true);
+  expect(evergreenWinter.scene.trees.map(t=>[t.x,t.y])).toEqual(summer.scene.trees.map(t=>[t.x,t.y]));
+  await page.locator("#forest-season").selectOption("leaf-on");const evergreenSummer=await snapshot();expect(evergreenSummer.signals).toEqual(evergreenWinter.signals);
+  expect(evergreenWinter.signals.some(s=>s.trace.canopyLoss>0)).toBe(true);
+  await page.locator("#forest-scene").screenshot({path:testInfo.outputPath("conifer-leaf-on.png")});
+  await page.locator("#forest-stand").selectOption("mixed");await page.locator("#forest-season").selectOption("leaf-off");const mixed=await snapshot();
+  expect(mixed.scene.trees.filter(t=>t.leafRetention===0)).toHaveLength(16);expect(mixed.scene.trees.filter(t=>t.leafRetention===1)).toHaveLength(16);
+  const {traceForest}=await import("../../docs/assets/forest/model.mjs");
+  for(const data of [summer,winter,evergreenWinter,mixed])for(const s of data.signals){
+    const actual=traceForest(data.scene,data.receiverENU,s.trace.direction,data.options);
+    expect(actual.canopyLoss).toBeCloseTo(s.trace.canopyLoss,9);expect(actual.wood).toEqual(s.trace.wood);
+    expect(data.assumptions.phenology).toContain("not calibrated");
+  }
+  await page.locator("#forest-trail-view").click();await page.locator("#forest-scene").screenshot({path:testInfo.outputPath("mixed-leaf-off-trail.png")});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.locator("#position-experiment summary").click();await page.locator("#position-run").click();await page.locator("#forest-stand").selectOption("broadleaf");
+  await expect(page.locator("#position-experiment")).toHaveAttribute("data-state","ready",{timeout:120000});
+  const pending=page.waitForEvent("download");await page.locator("#position-export").click();const result=JSON.parse(fs.readFileSync(await (await pending).path(),"utf8"));
+  expect(result.scene).toEqual(mixed.scene);expect(result.results).toHaveLength(3);expect(result.results.every(r=>r.status==="solution")).toBe(true);expect(errors).toEqual([]);
+});
