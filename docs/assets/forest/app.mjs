@@ -1,11 +1,13 @@
 import { generateForest,forestReceiver,traceForest } from "./model.mjs?v=ground-1";
 import { ForestRenderer } from "./renderer.mjs?v=ground-1";
 import { GroundReflectionModel } from "./ground-reflections.mjs?v=ground-1";
+import { setupPositioning } from "./positioning-ui.mjs?v=position-1";
 import { selectNavigation,receivedSatellite,sub,mul,norm,dot,geodetic,enuRotation } from "../simulation/orbit.mjs?v=glonass-1";
 import { skyLayout } from "../simulation/sky-plot.mjs?v=glonass-1";
 const $=id=>document.getElementById(id),root=$("forest-lab"),canvas=$("forest-scene");
 let scene,sourceHash,forest,renderer,signals=[],receiver,selected,playing=false,seconds=600,last=0,elapsed=0;
 let groundModel,reflectionCache,reflectionPacket,completedSeconds=600;
+let stopPositioning;
 const options=()=>({specificLoss:Number($("specific-loss").value),foliage:Number($("foliage").value)});
 const colors={CLEAR:"#85e4bc",CANOPY:"#efbc79",WOOD:"#ec8f91",TERRAIN:"#b3b7c7"};
 function play(value){playing=value;if(!value)seconds=completedSeconds;$("forest-play").textContent=value?"Pause":"Play · 10×";$("forest-play").setAttribute("aria-pressed",String(value));last=0;}
@@ -65,7 +67,7 @@ function compute(){
   if(!signals.some(s=>s.id===selected))selected=(signals.find(s=>s.trace.classification==="CANOPY")??signals[0])?.id;
   $("forest-cost").textContent=`${(performance.now()-started).toFixed(1)} ms · CPU propagation + direct intersections`;render();
 }
-function fail(error){play(false);root.dataset.state="error";$("forest-status").textContent=error.message;for(const input of document.querySelectorAll("[data-control]"))input.disabled=true;}
+function fail(error){play(false);stopPositioning?.();root.dataset.state="error";$("forest-status").textContent=error.message;for(const input of document.querySelectorAll("[data-control]"))input.disabled=true;}
 function download(){
   const value={schema:"synthetic-forest-snapshot-v2",simulationOnly:true,assumptions:{canopy:"ellipsoid density volumes; overlapping densities add",wood:"finite cylinders; no calibrated power model",terrain:"piecewise planar finite patch",attenuation:"illustrative linear density integral, not a fitted ITU/GNSS model",reflections:"selected satellite, finite terrain single bounce only; constant uncalibrated bounce loss, no coherent combination or polarization model",diffraction:false,receiverTracking:false},
     options:{...options(),maximumDirectRayM:400,elevationMaskDeg:10,receiverHeightM:1.6,routeDurationSeconds:1200},scene:forest,receiverENU:receiver,anchor:{originECEF:scene.origin,rotation:scene.rotation},week:scene.week,startTow:scene.track[0][0],elapsedSeconds:completedSeconds,tow:scene.track[0][0]+completedSeconds,source:{file:"odaiba-scene.json.gz",sha256:sourceHash},signals,selectedReflection:reflectionPacket};
@@ -80,6 +82,10 @@ async function init(){
   forest=generateForest();groundModel=new GroundReflectionModel(forest);renderer=new ForestRenderer(canvas,forest);compute();$("forest-status").textContent="Synthetic forest · real broadcast orbits";
   for(const input of document.querySelectorAll("[data-control]"))input.disabled=false;
   $("forest-focus-reflection").disabled=!reflectionPacket?.paths.length;
+  stopPositioning=setupPositioning(()=>{
+    play(false);
+    return {forest:structuredClone(forest),receiver:receiver.slice(),signals:signals.map(s=>({id:s.id,sourceENU:s.sourceENU.slice()})),context:{week:scene.week,tow:scene.track[0][0]+completedSeconds,elapsedSeconds:completedSeconds,source:{file:"odaiba-scene.json.gz",sha256:sourceHash}}};
+  });
   $("forest-play").addEventListener("click",()=>play(!playing));
   $("forest-progress").addEventListener("input",e=>{play(false);seconds=Number(e.target.value);compute();});
   for(const id of ["specific-loss","foliage"])$(id).addEventListener("input",compute);

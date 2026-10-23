@@ -4,6 +4,36 @@ const fs=require("node:fs");
 // No software-renderer flags are added to the website or normal browser launches.
 test.use({launchOptions:{args:["--use-angle=swiftshader","--enable-unsafe-swiftshader"]}});
 
+test("controlled positioning captures a fixed epoch, runs blindly and exports every method",async({page},testInfo)=>{
+  test.setTimeout(180000);
+  const errors=[];page.on("pageerror",e=>errors.push(e.message));
+  await page.goto("forest.html");await expect(page.locator("#forest-lab")).toHaveAttribute("data-state","ready");
+  await page.locator("#position-experiment summary").click();
+  await page.locator("#position-run").click();await page.locator("#position-cancel").click();
+  await expect(page.locator("#position-experiment")).toHaveAttribute("data-state","cancelled");
+  await expect(page.locator("#position-export")).toBeDisabled();
+  await page.locator("#forest-play").click();await expect(page.locator("#forest-play")).toHaveAttribute("aria-pressed","true");
+  await page.locator("#position-run").click();await expect(page.locator("#forest-play")).toHaveAttribute("aria-pressed","false");
+  const captured=Number(await page.locator("#forest-lab").getAttribute("data-seconds"));
+  // Subsequent scene edits must not mutate the worker's captured inputs/results.
+  await page.locator("#forest-count").selectOption("32");
+  await expect(page.locator("#position-experiment")).toHaveAttribute("data-state","ready",{timeout:120000});
+  await expect(page.locator("#position-results tr")).toHaveCount(3);
+  const pending=page.waitForEvent("download");await page.locator("#position-export").click();const download=await pending;
+  const data=JSON.parse(fs.readFileSync(await download.path(),"utf8"));
+  expect(data.schema).toBe("synthetic-forest-positioning-v1");expect(data.scene.count).toBe(64);expect(data.context.elapsedSeconds).toBe(captured);
+  expect(data.context.source.sha256).toMatch(/^[a-f0-9]{64}$/);expect(data.search.globalSpatialOptimum).toBe(false);expect(data.search.clockGridAdditiveNllBound).toBe(1/32);
+  expect(data.observations.length).toBeGreaterThanOrEqual(3);expect(data.observations.every(o=>o.id.startsWith("G")&&!('index' in o))).toBe(true);
+  expect(data.results.map(r=>r.method)).toEqual(["straight","robust","paths"]);
+  expect(data.results.every(r=>r.status==="solution"&&Number.isFinite(r.horizontalErrorM))).toBe(true);
+  expect(data.assumptions.limitations).toContain("inverse crime");
+  console.log(JSON.stringify({project:testInfo.project.name,results:data.results.map(r=>({method:r.method,error:r.horizontalErrorM,boundary:r.boundary})),observations:data.observations.length}));
+  await page.screenshot({path:testInfo.outputPath("positioning.png"),fullPage:true});
+  await page.locator("#forest-systems").selectOption("E");await page.locator("#position-run").click();
+  await expect(page.locator("#position-experiment")).toHaveAttribute("data-state","error");await expect(page.locator("#position-export")).toBeDisabled();
+  expect(errors).toEqual([]);
+});
+
 test("forest ray geometry, live sky, assumptions and exported snapshot remain consistent",async({page},testInfo)=>{
   const errors=[],requests=[];page.on("pageerror",e=>errors.push(e.message));page.on("request",r=>requests.push(r.url()));
   await page.goto("forest.html");const root=page.locator("#forest-lab");
