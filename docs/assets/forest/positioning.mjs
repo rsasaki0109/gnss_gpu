@@ -1,6 +1,6 @@
 // Controlled single-arrival ranging experiment, not a receiver tracking model.
-import {randomSequence,terrainHeight} from "./model.mjs?v=density-route-1";
-import {GroundReflectionModel} from "./ground-reflections.mjs?v=density-route-1";
+import {randomSequence,terrainHeight} from "./model.mjs?v=species-season-1";
+import {GroundReflectionModel} from "./ground-reflections.mjs?v=species-season-1";
 const distance=(a,b)=>Math.hypot(...a.map((v,i)=>v-b[i]));
 const vector=a=>Array.isArray(a)&&a.length===3&&a.every(Number.isFinite);
 export const METHODS=["straight","robust","paths"];
@@ -55,7 +55,7 @@ export function generateObservations(forest,receiver,signals,{seed=7,sigma=.3,cl
 export function shiftedForest(forest,bias){
   if(!Number.isFinite(bias)||Math.abs(bias)>3)throw new RangeError("Invalid vertical map bias");
   const p=a=>[a[0],a[1],a[2]+bias],c=a=>({...a,a:p(a.a),b:p(a.b)});
-  return {...forest,terrain:forest.terrain.map(t=>t.map(p)),trees:forest.trees.map(t=>({...t,trunk:c(t.trunk),branches:t.branches.map(c),crown:{...t.crown,center:p(t.crown.center)}}))};
+  return {...forest,terrain:forest.terrain.map(t=>t.map(p)),trees:forest.trees.map(t=>({...t,trunk:c(t.trunk),branches:t.branches.map(c),crown:{...t.crown,center:p(t.crown.center)},...(t.canopies?{canopies:t.canopies.map(c=>({...c,center:p(c.center)}))}:{})}))};
 }
 
 // This interface intentionally accepts no evaluation truth or path labels.

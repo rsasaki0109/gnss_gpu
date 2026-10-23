@@ -1,10 +1,10 @@
-import {checkDensityProfile,crownIntegral} from "./density.mjs?v=density-route-1";
+import {checkDensityProfile,crownIntegral} from "./density.mjs?v=species-season-1";
 // Synthetic ENU forest. Geometry and integrals use binary64; mesh is display only.
 const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0);
 const sub=(a,b)=>a.map((v,i)=>v-b[i]);
 const point=(o,d,t)=>o.map((v,i)=>v+t*d[i]);
 const unit=a=>{const n=Math.hypot(...a);if(!Number.isFinite(n)||n===0)throw new RangeError("Invalid direction");return a.map(v=>v/n);};
-export const MODEL_VERSION="synthetic-forest-v1";
+export const MODEL_VERSION="synthetic-forest-v2";
 export function randomSequence(seed) {
   if(!Number.isInteger(seed)||seed<0||seed>0xffffffff)throw new RangeError("Invalid seed");
   let value=seed;
@@ -25,7 +25,15 @@ export function forestReceiver(seconds) {
   const y=-65+130*seconds/1200,x=trailX(y);
   return [x,y,terrainHeight(x,y)+1.6];
 }
-export function generateForest({seed=20261023,count=64}={}) {
+// Growth forms, not calibrated botanical species. The component ellipsoids
+// below are shared by rendering and RF; with canopies, crown is a size/shadow proxy.
+export const PHENOLOGY_ASSUMPTION="synthetic deciduous broadleaf and evergreen conifer growth forms; leaf-off removes broadleaf canopy only, retaining wood and evergreen foliage; component volumes are authoritative; densities are not mass-matched across tree types; not calibrated species/season coefficients";
+export const FOREST_TYPES=Object.freeze(["broadleaf","conifer","mixed"]);
+export const FOREST_SEASONS=Object.freeze(["leaf-on","leaf-off"]);
+export const treeCrowns=tree=>tree.canopies??[tree.crown];
+export const leafRetention=tree=>tree.leafRetention??1;
+export function generateForest({seed=20261023,count=64,stand="broadleaf",season="leaf-on"}={}) {
+  if(!FOREST_TYPES.includes(stand)||!FOREST_SEASONS.includes(season))throw new RangeError("Invalid stand or season");
   if(!Number.isInteger(count)||count<1||count>128)throw new RangeError("Invalid tree count");
   const random=randomSequence(seed),trees=[],terrain=[];
   for(let y=-80;y<80;y+=10)for(let x=-80;x<80;x+=10){
@@ -45,7 +53,24 @@ export function generateForest({seed=20261023,count=64}={}) {
     trees.push({id:`T${String(trees.length+1).padStart(3,"0")}`,x,y,height:h,trunk,branches,crown,density:.75+random()*.5});
   }
   if(trees.length!==count)throw new Error("Could not place requested trees");
-  return {version:MODEL_VERSION,seed,count,bounds:[[-80,-80,-6],[80,80,36]],trees,terrain};
+  // Transform after placement: stand/season/count comparisons preserve tree
+  // locations and random draws. No seasonal change to trunk or branch geometry.
+  for(const [index,tree]of trees.entries()){
+    tree.species=stand==="mixed"?(index%2?"conifer":"broadleaf"):stand;
+    tree.leafRetention=season==="leaf-off"&&tree.species==="broadleaf"?0:1;
+    if(tree.species!=="conifer")continue;
+    const base=tree.trunk.a[2],bottom=base+4,step=(tree.height-4)/5,r=tree.crown.radii[0]*.72;
+    tree.crown={center:[tree.x,tree.y,(bottom+base+tree.height)/2],radii:[r,r,(tree.height-4)/2]};
+    // Five vertically disjoint bough envelopes: their density is never counted
+    // twice within one tree. Each tapering tier has an analytic ellipsoid chord.
+    tree.canopies=Array.from({length:5},(_,j)=>({center:[tree.x,tree.y,bottom+step*(j+.5)],radii:[r*(1-.18*j),r*(1-.18*j),step/2]}));
+    const original=tree.branches;
+    tree.branches=tree.canopies.flatMap((c,j)=>Array.from({length:3},(_,k)=>{
+      const old=original[j],angle=Math.atan2(old.b[1]-tree.y,old.b[0]-tree.x)+k*2*Math.PI/3,z=c.center[2]-.25*step;
+      return {a:[tree.x,tree.y,z],b:[tree.x+.85*c.radii[0]*Math.cos(angle),tree.y+.85*c.radii[1]*Math.sin(angle),z+.3*step],radius:old.radius};
+    }));
+  }
+  return {version:MODEL_VERSION,seed,count,stand,season,bounds:[[-80,-80,-6],[80,80,36]],trees,terrain};
 }
 function checkedRay(origin,direction,maximum) {
   if(!Array.isArray(origin)||origin.length!==3||!origin.every(Number.isFinite)||!Array.isArray(direction)||direction.length!==3||!direction.every(Number.isFinite)||Math.abs(Math.hypot(...direction)-1)>1e-12||!Number.isFinite(maximum)||maximum<=0)throw new RangeError("Expected finite unit ray");
@@ -138,10 +163,12 @@ export function traceForest(forest,origin,rawDirection,{specificLoss=.2,foliage=
   const direction=unit(rawDirection);checkedRay(origin,direction,maximum);
   const ground=terrainDistance(origin,direction,forest.terrain,maximum),limit=ground??maximum,crowns=[],wood=[];
   for(const tree of forest.trees){
-    const span=ellipsoidInterval(origin,direction,tree.crown,limit);
-    if(span){
-      const crown={tree:tree.id,enter:span[0],exit:span[1],density:tree.density};
-      if(densityProfile!=="uniform")crown.densityIntegral=crownIntegral(origin,direction,tree.crown,span,tree.density,densityProfile);
+    if(leafRetention(tree)>0)for(const [component,shape]of treeCrowns(tree).entries()){
+      const span=ellipsoidInterval(origin,direction,shape,limit);
+      if(!span)continue;
+      const density=tree.density*leafRetention(tree),crown={tree:tree.id,enter:span[0],exit:span[1],density};
+      if(tree.canopies)crown.component=component;
+      if(densityProfile!=="uniform")crown.densityIntegral=crownIntegral(origin,direction,shape,span,density,densityProfile);
       crowns.push(crown);
     }
     for(const [index,shape] of [tree.trunk,...tree.branches].entries()){
@@ -173,7 +200,7 @@ export function forestMesh(forest,{foliage=1}={}) {
     for(const tree of forest.trees){
       const {center,radii}=tree.crown,h=center[2]-p[2];
       const x=(p[0]-center[0]+.375*h)/(radii[0]+.375*radii[2]),y=(p[1]-center[1]-.625*h)/(radii[1]+.625*radii[2]);
-      shade*=1-.42*Math.min(foliage,1)*Math.exp(-1.6*(x*x+y*y));
+      shade*=1-.42*leafRetention(tree)*Math.min(foliage,1)*Math.exp(-1.6*(x*x+y*y));
     }
     const variation=.94+.06*Math.sin(p[0]*.61+p[1]*.37),color=[.30,.33,.21].map(v=>v*variation*(.45+.55*shade));
     floorColors.set(key,color);return color;
@@ -212,9 +239,10 @@ export function forestMesh(forest,{foliage=1}={}) {
       const center=[r*Math.cos(angle)*radius,r*Math.sin(angle)*radius,z*radius];
       lobes.push({center,radius:Math.min(.32+.09*random(),.98-radius)});
     }
-    const tint=random(),crown=tree.crown;
-    if(foliage===0)continue;
-    for(const lobe of lobes){
+    const tint=random();
+    if(foliage===0||leafRetention(tree)===0)continue;
+    const components=tree.canopies?tree.canopies.map(crown=>({crown,lobes:[{center:[0,0,0],radius:1}]})):[{crown:tree.crown,lobes}];
+    for(const {crown,lobes:clusters}of components)for(const lobe of clusters){
       const center=crown.center.map((v,i)=>v+lobe.center[i]*crown.radii[i]),radii=crown.radii.map(v=>v*lobe.radius);
       const sample=(i,j)=>{
         const u=[Math.sin(i*Math.PI/4)*Math.cos(j*Math.PI/4),Math.sin(i*Math.PI/4)*Math.sin(j*Math.PI/4),Math.cos(i*Math.PI/4)];
