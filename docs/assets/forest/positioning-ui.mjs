@@ -9,7 +9,7 @@ export function setupPositioning(capture){
     const input=capture();input.seed=Number($("position-seed").value);input.sigma=Number($("position-noise").value);input.mapBias=Number($("position-bias").value);
     panel.dataset.state="running";run.disabled=true;cancel.disabled=false;status.textContent="Generating synthetic GPS ranges…";
     try{
-      worker=new Worker(new URL("./positioning-worker.mjs?v=position-1",import.meta.url),{type:"module"});
+      worker=new Worker(new URL("./positioning-worker.mjs?v=prepared-1",import.meta.url),{type:"module"});
       const failure=message=>{stop();panel.dataset.state="error";status.textContent=message;};
       worker.onerror=()=>failure("Positioning worker failed. Reload or try another epoch.");
       worker.onmessage=({data})=>{

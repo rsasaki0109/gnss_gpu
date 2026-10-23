@@ -7,6 +7,40 @@ const receiver=[0,0,2],source=[10,0,10];
 const tree=(trunk,crown={center:[40,40,20],radii:[1,1,1]},density=1)=>({id:"T",trunk,branches:[],crown,density});
 const farWood={a:[40,40,0],b:[40,40,2],radius:.2};
 
+const detailedRanges=(forest,model,receiver,source,traceForest)=>{
+  const direct=Math.hypot(...receiver.map((v,i)=>v-source[i])),direction=source.map((v,i)=>(v-receiver[i])/direct),trace=traceForest(forest,receiver,direction,{maximum:direct});
+  return [...(trace.ground===null&&!trace.wood.length?[direct]:[]),...model.paths(receiver,source).paths.map(p=>p.totalRange)];
+};
+test("prepared occlusion ranges match detailed rays for wood, terrain and finite-aperture cases",async()=>{
+  const {GroundReflectionModel}=await modulePromise,{traceForest}=await modelPromise;
+  const cases=[ground(),{trees:[],terrain:[]},...['wood','terrain'].flatMap(kind=>[.8,2.5].map(x=>{
+    const forest=ground();if(kind==='wood')forest.trees=[tree({a:[x,0,0],b:[x,0,2],radius:.2})];else forest.terrain.push([[x,-2,.2],[x,2,.2],[x,0,3]]);return forest;
+  }))];
+  const distant=ground();distant.trees=[tree({a:[1000,0,990],b:[1000,0,1010],radius:1})];cases.push(distant);
+  for(const forest of cases)for(const source of [[10,0,10],[0,0,10],[2000,0,2000],[10,0,-10],[20e6,4e6,15e6]]){
+    const model=new GroundReflectionModel(forest);assert.deepEqual(model.ranges(receiver,source),detailedRanges(forest,model,receiver,source,traceForest));
+  }
+});
+test("prepared visibility matches detailed binary64 intersections on deterministic generated rays",async()=>{
+  const {GroundReflectionModel}=await modulePromise,{generateForest,terrainHeight,randomSequence,traceForest,ForestOcclusion}=await modelPromise;
+  const forest=generateForest(),model=new GroundReflectionModel(forest),index=new ForestOcclusion(forest),random=randomSequence(42);let blocked=0,reflected=0;
+  for(let i=0;i<120;i++){
+    const x=(random()-.5)*140,y=(random()-.5)*140,receiver=[x,y,terrainHeight(x,y)+.05+random()*10];
+    const source=[(random()-.5)*4e7,(random()-.5)*4e7,(random()-.15)*3e7],delta=source.map((v,j)=>v-receiver[j]),range=Math.hypot(...delta),direction=delta.map(v=>v/range);
+    const trace=traceForest(forest,receiver,direction,{maximum:range}),expected=trace.ground!==null||trace.wood.length>0;
+    assert.equal(index.blocked(receiver,direction,range),expected);blocked+=expected;
+    const detailed=detailedRanges(forest,model,receiver,source,traceForest);assert.deepEqual(model.ranges(receiver,source),detailed);reflected+=model.paths(receiver,source).paths.length;
+  }
+  assert.ok(blocked>0);assert.ok(reflected>0);
+});
+test("prepared rays preserve tangent, inside-cylinder and reflecting-endpoint decisions",async()=>{
+  const {GroundReflectionModel}=await modulePromise,{traceForest,ForestOcclusion}=await modelPromise;
+  const forest=ground();forest.trees=[tree({a:[0,0,0],b:[0,0,4],radius:.5})];const model=new GroundReflectionModel(forest),index=new ForestOcclusion(forest);
+  for(const receiver of [[0,0,2],[.5,0,2],[.5-1e-12,0,2],[.5+1e-12,0,2]])for(const source of [[.5,10,2],[0,0,10],[10,0,10]])assert.deepEqual(model.ranges(receiver,source),detailedRanges(forest,model,receiver,source,traceForest));
+  assert.throws(()=>index.blocked([0,0,1],[0,0,0],10),RangeError);assert.throws(()=>index.blocked([0,0,1],[0,0,1],10,{groundMaximum:11}),RangeError);
+  assert.throws(()=>model.ranges(receiver,receiver),RangeError);assert.throws(()=>model.ranges([NaN,0,1],source),RangeError);
+});
+
 test("finite ground path satisfies image geometry, reflection law and exact path length",async()=>{
   const {GroundReflectionModel}=await modulePromise,result=new GroundReflectionModel(ground()).paths(receiver,source);
   assert.equal(result.paths.length,1);assert.equal(result.blocked.length,0);const p=result.paths[0];
