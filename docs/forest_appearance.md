@@ -84,6 +84,42 @@ tree selection. Snapshot JSON retains `treeAttribution` with satellite, scope,
 per-tree loss/length/wood intersections and the reconciliation totals. Inspecting
 a tree changes the view, not the completed signal measurements or history.
 
+## Paired leaf-on / leaf-off comparison
+
+Open **Leaf-on vs leaf-off / 着葉・落葉を同じ条件で比較** and select
+**Compare current epoch**. Playback pauses and captures the current receiver,
+visible satellite endpoints, selected signal, forest geometry, RF assumptions
+and completed epoch. Both cases retain the same tree placement, wood, crown
+component geometry and density; only the existing binary leaf-retention rule
+changes. The live scene, selected season and recorded measurements are not
+replaced by the comparison cases.
+
+Every captured satellite gets leaf-on/off crown-loss components and their
+off-minus-on difference, ordered by the magnitude of that difference. Wood
+and terrain blockage remain visible; the crown values are not total received
+power for blocked rays. The selected satellite also gets both full ground
+queries, showing the shortest valid path's scalar relative power and geometric
+excess range. Bounce loss is fixed. No noise, tracking, weather, forest growth,
+coherent combination or positioning model is added by this comparison.
+
+In linear mode, broadleaf leaf-off removes crown leaf-density loss by
+assumption. In the extinction reference it retains the existing bare-crown
+coefficient (maple ratio 0.139/0.241). Evergreen foliage and all wood remain in
+both seasons. Consequently this is a controlled model sensitivity comparison,
+not a field estimate of seasonal GNSS performance or calibrated received power.
+
+Results remain the captured study while the live scene changes. A warning
+appears when receiver time/position, satellite set/selection, forest layout/type
+or RF assumptions no longer match. Display season alone does not invalidate
+the study because it already contains both seasons; camera and lighting changes
+also preserve it. Run again to capture new conditions.
+
+**Export comparison** writes a separate `forest-season-comparison-v1` JSON
+containing the complete captured forest, endpoints and context, both direct
+trace sets, selected ground queries, scalar differences and interpretation
+assumptions. Missing ground paths remain null/unavailable. This independent
+export avoids mixing an older comparison with the current live snapshot.
+
 The display now uses botanical branch cards rather than solid ellipsoid
 shells. A locally generated four-region texture atlas supplies broad leaves,
 leaf veins, twigs and evergreen needles. Random orientations and layered
@@ -126,6 +162,6 @@ exercise both lighting presets, default trail/overview switching, desktop and
 mobile layout, species/season controls, WebGL errors and exported signal results.
 
 ```bash
-node --test tests/site/forest-tree-causes.test.cjs tests/site/forest-live-history.test.cjs tests/site/forest-signal-overlay.test.cjs tests/site/forest-appearance.test.cjs tests/site/forest-model.test.cjs tests/site/forest-species.test.cjs
-npm run site:smoke -- tests/site/forest.spec.cjs --grep 'tree loss attribution|live signal charts|GNSS paths|woodland lighting|trail perspective|tree type and season'
+node --test tests/site/forest-season-study.test.cjs tests/site/forest-tree-causes.test.cjs tests/site/forest-live-history.test.cjs tests/site/forest-signal-overlay.test.cjs tests/site/forest-appearance.test.cjs tests/site/forest-model.test.cjs tests/site/forest-species.test.cjs
+npm run site:smoke -- tests/site/forest.spec.cjs --grep 'paired seasons|tree loss attribution|live signal charts|GNSS paths|woodland lighting|trail perspective|tree type and season'
 ```

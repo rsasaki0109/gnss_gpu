@@ -4,6 +4,27 @@ const fs=require("node:fs");
 // No software-renderer flags are added to the website or normal browser launches.
 test.use({launchOptions:{args:["--use-angle=swiftshader","--enable-unsafe-swiftshader"]}});
 
+test("paired seasons capture one epoch, preserve live measurements and flag changed conditions",async({page},testInfo)=>{
+  test.setTimeout(150000);const errors=[];page.on("pageerror",e=>errors.push(e.message));
+  await page.goto("forest.html");await expect(page.locator("#forest-lab")).toHaveAttribute("data-state","ready",{timeout:60000});
+  const download=async selector=>{const pending=page.waitForEvent("download");await page.locator(selector).click();return JSON.parse(fs.readFileSync(await (await pending).path(),"utf8"));};
+  const live=await download("#forest-export"),study=page.locator("#forest-season-study");await study.locator("summary").click();
+  await page.locator("#season-study-run").click();await expect(study).toHaveAttribute("data-state","ready");
+  const result=await download("#season-study-export");expect(result.schema).toBe("forest-season-comparison-v1");expect(result.captured.receiver).toEqual(live.receiverENU);expect(result.captured.context.elapsedSeconds).toBe(live.elapsedSeconds);expect(result.rows).toHaveLength(live.signals.length);
+  const row=result.rows.find(r=>r.id===result.captured.selected),original=live.signals.find(s=>s.id===row.id);
+  expect(row.leafOnLossDb).toBeCloseTo(original.trace.canopyLoss,7);expect(row.leafOffLossDb).toBe(0);
+  expect(result.cases[0].direct.map(s=>s.trace.wood)).toEqual(result.cases[1].direct.map(s=>s.trace.wood));
+  expect(result.cases[0].ground.paths.map(p=>p.point)).toEqual(result.cases[1].ground.paths.map(p=>p.point));
+  const unchanged=await download("#forest-export");expect(unchanged.signals).toEqual(live.signals);expect(unchanged.scene).toEqual(live.scene);expect(unchanged.signalHistory.samples).toEqual(live.signalHistory.samples);
+  await page.locator("#forest-season").selectOption("leaf-off");await expect(study).toHaveAttribute("data-stale","false");
+  await page.locator("#specific-loss").press("End");await expect(study).toHaveAttribute("data-stale","true");await expect(page.locator("#season-study-stale")).toBeVisible();expect(await download("#season-study-export")).toEqual(result);
+  await page.locator("#attenuation-model").selectOption("itu-extinction-v1");await page.locator("#forest-play").click();await page.locator("#season-study-run").click();await expect(study).toHaveAttribute("data-state","ready");await expect(page.locator("#forest-play")).toHaveAttribute("aria-pressed","false");
+  const reference=await download("#season-study-export"),referenceRow=reference.rows.find(r=>r.id===reference.captured.selected);
+  expect(reference.captured.context.elapsedSeconds).toBe(Number(await page.locator("#forest-lab").getAttribute("data-seconds")));await expect(study).toHaveAttribute("data-stale","false");
+  expect(referenceRow.leafOffLossDb).toBeGreaterThan(0);expect(referenceRow.leafOffLossDb/referenceRow.leafOnLossDb).toBeCloseTo(.139/.241,7);
+  await study.screenshot({path:testInfo.outputPath("paired-seasons.png")});expect(errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
 test("tree loss attribution reconciles with traces and focuses RF envelopes without changing measurements",async({page},testInfo)=>{
   test.setTimeout(150000);const errors=[];page.on("pageerror",e=>errors.push(e.message));
   await page.goto("forest.html");await expect(page.locator("#forest-lab")).toHaveAttribute("data-state","ready",{timeout:60000});

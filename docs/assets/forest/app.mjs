@@ -6,11 +6,12 @@ import { setupPositioning } from "./positioning-ui.mjs?v=extinction-reference-1"
 import {forestSignals} from "./signals.mjs?v=extinction-reference-1";
 import { ForestLiveHistory, renderForestHistory } from "./live-history.mjs?v=live-history-1";
 import { selectedTreeCauses, renderTreeCauses } from "./tree-causes.mjs?v=tree-causes-1";
+import { compareForestSeasons, renderSeasonStudy, seasonStudyKey } from "./season-study.mjs?v=season-study-1";
 import { skyLayout } from "../simulation/sky-plot.mjs?v=glonass-1";
 const $=id=>document.getElementById(id),root=$("forest-lab"),canvas=$("forest-scene");
 let scene,sourceHash,forest,renderer,signals=[],receiver,selected,playing=false,seconds=600,last=0,elapsed=0;
 let groundModel,reflectionCache,reflectionPacket,completedSeconds=600;
-let stopPositioning,focusedTree=null,treeAttribution;
+let stopPositioning,focusedTree=null,treeAttribution,seasonStudy=null;
 const liveHistory=new ForestLiveHistory();
 const sceneOptions=()=>({seed:Number($("forest-seed").value),count:Number($("forest-count").value),stand:$("forest-stand").value,season:$("forest-season").value});
 const options=()=>({specificLoss:Number($("specific-loss").value),foliage:$("attenuation-model").value==="itu-extinction-v1"?1:Number($("foliage").value),attenuationModel:$("attenuation-model").value,materialPreset:$("material-preset").value,densityProfile:$("density-profile").value});
@@ -42,6 +43,8 @@ function updateGroundReflection(){
   $("forest-focus-reflection").disabled=!first;$("bounce-out").textContent=`${assumptions.bounceLoss.toFixed(1)} dB`;
   return first;
 }
+function seasonStudyInput(){return {forest,receiver,selected,signals:signals.map(s=>({id:s.id,sourceENU:s.sourceENU.slice()})),options:{...options(),bounceLoss:Number($("bounce-loss").value)},context:{week:scene.week,tow:scene.track[0][0]+completedSeconds,elapsedSeconds:completedSeconds,source:{file:"odaiba-scene.json.gz",sha256:sourceHash}}};}
+function seasonStudyFreshness(){if(!seasonStudy)return;const stale=seasonStudyKey(seasonStudy.captured)!==seasonStudyKey(seasonStudyInput());$("forest-season-study").dataset.stale=String(stale);$("season-study-stale").hidden=!stale;}
 function render(){
   const ground=updateGroundReflection(),signal=signals.find(s=>s.id===selected);
   liveHistory.append({seconds:completedSeconds,id:selected,modelKey:JSON.stringify({scene:{seed:forest.seed,count:forest.count,stand:forest.stand,season:forest.season},...options(),bounceLoss:Number($("bounce-loss").value)}),trace:signal?.trace,reflection:ground});
@@ -72,6 +75,7 @@ function render(){
   $("forest-time").textContent=`${time} GPST · +${completedSeconds.toFixed(1)} s`;$("forest-progress").value=completedSeconds;
   $("forest-stats").textContent=`${forest.count} trees · ${signals.length} satellites · ${signals.filter(s=>s.trace.classification==="CANOPY").length} canopy-only`;
   $("loss-out").textContent=options().attenuationModel==="itu-extinction-v1"?"reference coefficients":`${options().specificLoss.toFixed(2)} dB/m`;$("foliage-out").textContent=`${options().foliage.toFixed(2)}×`;
+  seasonStudyFreshness();
   Object.assign(root.dataset,{state:"ready",seconds:completedSeconds,seed:forest.seed,count:forest.count,stand:forest.stand,season:forest.season,satellites:signals.length,selected:selected??""});
 }
 function compute(){
@@ -99,6 +103,16 @@ async function init(){
     play(false);
     return {forest:structuredClone(forest),orbitScene:{week:scene.week,startTow:scene.track[0][0],origin:scene.origin,rotation:scene.rotation,navigation:scene.navigation},...options(),receiver:receiver.slice(),signals:signals.map(s=>({id:s.id,sourceENU:s.sourceENU.slice()})),context:{week:scene.week,tow:scene.track[0][0]+completedSeconds,elapsedSeconds:completedSeconds,source:{file:"odaiba-scene.json.gz",sha256:sourceHash}}};
   });
+  $("season-study-run").addEventListener("click",async()=>{
+    if(root.dataset.state!=="ready")return;
+    play(false);const input=structuredClone(seasonStudyInput()),button=$("season-study-run"),panel=$("forest-season-study");
+    seasonStudy=null;button.disabled=true;$("season-study-export").disabled=true;panel.dataset.state="running";panel.querySelector("[data-season-results]").hidden=true;$("season-study-stale").hidden=true;$("season-study-status").textContent="Comparing captured leaf-on / leaf-off geometry…";
+    await new Promise(requestAnimationFrame);
+    try{seasonStudy=compareForestSeasons(input);renderSeasonStudy(panel,seasonStudy);seasonStudyFreshness();$("season-study-export").disabled=false;$("season-study-status").textContent="Comparison complete · same receiver, source endpoints, trees and wood geometry";}
+    catch(error){panel.dataset.state="error";$("season-study-status").textContent=error.message;}
+    finally{button.disabled=root.dataset.state!=="ready";}
+  });
+  $("season-study-export").addEventListener("click",()=>{if(!seasonStudy)return;const url=URL.createObjectURL(new Blob([JSON.stringify(seasonStudy,null,2)+"\n"],{type:"application/json"})),link=document.createElement("a");link.href=url;link.download="gnss-forest-season-comparison.json";link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
   $("forest-play").addEventListener("click",()=>play(!playing));
   $("forest-progress").addEventListener("input",e=>{play(false);liveHistory.clear("Timeline moved; new history segment");seconds=Number(e.target.value);compute();});
   for(const id of ["specific-loss","foliage"])$(id).addEventListener("input",compute);
