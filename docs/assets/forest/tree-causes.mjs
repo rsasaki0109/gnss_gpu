@@ -37,17 +37,24 @@ export function selectedTreeCauses(signal,ground,options,scope="direct"){
 }
 
 export function renderTreeCauses(root,attribution,focused){
-  const doc=root.ownerDocument,body=root.querySelector("tbody");body.replaceChildren();root.dataset.scope=attribution.scope;root.dataset.rows=String(attribution.rows.length);root.dataset.focused=focused??"";
+  const doc=root.ownerDocument,body=root.querySelector("tbody"),existing=new Map([...body.querySelectorAll("tr[data-tree-row]")].map(row=>[row.dataset.treeRow,row]));
+  root.dataset.scope=attribution.scope;root.dataset.rows=String(attribution.rows.length);root.dataset.focused=focused??"";
   root.querySelector("[data-tree-title]").textContent=`${attribution.satellite??"Selected signal"} · loss by tree / 原因の木`;
   root.querySelector("[data-tree-total]").textContent=!attribution.available?"Unavailable":`${attribution.totalCanopyLossDb.toFixed(2)} dB · canopy subtotal`;
   root.querySelector("[data-tree-note]").textContent=!attribution.available?(attribution.scope==="ground"?"No valid ground path at this epoch":"Select a satellite"):
     attribution.scope==="ground"?"Both ground legs · canopy loss only; bounce loss and spreading are separate. Click a tree to inspect it.":
     attribution.directBlocked?"Direct path blocked: this is the canopy component only; total power is unavailable.":"Click a tree to inspect its model crown envelope. Crown path lengths can overlap between trees.";
-  if(attribution.available&&!attribution.rows.length){const tr=doc.createElement("tr"),td=doc.createElement("td");td.colSpan=4;td.textContent="No crown or wood intersections on this path";tr.append(td);body.append(tr);}
-  for(const tree of attribution.rows){
-    const tr=doc.createElement("tr"),name=doc.createElement("td"),button=doc.createElement("button");button.textContent=tree.id;button.dataset.treeSelect=tree.id;button.setAttribute("aria-label",`Inspect tree ${tree.id}`);button.setAttribute("aria-pressed",String(tree.id===focused));name.append(button);tr.append(name);
-    for(const value of [`${tree.crownPathM.toFixed(2)} m`,`${tree.crownLossDb.toFixed(3)} dB`,tree.wood.length?`${tree.wood.length} hits`:"—"]){const cell=doc.createElement("td");cell.textContent=value;tr.append(cell);}
-    body.append(tr);
+  for(const [id,row]of existing)if(!attribution.rows.some(tree=>tree.id===id))row.remove();
+  body.querySelector("[data-tree-empty]")?.remove();
+  if(attribution.available&&!attribution.rows.length){const tr=doc.createElement("tr"),td=doc.createElement("td");tr.dataset.treeEmpty="true";td.colSpan=4;td.textContent="No crown or wood intersections on this path";tr.append(td);body.append(tr);}
+  // Keep live buttons attached between epochs. Replacing the whole tbody at
+  // each slow WebGL frame can detach a pointer/keyboard target before click.
+  for(const [index,tree]of attribution.rows.entries()){
+    let tr=existing.get(tree.id);
+    if(!tr){tr=doc.createElement("tr");tr.dataset.treeRow=tree.id;const name=doc.createElement("td"),button=doc.createElement("button");button.textContent=tree.id;button.dataset.treeSelect=tree.id;button.setAttribute("aria-label",`Inspect tree ${tree.id}`);name.append(button);tr.append(name);for(let i=0;i<3;i++)tr.append(doc.createElement("td"));}
+    tr.querySelector("button").setAttribute("aria-pressed",String(tree.id===focused));
+    for(const [i,value]of [`${tree.crownPathM.toFixed(2)} m`,`${tree.crownLossDb.toFixed(3)} dB`,tree.wood.length?`${tree.wood.length} hits`:"—"].entries())tr.children[i+1].textContent=value;
+    if(body.children[index]!==tr)body.insertBefore(tr,body.children[index]??null);
   }
 }
 

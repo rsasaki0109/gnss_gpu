@@ -83,6 +83,8 @@ the outline. Satellite/route/forest changes update the table and its current
 tree selection. Snapshot JSON retains `treeAttribution` with satellite, scope,
 per-tree loss/length/wood intersections and the reconciliation totals. Inspecting
 a tree changes the view, not the completed signal measurements or history.
+Tree inspection buttons remain attached while completed epochs update, so a
+slow rendering frame cannot detach the input target before its click completes.
 
 ## Paired leaf-on / leaf-off comparison
 

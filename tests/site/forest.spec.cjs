@@ -34,6 +34,9 @@ test("tree loss attribution reconciles with traces and focuses RF envelopes with
   expect(first.treeAttribution.totalCanopyLossDb).toBeCloseTo(sum(first.treeAttribution.rows),9);
   expect(first.treeAttribution.satellite).toBe(first.signalHistory.samples.at(-1).id);
   expect(sum(first.treeAttribution.rows)).toBeCloseTo(first.signals.find(s=>s.id===first.signalHistory.samples.at(-1).id).trace.canopyLoss,9);
+  const liveButton=await causes.locator(`[data-tree-select="${id}"]`).elementHandle();
+  await page.locator("#forest-tree-scope").evaluate(el=>el.dispatchEvent(new Event("change",{bubbles:true})));
+  expect(await liveButton.evaluate((node,id)=>node.isConnected&&node===document.querySelector(`[data-tree-select="${id}"]`),id)).toBe(true);
   await causes.locator(`[data-tree-select="${id}"]`).click();await expect(canvas).toHaveAttribute("data-view","overview");await expect(rays).toHaveAttribute("data-highlighted-tree",id);
   expect(await page.locator(`[data-tree-outline="${id}"] path`).count()).toBeGreaterThan(0);
   const focused=await snapshot();expect(focused.signals).toEqual(first.signals);expect(focused.signalHistory.samples).toEqual(first.signalHistory.samples);

@@ -1,5 +1,5 @@
 import { forestCameraFrame, forestSignalOverlay, drawForestSignalOverlay } from "./signal-overlay.mjs?v=live-history-1";
-import { drawTreeCauseOutline } from "./tree-causes.mjs?v=tree-causes-1";
+import { drawTreeCauseOutline } from "./tree-causes.mjs?v=tree-causes-2";
 import { forestAppearance, createLeafAtlas, APPEARANCE_STRIDE } from "./appearance.mjs?v=woodland-1";
 const vs=`#version 300 es
 in vec3 a_position;in vec3 a_normal;in vec3 a_color;in vec3 a_surface;in vec2 a_uv;

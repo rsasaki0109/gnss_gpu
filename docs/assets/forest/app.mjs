@@ -1,11 +1,11 @@
 import {attenuationDescription} from "./attenuation.mjs?v=extinction-reference-1";
 import { generateForest,forestReceiver,traceForest,PHENOLOGY_ASSUMPTION } from "./model.mjs?v=extinction-reference-1";
-import { ForestRenderer } from "./renderer.mjs?v=tree-causes-1";
+import { ForestRenderer } from "./renderer.mjs?v=tree-causes-2";
 import { GroundReflectionModel } from "./ground-reflections.mjs?v=extinction-reference-1";
 import { setupPositioning } from "./positioning-ui.mjs?v=extinction-reference-1";
 import {forestSignals} from "./signals.mjs?v=extinction-reference-1";
 import { ForestLiveHistory, renderForestHistory } from "./live-history.mjs?v=live-history-1";
-import { selectedTreeCauses, renderTreeCauses } from "./tree-causes.mjs?v=tree-causes-1";
+import { selectedTreeCauses, renderTreeCauses } from "./tree-causes.mjs?v=tree-causes-2";
 import { compareForestSeasons, renderSeasonStudy, seasonStudyKey } from "./season-study.mjs?v=season-study-1";
 import { skyLayout } from "../simulation/sky-plot.mjs?v=glonass-1";
 const $=id=>document.getElementById(id),root=$("forest-lab"),canvas=$("forest-scene");
