@@ -42,7 +42,7 @@ export function projectForestSegment(start,end,frame){
   return Math.hypot(clipped[1][0]-clipped[0][0],clipped[1][1]-clipped[0][1])>.5?clipped:null;
 }
 
-export function forestSignalOverlay(receiver,signals,selected,ground,frame,mode="all"){
+export function forestSignalOverlay(receiver,signals,selected,ground,frame,mode="all",reflectionTrail=[]){
   const lines=[],labels=[];
   const point=(origin,direction,t)=>origin.map((v,i)=>v+direction[i]*t);
   const line=(a,b,satellite,kind,color,active,dashed=false)=>{
@@ -50,6 +50,9 @@ export function forestSignalOverlay(receiver,signals,selected,ground,frame,mode=
     if(projected)lines.push({a:projected[0],b:projected[1],satellite,kind,color,active,dashed});
     return projected;
   };
+  if(mode!=="off")for(let i=1;i<reflectionTrail.length;i++){
+    if(reflectionTrail[i-1]&&reflectionTrail[i])line(reflectionTrail[i-1],reflectionTrail[i],selected,"reflection-trail",SIGNAL_COLORS.CANOPY,false,true);
+  }
   if(mode!=="off")for(const signal of signals){
     const active=signal.id===selected;if(mode==="selected"&&!active)continue;
     const trace=signal.trace,blocked=trace.classification==="WOOD"||trace.classification==="TERRAIN",color=SIGNAL_COLORS[trace.classification];
@@ -77,7 +80,7 @@ export function drawForestSignalOverlay(svg,packet,width,height){
   for(const path of ordered){
     const d=`M${path.a.join(",")}L${path.b.join(",")}`,width=path.kind==="canopy"||path.kind==="wood"?5:path.active?3:1.5;
     el("path",{d,fill:"none",stroke:"#071a22","stroke-width":width+2,opacity:path.active?.85:.55});
-    el("path",{d,fill:"none",stroke:path.color,"stroke-width":width,"stroke-linecap":"round","stroke-dasharray":path.dashed?"8 6":"none",opacity:path.active?1:.65,"data-signal":path.satellite,"data-path-kind":path.kind});
+    el("path",{d,fill:"none",stroke:path.color,"stroke-width":width,"stroke-linecap":"round","stroke-dasharray":path.kind==="reflection-trail"?"2 5":path.dashed?"8 6":"none",opacity:path.active?1:.65,"data-signal":path.satellite,"data-path-kind":path.kind});
     if(path.kind==="direct"&&!path.dashed){
       const dx=path.a[0]-path.b[0],dy=path.a[1]-path.b[1],length=Math.hypot(dx,dy);
       if(length>35){const x=path.a[0]+(path.b[0]-path.a[0])*.57,y=path.a[1]+(path.b[1]-path.a[1])*.57,ux=dx/length,uy=dy/length;

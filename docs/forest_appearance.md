@@ -24,6 +24,34 @@ the antenna. Ray extents are 160 m along the computed arrival directions;
 edge labels indicate direction, not spacecraft positions at those distances.
 Arrows show propagation direction, not RF phase or real-time wave speed.
 
+## Changes during playback
+
+The selected satellite now has live charts below the viewer: direct canopy
+loss in dB and the shortest valid ground path's excess range in metres.
+Current values, change in loss since the preceding sample, geometry-class
+transitions, ground path gain/loss and ground triangle changes accompany them.
+The chart fills the available recorded interval, up to 120 simulated seconds;
+its cursor follows the latest completed epoch. No extra route scan or future
+orbit/propagation calculation is performed for these plots.
+
+History retains at most 600 completed samples. Rendering again at the same
+timestamp replaces its sample rather than duplicating it. Satellite selection,
+RF/forest settings changes, timeline seeks, backward time or a gap over five
+simulated seconds start a new history segment. Camera, lighting and path-display
+changes preserve the recorded measurements. Blocked direct paths and absent
+ground paths have null values: the curves stop rather than connecting across
+outages or assigning a zero loss/excess range. Missing a sampled reflection
+does not establish its exact loss/recovery time between completed epochs.
+
+The latest 30 ground reflection points form a dotted amber trail in the 3D
+overlay. Missing reflection epochs break the trail; it is historical geometry,
+not additional simultaneous multipath. Hiding signal paths hides this trail.
+The snapshot JSON includes an immutable `signalHistory` record with schema
+`forest-live-history-v1`, sample times relative to the existing scene start,
+model values, geometry states, selected ground triangles/points and events.
+These remain illustrative model values, not C/N0, measured receiver strength,
+coherently combined signals or a receiver-tracking result.
+
 The display now uses botanical branch cards rather than solid ellipsoid
 shells. A locally generated four-region texture atlas supplies broad leaves,
 leaf veins, twigs and evergreen needles. Random orientations and layered
@@ -66,6 +94,6 @@ exercise both lighting presets, default trail/overview switching, desktop and
 mobile layout, species/season controls, WebGL errors and exported signal results.
 
 ```bash
-node --test tests/site/forest-appearance.test.cjs tests/site/forest-model.test.cjs tests/site/forest-species.test.cjs
-npm run site:smoke -- tests/site/forest.spec.cjs --grep 'woodland lighting|trail perspective|tree type and season'
+node --test tests/site/forest-live-history.test.cjs tests/site/forest-signal-overlay.test.cjs tests/site/forest-appearance.test.cjs tests/site/forest-model.test.cjs tests/site/forest-species.test.cjs
+npm run site:smoke -- tests/site/forest.spec.cjs --grep 'live signal charts|GNSS paths|woodland lighting|trail perspective|tree type and season'
 ```

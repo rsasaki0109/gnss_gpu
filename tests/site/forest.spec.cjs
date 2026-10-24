@@ -4,6 +4,26 @@ const fs=require("node:fs");
 // No software-renderer flags are added to the website or normal browser launches.
 test.use({launchOptions:{args:["--use-angle=swiftshader","--enable-unsafe-swiftshader"]}});
 
+test("live signal charts retain completed epochs and reset on seeks, RF edits and satellite selection",async({page},testInfo)=>{
+  test.setTimeout(150000);const errors=[];page.on("pageerror",e=>errors.push(e.message));
+  await page.goto("forest.html");const root=page.locator("#forest-lab"),history=page.locator("#forest-live-history");await expect(root).toHaveAttribute("data-state","ready",{timeout:60000});
+  await page.locator("#forest-count").selectOption("32");await expect(history).toHaveAttribute("data-samples","1");
+  await page.locator("#forest-play").click();await expect.poll(async()=>Number(await history.getAttribute("data-samples")),{timeout:45000}).toBeGreaterThan(2);await page.locator("#forest-play").click();
+  const snapshot=async()=>{const pending=page.waitForEvent("download");await page.locator("#forest-export").click();return JSON.parse(fs.readFileSync(await (await pending).path(),"utf8"));};
+  const first=await snapshot(),samples=first.signalHistory.samples,last=samples.at(-1);
+  expect(last.seconds).toBe(first.elapsedSeconds);const channel=first.signals.find(s=>s.id===last.id);expect(channel).toBeDefined();
+  expect(last.directLossDb).toBe(channel.trace.directRelativeDb===null?null:channel.trace.canopyLoss);
+  expect(last.reflectionExtraM).toBe(first.selectedReflection.paths[0]?.extra??null);
+  expect(samples.every((s,i)=>i===0||s.seconds>samples[i-1].seconds)).toBe(true);
+  await expect(page.locator('[data-history-plot="directLossDb"] [data-live-series]')).toHaveCount(1);
+  await page.locator("#forest-light").selectOption("overcast");const relit=await snapshot();expect(relit.signalHistory.samples).toEqual(samples);expect(relit.signals).toEqual(first.signals);
+  await page.locator("#forest-progress").press("Home");await expect(history).toHaveAttribute("data-samples","1");expect((await snapshot()).signalHistory.reason).toContain("Timeline");
+  await page.locator("#forest-play").click();await expect.poll(async()=>Number(await history.getAttribute("data-samples")),{timeout:45000}).toBeGreaterThan(1);await page.locator("#forest-play").click();
+  await page.locator("#density-profile").selectOption("uniform");await expect(history).toHaveAttribute("data-samples","1");
+  const target=page.locator('#forest-signals button[aria-pressed="false"]').first(),id=await target.getAttribute("data-channel");await target.click();await expect(history).toHaveAttribute("data-selected",id);await expect(history).toHaveAttribute("data-samples","1");
+  await page.locator(".viewer").screenshot({path:testInfo.outputPath("live-signal-changes.png")});expect(errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
 test("GNSS paths stay visible in trail and overview, selectable without changing measurements",async({page},testInfo)=>{
   test.setTimeout(120000);const errors=[];page.on("pageerror",e=>errors.push(e.message));
   await page.goto("forest.html");const root=page.locator("#forest-lab");await expect(root).toHaveAttribute("data-state","ready",{timeout:60000});
