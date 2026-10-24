@@ -1,4 +1,5 @@
 import { forestCameraFrame, forestSignalOverlay, drawForestSignalOverlay } from "./signal-overlay.mjs?v=live-history-1";
+import { drawTreeCauseOutline } from "./tree-causes.mjs?v=tree-causes-1";
 import { forestAppearance, createLeafAtlas, APPEARANCE_STRIDE } from "./appearance.mjs?v=woodland-1";
 const vs=`#version 300 es
 in vec3 a_position;in vec3 a_normal;in vec3 a_color;in vec3 a_surface;in vec2 a_uv;
@@ -51,7 +52,7 @@ void main(){vec3 ray=transpose(u_view)*normalize(vec3(uv/u_scale.xy,-1.));float 
 
 export class ForestRenderer {
   constructor(canvas,forest){
-    this.canvas=canvas;this.overlay=canvas.closest(".stage")?.querySelector("#forest-rays");this.signalMode="all";this.reflectionTrail=[];this.camera={yaw:-.18,pitch:-.08,zoom:1,target:[0,0,5],follow:true};this.lighting="sunlit";
+    this.canvas=canvas;this.overlay=canvas.closest(".stage")?.querySelector("#forest-rays");this.signalMode="all";this.reflectionTrail=[];this.highlightedTree=null;this.camera={yaw:-.18,pitch:-.08,zoom:1,target:[0,0,5],follow:true};this.lighting="sunlit";
     const gl=canvas.getContext("webgl2",{alpha:false,antialias:true});if(!gl)throw new Error("WebGL 2 is required for the forest view");this.gl=gl;
     const program=(vertex,fragment)=>{
       const compile=(type,source)=>{const shader=gl.createShader(type);gl.shaderSource(shader,source);gl.compileShader(shader);if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(shader));return shader;};
@@ -76,6 +77,8 @@ export class ForestRenderer {
   setFoliage(value){if(this.foliage!==value){this.foliage=value;this.setForest(this.forest);}}
   zoom(factor){this.camera.zoom=Math.max(.65,Math.min(4,this.camera.zoom*factor));this.redraw();}
   redraw(){if(this.last)this.draw(...this.last);}
+  setHighlightedTree(tree){this.highlightedTree=tree;}
+  focusTree(tree){Object.assign(this.camera,{follow:false,pitch:.65,zoom:3.1,target:[tree.x,tree.y,tree.trunk.a[2]+tree.height/2]});}
   setReflectionTrail(points){this.reflectionTrail=points;}
   setSignalMode(value){this.signalMode=value;this.redraw();}
   focusSignal(signal){if(!signal)return;const d=signal.trace.direction;Object.assign(this.camera,{yaw:Math.atan2(-d[0],d[1]),pitch:Math.max(-1.4,-Math.asin(d[2])),zoom:1,follow:true});this.redraw();}
@@ -94,6 +97,7 @@ export class ForestRenderer {
     gl.enable(gl.DEPTH_TEST);gl.useProgram(this.program);gl.uniform1f(this.uniforms.overcast,this.lighting==="overcast"?1:0);gl.uniform1f(this.uniforms.shadowPass,0);gl.uniform1f(this.uniforms.time,this.reducedMotion?0:performance.now()/1000);gl.uniformMatrix3fv(this.uniforms.view,false,view);gl.uniform3fv(this.uniforms.scale,scales);gl.uniform3fv(this.uniforms.eye,frame.eye);gl.uniform1f(this.uniforms.perspective,this.camera.follow?1:0);gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);gl.bindVertexArray(this.mesh.vao);gl.drawArrays(gl.TRIANGLES,0,this.mesh.count);gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);
     const packet=forestSignalOverlay(receiver,signals,selected,ground,frame,this.signalMode,this.reflectionTrail);
     drawForestSignalOverlay(this.overlay,packet,w,h);
+    if(this.overlay)drawTreeCauseOutline(this.overlay,this.highlightedTree,frame,this.signalMode!=="off");
     this.canvas.dataset.signalMode=this.signalMode;this.canvas.dataset.signalRays=String(packet.labels.length);
     this.canvas.dataset.reflection=String(Boolean(ground));this.canvas.dataset.view=this.camera.follow?"trail":"overview";this.canvas.dataset.vertices=String(this.mesh.count);this.canvas.dataset.appearance="woodland-1";this.canvas.dataset.lighting=this.lighting;
     const stage=this.canvas.closest(".stage");if(stage){stage.querySelector(".stage-label span").textContent=this.camera.follow?"Drag to look around · Scroll to zoom":"Drag to orbit · Scroll to zoom";stage.querySelector("#forest-trail-view").setAttribute("aria-pressed",String(this.camera.follow));}

@@ -52,6 +52,38 @@ model values, geometry states, selected ground triangles/points and events.
 These remain illustrative model values, not C/N0, measured receiver strength,
 coherently combined signals or a receiver-tracking result.
 
+## Which trees contribute to the loss?
+
+The **Loss by tree / 原因の木** panel decomposes the selected satellite's
+computed crown loss by tree ID. Choose the direct ray or the shortest valid
+ground-reflected path. Ground attribution sums both complete traced legs;
+fixed bounce loss and geometric spreading remain separate. No extra rays or
+alternative RF model are evaluated for this panel.
+
+In linear mode, each crown component contributes specific loss × foliage
+multiplier × its traced density integral. In the extinction reference, it
+contributes the same integral × that crown's reference dB/m coefficient.
+Components add by tree, including overlapping densities. The sum is checked
+against the completed trace's canopy loss; mismatched settings cannot silently
+produce an apparently reconciled attribution. Per-tree crown path is the union
+of that tree's intervals on each leg, summed over distinct traversals. Path
+lengths across different overlapping trees are not additive union lengths.
+
+Wood intersections are listed separately, with no invented wood dB loss.
+For blocked direct paths the canopy subtotal is a geometric component, not
+total received power. A missing ground path stays unavailable rather than
+reporting zero attenuation. The table orders additive crown dB contributions,
+not percentages of signal energy or calibrated causal effects on real data.
+
+Clicking a tree pauses playback, focuses an overview on it and outlines its
+model crown ellipsoid(s) in blue. These are the same shape parameters used by
+the ray integrator, not extra scattering or attenuation volumes. Inspection
+switches the path display to the selected satellite; hiding paths also hides
+the outline. Satellite/route/forest changes update the table and its current
+tree selection. Snapshot JSON retains `treeAttribution` with satellite, scope,
+per-tree loss/length/wood intersections and the reconciliation totals. Inspecting
+a tree changes the view, not the completed signal measurements or history.
+
 The display now uses botanical branch cards rather than solid ellipsoid
 shells. A locally generated four-region texture atlas supplies broad leaves,
 leaf veins, twigs and evergreen needles. Random orientations and layered
@@ -94,6 +126,6 @@ exercise both lighting presets, default trail/overview switching, desktop and
 mobile layout, species/season controls, WebGL errors and exported signal results.
 
 ```bash
-node --test tests/site/forest-live-history.test.cjs tests/site/forest-signal-overlay.test.cjs tests/site/forest-appearance.test.cjs tests/site/forest-model.test.cjs tests/site/forest-species.test.cjs
-npm run site:smoke -- tests/site/forest.spec.cjs --grep 'live signal charts|GNSS paths|woodland lighting|trail perspective|tree type and season'
+node --test tests/site/forest-tree-causes.test.cjs tests/site/forest-live-history.test.cjs tests/site/forest-signal-overlay.test.cjs tests/site/forest-appearance.test.cjs tests/site/forest-model.test.cjs tests/site/forest-species.test.cjs
+npm run site:smoke -- tests/site/forest.spec.cjs --grep 'tree loss attribution|live signal charts|GNSS paths|woodland lighting|trail perspective|tree type and season'
 ```

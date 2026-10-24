@@ -4,6 +4,28 @@ const fs=require("node:fs");
 // No software-renderer flags are added to the website or normal browser launches.
 test.use({launchOptions:{args:["--use-angle=swiftshader","--enable-unsafe-swiftshader"]}});
 
+test("tree loss attribution reconciles with traces and focuses RF envelopes without changing measurements",async({page},testInfo)=>{
+  test.setTimeout(150000);const errors=[];page.on("pageerror",e=>errors.push(e.message));
+  await page.goto("forest.html");await expect(page.locator("#forest-lab")).toHaveAttribute("data-state","ready",{timeout:60000});
+  const causes=page.locator("#forest-tree-causes"),canvas=page.locator("#forest-scene"),rays=page.locator("#forest-rays");
+  const snapshot=async()=>{const pending=page.waitForEvent("download");await page.locator("#forest-export").click();return JSON.parse(fs.readFileSync(await (await pending).path(),"utf8"));};
+  const first=await snapshot(),id=await causes.locator("[data-tree-select]").first().getAttribute("data-tree-select"),sum=rows=>rows.reduce((s,r)=>s+r.crownLossDb,0);
+  expect(first.treeAttribution.totalCanopyLossDb).toBeCloseTo(sum(first.treeAttribution.rows),9);
+  expect(first.treeAttribution.satellite).toBe(first.signalHistory.samples.at(-1).id);
+  expect(sum(first.treeAttribution.rows)).toBeCloseTo(first.signals.find(s=>s.id===first.signalHistory.samples.at(-1).id).trace.canopyLoss,9);
+  await causes.locator(`[data-tree-select="${id}"]`).click();await expect(canvas).toHaveAttribute("data-view","overview");await expect(rays).toHaveAttribute("data-highlighted-tree",id);
+  expect(await page.locator(`[data-tree-outline="${id}"] path`).count()).toBeGreaterThan(0);
+  const focused=await snapshot();expect(focused.signals).toEqual(first.signals);expect(focused.signalHistory.samples).toEqual(first.signalHistory.samples);
+  await page.locator(".stage").screenshot({path:testInfo.outputPath("tree-cause-focus.png")});
+  await page.locator("#forest-path-mode").selectOption("off");await expect(page.locator("[data-tree-outline]")).toHaveCount(0);await page.locator("#forest-path-mode").selectOption("selected");
+  await page.locator("#forest-tree-scope").selectOption("ground");const ground=await snapshot(),path=ground.selectedReflection.paths[0];
+  expect(ground.treeAttribution.available).toBe(Boolean(path));if(path)expect(sum(ground.treeAttribution.rows)).toBeCloseTo(path.canopyLoss,9);
+  await page.locator("#forest-tree-scope").selectOption("direct");await page.locator("#attenuation-model").selectOption("itu-extinction-v1");await page.locator("#forest-season").selectOption("leaf-off");
+  const winter=await snapshot();expect(sum(winter.treeAttribution.rows)).toBeCloseTo(winter.signals.find(s=>s.id===winter.signalHistory.samples.at(-1).id).trace.canopyLoss,9);
+  await page.locator("#forest-play").click();await expect(page.locator("#forest-play")).toHaveAttribute("aria-pressed","true");await causes.locator("[data-tree-select]").first().click();await expect(page.locator("#forest-play")).toHaveAttribute("aria-pressed","false");
+  await causes.screenshot({path:testInfo.outputPath("tree-cause-breakdown.png")});expect(errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
 test("live signal charts retain completed epochs and reset on seeks, RF edits and satellite selection",async({page},testInfo)=>{
   test.setTimeout(150000);const errors=[];page.on("pageerror",e=>errors.push(e.message));
   await page.goto("forest.html");const root=page.locator("#forest-lab"),history=page.locator("#forest-live-history");await expect(root).toHaveAttribute("data-state","ready",{timeout:60000});

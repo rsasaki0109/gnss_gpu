@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0c1919"><title>Forest signal lab · gnss_gpu</title><link rel="icon" href="data:,"><link rel="stylesheet" href="assets/forest/style.css?v=live-history-1"><script type="module" src="assets/forest/app.mjs?v=live-history-1"></script></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0c1919"><title>Forest signal lab · gnss_gpu</title><link rel="icon" href="data:,"><link rel="stylesheet" href="assets/forest/style.css?v=tree-causes-1"><script type="module" src="assets/forest/app.mjs?v=tree-causes-1"></script></head>
 <body><div class="shell" id="forest-lab" data-state="loading">
 <nav><a href="simulation.html">← City lab</a><span>gnss_gpu / Forest</span><a href="https://github.com/rsasaki0109/gnss_gpu">GitHub ↗</a></nav>
 <header><div><p class="eyebrow">SYNTHETIC SCENE · RESEARCH PROTOTYPE</p><h1>Under the canopy</h1></div><p id="forest-status" role="status">Preparing forest and broadcast orbits…</p></header>
@@ -11,6 +11,12 @@
 <div class="live-metrics"><div><span>Direct canopy loss</span><strong data-live-direct>—</strong><small data-live-change>—</small></div><div><span>Ground excess range</span><strong data-live-reflection>—</strong><small>Shortest valid ground path</small></div></div>
 <div class="live-plots"><svg data-history-plot="directLossDb"></svg><svg data-history-plot="reflectionExtraM"></svg></div>
 <p class="muted" data-history-note>Play to record completed epochs.</p><ul data-history-events aria-label="Recent signal path changes"></ul>
+</section>
+<section id="forest-tree-causes" aria-label="Trees contributing to selected signal attenuation">
+<div class="live-heading"><h2 data-tree-title>Loss by tree / 原因の木</h2><span data-tree-total>—</span></div>
+<label>Path to inspect<select id="forest-tree-scope" data-control disabled><option value="direct">Direct ray · 直達波</option><option value="ground">Ground reflection · 地面反射</option></select></label>
+<p class="muted" data-tree-note></p><div class="table-wrap"><table><thead><tr><th>Tree</th><th>Crown path</th><th>Crown loss</th><th>Wood</th></tr></thead><tbody></tbody></table></div>
+<p class="muted">Blue outline: selected tree's model crown envelope</p>
 </section></section>
 <aside><section class="panel"><h2>Forest</h2><label>Light<select id="forest-light" data-control disabled><option value="sunlit">Sunlit · 木漏れ日</option><option value="overcast">Overcast · 曇天</option></select></label><div class="fields"><label>Trees<select id="forest-count" data-control disabled><option value="32">32 · sparse</option><option value="64">64 · open</option><option value="96">96 · woodland</option><option value="128" selected>128 · dense</option></select></label><label>Seed<input id="forest-seed" type="number" min="0" max="4294967295" step="1" value="20261023" data-control disabled></label></div>
   <div class="fields"><label>Tree type<select id="forest-stand" data-control disabled><option value="broadleaf">Broadleaf · 広葉樹</option><option value="conifer">Evergreen conifer · 針葉樹</option><option value="mixed">Mixed · 混交林</option></select></label><label>Season<select id="forest-season" data-control disabled><option value="leaf-on">Leaf-on · 着葉期</option><option value="leaf-off">Leaf-off · 落葉期</option></select></label></div>
