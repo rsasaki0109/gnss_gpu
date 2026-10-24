@@ -4,6 +4,37 @@ const fs=require("node:fs");
 // No software-renderer flags are added to the website or normal browser launches.
 test.use({launchOptions:{args:["--use-angle=swiftshader","--enable-unsafe-swiftshader"]}});
 
+test("evergreen needles remain visible at trail distance in leaf-off season",async({page},testInfo)=>{
+  test.setTimeout(90000);
+  await page.goto("forest.html");await expect(page.locator("#forest-lab")).toHaveAttribute("data-state","ready",{timeout:60000});
+  await page.locator("#forest-count").selectOption("32");await page.locator("#forest-stand").selectOption("conifer");await page.locator("#forest-season").selectOption("leaf-off");
+  const canvas=page.locator("#forest-scene");
+  const drawing=await canvas.evaluate(c=>{
+    document.getElementById("forest-trail-view").click();const gl=c.getContext("webgl2"),w=c.width,h=Math.floor(c.height*.55),pixels=new Uint8Array(w*h*4);
+    gl.readPixels(0,c.height-h,w,h,gl.RGBA,gl.UNSIGNED_BYTE,pixels);let green=0;
+    for(let i=0;i<pixels.length;i+=4)if(pixels[i+1]>pixels[i]*1.15&&pixels[i+1]>pixels[i+2]*1.1)green++;
+    return {fraction:green/(w*h),error:gl.getError()};
+  });
+  expect(drawing.error).toBe(0);expect(drawing.fraction).toBeGreaterThan(.004);
+  await canvas.screenshot({path:testInfo.outputPath("evergreen-needles.png")});
+});
+
+test("woodland lighting changes appearance while preserving the captured RF scene",async({page},testInfo)=>{
+  test.setTimeout(120000);const errors=[];page.on("pageerror",e=>errors.push(e.message));
+  await page.goto("forest.html");await expect(page.locator("#forest-lab")).toHaveAttribute("data-state","ready",{timeout:60000});
+  const canvas=page.locator("#forest-scene");await expect(canvas).toHaveAttribute("data-appearance","woodland-1");await expect(canvas).toHaveAttribute("data-view","trail");
+  const snapshot=async()=>{const pending=page.waitForEvent("download");await page.locator("#forest-export").click();return JSON.parse(fs.readFileSync(await (await pending).path(),"utf8"));};
+  const sunny=await snapshot();await canvas.screenshot({path:testInfo.outputPath("woodland-sunlit.png")});
+  await page.locator("#forest-light").selectOption("overcast");await expect(canvas).toHaveAttribute("data-lighting","overcast");
+  const cloudy=await snapshot();assertSameScene(sunny,cloudy);
+  expect(cloudy.view.lighting).toBe("overcast");await canvas.screenshot({path:testInfo.outputPath("woodland-overcast.png")});
+  await page.locator("#forest-reset-view").click();await expect(canvas).toHaveAttribute("data-view","overview");await page.locator("#forest-trail-view").click();
+  const drawing=await canvas.evaluate(c=>{const gl=c.getContext("webgl2");return {error:gl.getError(),lost:gl.isContextLost()};});
+  expect(drawing).toEqual({error:0,lost:false});expect(errors).toEqual([]);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  function assertSameScene(a,b){expect(b.scene).toEqual(a.scene);expect(b.signals).toEqual(a.signals);expect(b.receiverENU).toEqual(a.receiverENU);expect(b.elapsedSeconds).toBe(a.elapsedSeconds);}
+});
+
 test("controlled positioning captures a fixed epoch, runs blindly and exports every method",async({page},testInfo)=>{
   test.setTimeout(180000);
   const errors=[];page.on("pageerror",e=>errors.push(e.message));
@@ -118,7 +149,7 @@ test("corrupted orbit source fails visibly without enabling a plausible forest r
 test("trail perspective follows the completed receiver and keeps appearance out of RF assumptions",async({page},testInfo)=>{
   const errors=[];page.on("pageerror",e=>errors.push(e.message));
   await page.goto("forest.html");await expect(page.locator("#forest-lab")).toHaveAttribute("data-state","ready",{timeout:45000});
-  const canvas=page.locator("#forest-scene");await expect(canvas).toHaveAttribute("data-view","overview");
+  const canvas=page.locator("#forest-scene");await expect(canvas).toHaveAttribute("data-view","trail");
   expect(Number(await canvas.getAttribute("data-vertices"))).toBeLessThan(800000);
   await page.locator("#forest-trail-view").click();await expect(canvas).toHaveAttribute("data-view","trail");
   await canvas.screenshot({path:testInfo.outputPath("forest-trail.png")});
