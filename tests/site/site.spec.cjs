@@ -1,10 +1,6 @@
 const { test, expect } = require("@playwright/test");
 
-const IGNORED_CONSOLE_ERRORS = [
-  "fonts.googleapis.com",
-  "fonts.gstatic.com",
-  "/favicon.ico",
-];
+const { isOptionalAssetError } = require("./console-issues.cjs");
 
 test("artifact snapshot renders cleanly", async ({ page }) => {
   const issues = [];
@@ -14,10 +10,11 @@ test("artifact snapshot renders cleanly", async ({ page }) => {
       return;
     }
     const text = msg.text();
-    if (IGNORED_CONSOLE_ERRORS.some((pattern) => text.includes(pattern))) {
+    const source = msg.location().url;
+    if (isOptionalAssetError(source, page.url())) {
       return;
     }
-    issues.push(`console: ${text}`);
+    issues.push(`console: ${text} (${source})`);
   });
 
   await page.goto("results.html", { waitUntil: "domcontentloaded" });
