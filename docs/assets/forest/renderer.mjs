@@ -1,4 +1,4 @@
-import { rayPoint } from "./model.mjs?v=extinction-reference-1";
+import { forestCameraFrame, forestSignalOverlay, drawForestSignalOverlay } from "./signal-overlay.mjs?v=signal-paths-1";
 import { forestAppearance, createLeafAtlas, APPEARANCE_STRIDE } from "./appearance.mjs?v=woodland-1";
 const vs=`#version 300 es
 in vec3 a_position;in vec3 a_normal;in vec3 a_color;in vec3 a_surface;in vec2 a_uv;
@@ -51,7 +51,7 @@ void main(){vec3 ray=transpose(u_view)*normalize(vec3(uv/u_scale.xy,-1.));float 
 
 export class ForestRenderer {
   constructor(canvas,forest){
-    this.canvas=canvas;this.camera={yaw:-.18,pitch:-.08,zoom:1,target:[0,0,5],follow:true};this.lighting="sunlit";
+    this.canvas=canvas;this.overlay=canvas.closest(".stage")?.querySelector("#forest-rays");this.signalMode="all";this.camera={yaw:-.18,pitch:-.08,zoom:1,target:[0,0,5],follow:true};this.lighting="sunlit";
     const gl=canvas.getContext("webgl2",{alpha:false,antialias:true});if(!gl)throw new Error("WebGL 2 is required for the forest view");this.gl=gl;
     const program=(vertex,fragment)=>{
       const compile=(type,source)=>{const shader=gl.createShader(type);gl.shaderSource(shader,source);gl.compileShader(shader);if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(shader));return shader;};
@@ -67,7 +67,7 @@ export class ForestRenderer {
     this.foliage=1;this.forest=forest;this.mesh=this.upload(forestAppearance(forest),gl.TRIANGLES);this.lines=this.upload(new Float32Array(),gl.LINES);this.shadowDirty=true;this.reducedMotion=matchMedia("(prefers-reduced-motion: reduce)").matches;
     let drag;
     canvas.addEventListener("pointerdown",e=>{canvas.setPointerCapture(e.pointerId);drag={x:e.clientX,y:e.clientY,...this.camera};});
-    canvas.addEventListener("pointermove",e=>{if(drag){this.camera.yaw=drag.yaw+(e.clientX-drag.x)*.007;this.camera.pitch=Math.max(this.camera.follow?-.65:.12,Math.min(1.5,drag.pitch+(e.clientY-drag.y)*.007));this.redraw();}});
+    canvas.addEventListener("pointermove",e=>{if(drag){this.camera.yaw=drag.yaw+(e.clientX-drag.x)*.007;this.camera.pitch=Math.max(this.camera.follow?-1.4:.12,Math.min(1.5,drag.pitch+(e.clientY-drag.y)*.007));this.redraw();}});
     const end=()=>{drag=null;};canvas.addEventListener("pointerup",end);canvas.addEventListener("pointercancel",end);canvas.addEventListener("lostpointercapture",end);
     canvas.addEventListener("wheel",e=>{e.preventDefault();this.zoom(Math.exp(-e.deltaY*.001));},{passive:false});
   }
@@ -76,6 +76,8 @@ export class ForestRenderer {
   setFoliage(value){if(this.foliage!==value){this.foliage=value;this.setForest(this.forest);}}
   zoom(factor){this.camera.zoom=Math.max(.65,Math.min(4,this.camera.zoom*factor));this.redraw();}
   redraw(){if(this.last)this.draw(...this.last);}
+  setSignalMode(value){this.signalMode=value;this.redraw();}
+  focusSignal(signal){if(!signal)return;const d=signal.trace.direction;Object.assign(this.camera,{yaw:Math.atan2(-d[0],d[1]),pitch:Math.max(-1.4,-Math.asin(d[2])),zoom:1,follow:true});this.redraw();}
   setAtmosphere(value){this.lighting=value;this.redraw();}
   trailView(){Object.assign(this.camera,{yaw:0,pitch:-.04,zoom:1,follow:true});this.redraw();}
   resetView(){Object.assign(this.camera,{yaw:-.7,pitch:.62,zoom:1.35,target:[0,0,5],follow:false});this.redraw();}
@@ -86,16 +88,14 @@ export class ForestRenderer {
     gl.useProgram(this.program);gl.uniform1i(this.uniforms.atlas,0);gl.uniform1i(this.uniforms.shadow,1);gl.uniform1f(this.uniforms.lit,1);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,this.atlas);
     if(this.shadowDirty){gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,null);gl.bindFramebuffer(gl.FRAMEBUFFER,this.shadowFramebuffer);gl.viewport(0,0,1536,1536);gl.clear(gl.DEPTH_BUFFER_BIT);gl.enable(gl.DEPTH_TEST);gl.uniform1f(this.uniforms.shadowPass,1);gl.uniform1f(this.uniforms.time,0);gl.bindVertexArray(this.mesh.vao);gl.drawArrays(gl.TRIANGLES,0,this.mesh.count);gl.bindFramebuffer(gl.FRAMEBUFFER,null);this.shadowDirty=false;}
     gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,this.shadowTexture);gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.clearColor(.65,.72,.65,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.disable(gl.DEPTH_TEST);
-    const {yaw,pitch,zoom}=this.camera,c=Math.cos(yaw),s=Math.sin(yaw),sp=Math.sin(pitch),cp=Math.cos(pitch),right=[c,s,0],up=[-s*sp,c*sp,cp],forward=[s*cp,-c*cp,sp],view=new Float32Array([right[0],up[0],forward[0],right[1],up[1],forward[1],right[2],up[2],forward[2]]);
-    const extentRight=80*(Math.abs(right[0])+Math.abs(right[1])),extentUp=80*(Math.abs(up[0])+Math.abs(up[1]))+31*Math.abs(up[2]),scale=.9*Math.min(w/(2*extentRight),h/(2*extentUp))*zoom,lens=zoom/Math.tan(Math.PI/5.2),scales=this.camera.follow?[lens*h/w,lens,-1/700]:[2*scale/w,2*scale/h,-1/700];
-    gl.useProgram(this.skyProgram);gl.uniform1f(this.skyUniforms.overcast,this.lighting==="overcast"?1:0);gl.uniformMatrix3fv(this.skyUniforms.view,false,view);gl.uniform3f(this.skyUniforms.scale,lens*h/w,lens,1);gl.bindVertexArray(this.skyVAO);gl.drawArrays(gl.TRIANGLES,0,3);
-    gl.enable(gl.DEPTH_TEST);gl.useProgram(this.program);gl.uniform1f(this.uniforms.overcast,this.lighting==="overcast"?1:0);gl.uniform1f(this.uniforms.shadowPass,0);gl.uniform1f(this.uniforms.time,this.reducedMotion?0:performance.now()/1000);gl.uniformMatrix3fv(this.uniforms.view,false,view);gl.uniform3fv(this.uniforms.scale,scales);gl.uniform3fv(this.uniforms.eye,this.camera.follow?this.camera.target:this.camera.target.map((v,i)=>v+forward[i]*180));gl.uniform1f(this.uniforms.perspective,this.camera.follow?1:0);gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);gl.bindVertexArray(this.mesh.vao);gl.drawArrays(gl.TRIANGLES,0,this.mesh.count);gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);
-    const data=[],line=(a,b,color)=>{for(const p of [a,b])data.push(...p,0,0,1,...color,0,0,1,0,0);};
-    if(!this.camera.follow)line(receiver,receiver.map((v,i)=>v+(i===2?4:0)),[.65,1,.85]);
-    const signal=signals.find(s=>s.id===selected);if(signal){const d=signal.trace.direction;line(receiver,rayPoint(receiver,d,130),[.45,.7,.78]);for(const crown of signal.trace.crowns)line(rayPoint(receiver,d,crown.enter),rayPoint(receiver,d,crown.exit),[1,.72,.26]);for(const wood of signal.trace.wood)line(rayPoint(receiver,d,wood.enter),rayPoint(receiver,d,wood.exit),[1,.3,.3]);}
-    if(ground){line(receiver,ground.point,[1,.76,.3]);line(ground.point,rayPoint(ground.point,ground.legs.satellite.direction,130),[1,.76,.3]);for(const axis of [[1.2,0,0],[0,1.2,0]])line(ground.point.map((v,i)=>v-axis[i]),ground.point.map((v,i)=>v+axis[i]),[1,.88,.6]);}
+    const frame=forestCameraFrame(this.camera,w,h),view=frame.matrix,scales=frame.scale;
+    gl.useProgram(this.skyProgram);gl.uniform1f(this.skyUniforms.overcast,this.lighting==="overcast"?1:0);gl.uniformMatrix3fv(this.skyUniforms.view,false,view);gl.uniform3fv(this.skyUniforms.scale,frame.skyScale);gl.bindVertexArray(this.skyVAO);gl.drawArrays(gl.TRIANGLES,0,3);
+    gl.enable(gl.DEPTH_TEST);gl.useProgram(this.program);gl.uniform1f(this.uniforms.overcast,this.lighting==="overcast"?1:0);gl.uniform1f(this.uniforms.shadowPass,0);gl.uniform1f(this.uniforms.time,this.reducedMotion?0:performance.now()/1000);gl.uniformMatrix3fv(this.uniforms.view,false,view);gl.uniform3fv(this.uniforms.scale,scales);gl.uniform3fv(this.uniforms.eye,frame.eye);gl.uniform1f(this.uniforms.perspective,this.camera.follow?1:0);gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);gl.bindVertexArray(this.mesh.vao);gl.drawArrays(gl.TRIANGLES,0,this.mesh.count);gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);
+    const packet=forestSignalOverlay(receiver,signals,selected,ground,frame,this.signalMode);
+    drawForestSignalOverlay(this.overlay,packet,w,h);
+    this.canvas.dataset.signalMode=this.signalMode;this.canvas.dataset.signalRays=String(packet.labels.length);
     this.canvas.dataset.reflection=String(Boolean(ground));this.canvas.dataset.view=this.camera.follow?"trail":"overview";this.canvas.dataset.vertices=String(this.mesh.count);this.canvas.dataset.appearance="woodland-1";this.canvas.dataset.lighting=this.lighting;
     const stage=this.canvas.closest(".stage");if(stage){stage.querySelector(".stage-label span").textContent=this.camera.follow?"Drag to look around · Scroll to zoom":"Drag to orbit · Scroll to zoom";stage.querySelector("#forest-trail-view").setAttribute("aria-pressed",String(this.camera.follow));}
-    gl.bindBuffer(gl.ARRAY_BUFFER,this.lines.buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.DYNAMIC_DRAW);gl.disable(gl.DEPTH_TEST);gl.uniform1f(this.uniforms.lit,0);gl.bindVertexArray(this.lines.vao);gl.drawArrays(gl.LINES,0,data.length/APPEARANCE_STRIDE);
+
   }
 }

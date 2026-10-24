@@ -1,6 +1,6 @@
 import {attenuationDescription} from "./attenuation.mjs?v=extinction-reference-1";
 import { generateForest,forestReceiver,traceForest,PHENOLOGY_ASSUMPTION } from "./model.mjs?v=extinction-reference-1";
-import { ForestRenderer } from "./renderer.mjs?v=woodland-1";
+import { ForestRenderer } from "./renderer.mjs?v=signal-paths-1";
 import { GroundReflectionModel } from "./ground-reflections.mjs?v=extinction-reference-1";
 import { setupPositioning } from "./positioning-ui.mjs?v=extinction-reference-1";
 import {forestSignals} from "./signals.mjs?v=extinction-reference-1";
@@ -72,7 +72,7 @@ function compute(){
 function fail(error){play(false);stopPositioning?.();root.dataset.state="error";$("forest-status").textContent=error.message;for(const input of document.querySelectorAll("[data-control]"))input.disabled=true;}
 function download(){
   const value={schema:"synthetic-forest-snapshot-v2",simulationOnly:true,assumptions:{vegetationModel:attenuationDescription(options().attenuationModel,options().materialPreset),phenology:PHENOLOGY_ASSUMPTION,appearance:"deterministic botanical leaf/needle cutouts, fine branches, roots, litter, stones, fallen wood, understory, alpha-tested sunlight shadows and atmospheric horizon are display only, not additional RF geometry",canopy:"uniform or normalized radial/height density in ellipsoid volumes; overlapping densities add; structured chords use an analytic cubic integral",wood:"finite cylinders; no calibrated power model",terrain:"piecewise planar finite patch",attenuation:options().attenuationModel==="itu-extinction-v1"?"Ballistic extinction from published RET coefficients; not a full ITU/GNSS model":"illustrative linear density integral, not a fitted ITU/GNSS model",reflections:"selected satellite, finite terrain single bounce only; constant uncalibrated bounce loss, no coherent combination or polarization model",diffraction:false,receiverTracking:false},
-    options:{...options(),maximumDirectRayM:400,elevationMaskDeg:10,receiverHeightM:1.6,routeDurationSeconds:1200},scene:forest,view:{...structuredClone(renderer.camera),lighting:renderer.lighting},receiverENU:receiver,anchor:{originECEF:scene.origin,rotation:scene.rotation},week:scene.week,startTow:scene.track[0][0],elapsedSeconds:completedSeconds,tow:scene.track[0][0]+completedSeconds,source:{file:"odaiba-scene.json.gz",sha256:sourceHash},signals,selectedReflection:reflectionPacket};
+    options:{...options(),maximumDirectRayM:400,elevationMaskDeg:10,receiverHeightM:1.6,routeDurationSeconds:1200},scene:forest,view:{...structuredClone(renderer.camera),lighting:renderer.lighting,signalMode:renderer.signalMode,followObserverOffsetM:{behind:6,above:1}},receiverENU:receiver,anchor:{originECEF:scene.origin,rotation:scene.rotation},week:scene.week,startTow:scene.track[0][0],elapsedSeconds:completedSeconds,tow:scene.track[0][0]+completedSeconds,source:{file:"odaiba-scene.json.gz",sha256:sourceHash},signals,selectedReflection:reflectionPacket};
   const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)+"\n"],{type:"application/json"})),link=document.createElement("a");link.href=url;link.download="gnss-forest-snapshot.json";link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 async function init(){
@@ -101,6 +101,11 @@ async function init(){
   $("forest-systems").addEventListener("change",compute);$("density-profile").addEventListener("change",compute);
   for(const id of ["forest-count","forest-seed","forest-stand","forest-season"])$(id).addEventListener("change",()=>{if(!$("forest-seed").reportValidity())return;try{play(false);forest=generateForest(sceneOptions());groundModel=new GroundReflectionModel(forest);renderer.setForest(forest);compute();}catch(error){fail(error);}});
   $("forest-export").addEventListener("click",download);$("forest-zoom-in").addEventListener("click",()=>renderer.zoom(1.25));$("forest-zoom-out").addEventListener("click",()=>renderer.zoom(.8));
+  const chooseOverlaySignal=event=>{if(root.dataset.state!=="ready")return;const id=event.target.closest("[data-signal-select]")?.dataset.signalSelect;if(id){event.preventDefault();select(id);}};
+  $("forest-rays").addEventListener("click",chooseOverlaySignal);
+  $("forest-rays").addEventListener("keydown",event=>{if(["Enter"," "].includes(event.key))chooseOverlaySignal(event);});
+  $("forest-path-mode").addEventListener("change",()=>renderer.setSignalMode($("forest-path-mode").value));
+  $("forest-track-signal").addEventListener("click",()=>renderer.focusSignal(signals.find(s=>s.id===selected)));
   $("forest-light").addEventListener("change",()=>renderer.setAtmosphere($("forest-light").value));
   $("forest-trail-view").addEventListener("click",()=>renderer.trailView());
   $("forest-reset-view").addEventListener("click",()=>renderer.resetView());

@@ -1,10 +1,28 @@
 # Woodland rendering
 
-Open `forest.html` for the receiver-height trail view. Drag to look around,
+Open `forest.html` for the receiver-follow trail view. Drag to look around,
 scroll to change the field of view, and use **Overview** for the scene map.
 The **Light** control switches between filtered sunlight and diffuse overcast
 illumination. Tree type, season, seed, route time and signal inspection remain
 available in both views.
+
+GNSS paths are enabled for all satellites by default. The observer follows
+6 m behind the antenna horizontally and 1 m above it; placing the camera at
+the antenna itself would collapse incoming rays into single screen points.
+The physical receiver route and its 1.6 m terrain offset remain unchanged.
+**Signal paths** switches between all satellites, the selected satellite and
+hidden paths. Click a direction label to select a signal; **Satellite** points
+the camera toward its arrival direction. **Overview** restores the scene map.
+
+The screen-space overlay uses a shared camera projection and clips segments
+at the near plane and viewport. It draws coloured paths with arrival arrows,
+satellite identifiers, the selected canopy-loss value, selected crown/wood
+intersections, the RX marker and both legs of the selected valid ground bounce.
+Blocked direct geometric alternatives are dashed. These paths deliberately
+overlay occluding scenery; they are not an assertion that blocked signals reach
+the antenna. Ray extents are 160 m along the computed arrival directions;
+edge labels indicate direction, not spacecraft positions at those distances.
+Arrows show propagation direction, not RF phase or real-time wave speed.
 
 The display now uses botanical branch cards rather than solid ellipsoid
 shells. A locally generated four-region texture atlas supplies broad leaves,

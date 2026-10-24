@@ -4,6 +4,26 @@ const fs=require("node:fs");
 // No software-renderer flags are added to the website or normal browser launches.
 test.use({launchOptions:{args:["--use-angle=swiftshader","--enable-unsafe-swiftshader"]}});
 
+test("GNSS paths stay visible in trail and overview, selectable without changing measurements",async({page},testInfo)=>{
+  test.setTimeout(120000);const errors=[];page.on("pageerror",e=>errors.push(e.message));
+  await page.goto("forest.html");const root=page.locator("#forest-lab");await expect(root).toHaveAttribute("data-state","ready",{timeout:60000});
+  const rays=page.locator("#forest-rays"),paths=page.locator('#forest-rays path[data-path-kind="direct"]');
+  expect(await paths.count()).toBeGreaterThan(3);
+  for(const path of await paths.all())expect(await path.evaluate(p=>p.getTotalLength())).toBeGreaterThan(.5);
+  const snapshot=async()=>{const pending=page.waitForEvent("download");await page.locator("#forest-export").click();return JSON.parse(fs.readFileSync(await (await pending).path(),"utf8"));};
+  const before=await snapshot();
+  const target=await page.locator('#forest-rays [data-signal-select][aria-pressed="false"]').first().getAttribute("data-signal-select");
+  await page.locator(`#forest-rays [data-signal-select="${target}"]`).click();await expect(root).toHaveAttribute("data-selected",target);
+  await page.locator("#forest-path-mode").selectOption("selected");await expect(paths).toHaveCount(1);
+  await page.locator("#forest-track-signal").click();await expect(paths).toHaveCount(1);
+  const eye=await page.evaluate(async()=>{const {forestCameraFrame}=await import('./assets/forest/signal-overlay.mjs?v=signal-paths-1');return forestCameraFrame({yaw:0,pitch:-1.4,zoom:1,target:[0,0,1.6],follow:true},800,600).eye;});expect(eye[2]).toBeCloseTo(2.6);
+  await page.locator("#forest-path-mode").selectOption("off");await expect(page.locator('#forest-rays path[data-signal]')).toHaveCount(0);
+  const hidden=await snapshot();expect(hidden.signals).toEqual(before.signals);expect(hidden.receiverENU).toEqual(before.receiverENU);expect(hidden.view.signalMode).toBe("off");
+  await page.locator("#forest-path-mode").selectOption("all");await page.locator("#forest-reset-view").click();expect(await paths.count()).toBeGreaterThan(3);
+  await page.locator(".stage").screenshot({path:testInfo.outputPath("gnss-overview.png")});await page.locator("#forest-trail-view").click();await page.locator(".stage").screenshot({path:testInfo.outputPath("gnss-trail.png")});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(errors).toEqual([]);
+});
+
 test("evergreen needles remain visible at trail distance in leaf-off season",async({page},testInfo)=>{
   test.setTimeout(90000);
   await page.goto("forest.html");await expect(page.locator("#forest-lab")).toHaveAttribute("data-state","ready",{timeout:60000});
@@ -110,7 +130,7 @@ test("selected ground path renders, changes assumed power and exports coherent f
   expect(extra).toBeGreaterThan(0);expect(Math.abs(delay-extra/299792458*1e9)).toBeLessThan(1e-10);
   await page.locator("#bounce-loss").press("End");expect(Number(await readout.getAttribute("data-extra"))).toBe(extra);expect(Math.abs(Number(await readout.getAttribute("data-power-db"))-power+24)).toBeLessThan(1e-10);
   const time=await root.getAttribute("data-seconds");await page.locator("#forest-trail-view").click();await page.locator("#forest-focus-reflection").click();await expect(page.locator("#forest-scene")).toHaveAttribute("data-view","overview");expect(await root.getAttribute("data-seconds")).toBe(time);
-  await page.locator("#forest-scene").screenshot({path:testInfo.outputPath("ground-reflection.png")});
+  await page.locator(".stage").screenshot({path:testInfo.outputPath("ground-reflection.png")});
   const pending=page.waitForEvent("download");await page.locator("#forest-export").click();const data=JSON.parse(fs.readFileSync(await (await pending).path(),"utf8")),packet=data.selectedReflection;
   expect(data.view.follow).toBe(false);expect(data.view.pitch).toBeGreaterThan(.5);expect(packet.model).toBe("finite-terrain-reflection-v1");expect(packet.options.completeSegments).toBe(true);expect(packet.options.bounceLoss).toBe(30);expect(packet.tow).toBe(data.tow);
   expect(packet.satelliteStateConvention).toContain("no reflected-flight-time orbit iteration");
