@@ -57,9 +57,18 @@ export function compareEpoch({forest,receiver,signals,seconds,seed=7,wetLoss=.3,
       verticalErrorM:fit.position?fit.position[2]-receiver[2]:null};
   })};
 }
+// Shared catalogue keeps map markers, exports and worker receiver positions identical.
+export function comparisonLocations(forest=generateForest()){
+  return [{id:'trail',label:'林道の中央',receiver:forestReceiver(600)},...forest.trees.map((tree,i)=>({
+    id:i===0?'canopy':tree.id,treeId:tree.id,label:`${tree.id} · 幹の東1 m`,
+    receiver:[tree.x+1,tree.y,terrainHeight(tree.x+1,tree.y)+1.6]
+  }))];
+}
 export function runComparison(scene,{seed=7,wetLoss=.3,threshold=30,location='canopy'}={},progress=()=>{}){
-  if(!Number.isInteger(seed)||seed<0||seed>0xffffffff||!Number.isFinite(wetLoss)||wetLoss<0||wetLoss>2||!Number.isFinite(threshold)||threshold<20||threshold>45||!['canopy','trail'].includes(location))throw new RangeError('Invalid comparison settings');
-  const forest=generateForest(),tree=forest.trees[0],receiver=location==='trail'?forestReceiver(600):[tree.x+1,tree.y,terrainHeight(tree.x+1,tree.y)+1.6];
+  if(!Number.isInteger(seed)||seed<0||seed>0xffffffff||!Number.isFinite(wetLoss)||wetLoss<0||wetLoss>2||!Number.isFinite(threshold)||threshold<20||threshold>45)throw new RangeError('Invalid comparison settings');
+  const forest=generateForest(),point=comparisonLocations(forest).find(p=>p.id===location);
+  if(!point)throw new RangeError('Unknown comparison location');
+  const receiver=point.receiver;
   const epochs=[];
   for(let seconds=0;seconds<=1200;seconds+=30){
     epochs.push(compareEpoch({forest,receiver,signals:forestSignals(scene,receiver,seconds,'G'),seconds,seed,wetLoss,threshold}));
@@ -72,7 +81,7 @@ export function runComparison(scene,{seed=7,wetLoss=.3,threshold=30,location='ca
       meanUsed:cases.reduce((s,c)=>s+c.used,0)/cases.length};
   });
   return {schema:'forest-environment-comparison-v1',simulationOnly:true,settings:{seed,wetLoss,threshold,location},
-    scene:forest,receiverENU:receiver,week:scene.week,startTow:scene.startTow??scene.track[0][0],summary,epochs,
+    scene:forest,locationLabel:point.label,receiverENU:receiver,week:scene.week,startTow:scene.startTow??scene.track[0][0],summary,epochs,
     assumptions:{orbit:'Stored broadcast GPS orbits; 10 degree elevation mask; same stationary receiver and epochs for all conditions.',
       open:'Trees removed; terrain and receiver unchanged.',dry:'Existing synthetic linear canopy model, 0.2 dB per integrated-density metre; wood/terrain block the direct ray.',
       wet:'Additional wetLoss dB per geometric canopy metre. Hypothetical wet-canopy sensitivity, NOT rain rate or a calibrated water-content model.',

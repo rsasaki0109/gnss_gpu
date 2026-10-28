@@ -38,3 +38,15 @@ test('missing position remains null when an epoch has fewer than four GPS source
   const epoch=compareEpoch({forest,receiver,signals:forestSignals(scene,receiver,0,'G').slice(0,3),seconds:0});
   for(const c of epoch.cases){assert.equal(c.horizontalErrorM,null);assert.equal(c.status,'insufficient-satellites');}
 });
+
+test('location catalogue preserves original receiver and reproduces the T062 outage',async()=>{
+  const {comparisonLocations,runComparison}=await modulePromise,points=comparisonLocations();
+  assert.equal(points.length,65);assert.equal(new Set(points.map(p=>p.id)).size,65);
+  const original=runComparison(scene),explicit=runComparison(scene,{location:'canopy'});
+  assert.deepEqual(original,explicit);assert.deepEqual(original.receiverENU,points.find(p=>p.id==='canopy').receiver);
+  const r=runComparison(scene,{location:'T062',wetLoss:.6,threshold:35});
+  assert.deepEqual(r.receiverENU,points.find(p=>p.id==='T062').receiver);
+  assert.deepEqual(r.summary.map(s=>s.available),[41,41,35]);
+  assert.deepEqual(r.epochs.filter(e=>e.cases[2].status!=='solution').map(e=>e.seconds),[720,750,780,810,840,870]);
+  assert.throws(()=>runComparison(scene,{location:'T999'}),RangeError);
+});

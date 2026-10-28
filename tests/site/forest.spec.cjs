@@ -362,3 +362,25 @@ test('environment comparison runs three paired conditions and exports captured r
   expect(errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:testInfo.outputPath('environment-comparison.png'),fullPage:true});
 });
+
+test('environment locations preserve pinned conditions and expose satellite-shortage epochs',async({page},testInfo)=>{
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto('forest-comparison.html');await expect(page.locator('#comparison')).toHaveAttribute('data-state','idle');
+  await expect(page.locator('#location-map [role=button]')).toHaveCount(65);
+  await page.locator('#wet-loss').selectOption('.6');await page.locator('#threshold').selectOption('35');
+  await page.locator('#run').click();await expect(page.locator('#comparison')).toHaveAttribute('data-state','ready');await page.locator('#pin').click();
+  await page.locator('#location-map [data-location=T062]').focus();await page.keyboard.press('Enter');
+  await expect(page.locator('#location')).toHaveValue('T062');await expect(page.locator('#stale')).toBeVisible();
+  await expect(page.locator('#capture')).toContainText('T001');
+  await page.locator('#run').click();await expect(page.locator('#comparison')).toHaveAttribute('data-state','ready');
+  await expect(page.locator('#capture')).toContainText('T062');await expect(page.locator('#pair-rows tr')).toHaveCount(3);
+  await expect(page.locator('#pair-rows tr').nth(2)).toContainText('35/41');
+  await page.locator('#next-failure').click();await expect(page.locator('#time')).toHaveText('+720秒');await expect(page.locator('#epoch-status')).toContainText('濡れた森林: 3衛星 / 測位不能');
+  const pending=page.waitForEvent('download');await page.locator('#save').click();const result=JSON.parse(fs.readFileSync(await (await pending).path(),'utf8'));
+  expect(result.settings.location).toBe('T062');expect(result.pinnedComparison.settings.location).toBe('canopy');expect(result.summary[2].available).toBe(35);
+  await page.screenshot({path:testInfo.outputPath('forest-location-comparison.png'),fullPage:true});
+  await page.locator('#wet-loss').selectOption('0');await page.locator('#run').click();await expect(page.locator('#comparison')).toHaveAttribute('data-state','ready');
+  await expect(page.locator('#location-comparison')).toBeHidden();await expect(page.locator('#pin-status')).toContainText('条件が異なります');
+  await page.locator('#outage-example').click();await expect(page.locator('#wet-loss')).toHaveValue('.6');await expect(page.locator('#threshold')).toHaveValue('35');
+  expect(errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
