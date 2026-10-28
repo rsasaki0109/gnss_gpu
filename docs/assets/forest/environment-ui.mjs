@@ -1,8 +1,12 @@
-import {comparisonLocations} from './environment-comparison.mjs?v=locations-1';
+import {setupSensitivity} from './sensitivity-ui.mjs?v=1';
+import {comparisonLocations} from './environment-comparison.mjs?v=sensitivity-1';
 const $=id=>document.getElementById(id),labels=['開けた場所','森林','濡れた森林'],colors=['#91f8da','#ffcf68','#b4a4ff'];
 let scene,source,result,worker,activeSettings,pinned;
 const locations=comparisonLocations();
 const settings=()=>({seed:Number($('seed').value),wetLoss:Number($('wet-loss').value),threshold:Number($('threshold').value),location:$('location').value});
+const sensitivity=setupSensitivity(()=>({scene,source,settings:settings()}),s=>{
+  $('location').value=s.location;$('seed').value=s.seed;$('wet-loss').value=String(s.wetLoss).replace(/^0\./,'.');$('threshold').value=String(s.threshold);$('settings').onchange();
+});
 function svg(id,title){const root=$(id);root.replaceChildren();root.setAttribute('viewBox','0 0 480 260');const add=(tag,attrs,text)=>{const e=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v]of Object.entries(attrs))e.setAttribute(k,String(v));if(text!==undefined)e.textContent=text;root.append(e);return e;};add('text',{x:20,y:24,fill:'#dfefea','font-size':14},title);return add;}
 function linePlot(id,title,value){
   const add=svg(id,title),maximum=Math.max(1,...result.epochs.flatMap(e=>e.cases.map(value)).filter(Number.isFinite))*1.1;
@@ -40,10 +44,10 @@ function render(){
 }
 function stop(){worker?.terminate();worker=null;$('run').disabled=!scene;$('cancel').disabled=true;}
 $('cancel').onclick=()=>{stop();$('comparison').dataset.state='cancelled';$('status').textContent='計算を中止しました。';};
-$('settings').onchange=()=>{drawLocations();$('stale').hidden=!result||JSON.stringify(result.settings)===JSON.stringify(settings());};
+$('settings').onchange=()=>{drawLocations();sensitivity.changed();$('stale').hidden=!result||JSON.stringify(result.settings)===JSON.stringify(settings());};
 $('settings').onsubmit=event=>{
   event.preventDefault();stop();activeSettings=settings();$('run').disabled=true;$('save').disabled=true;$('cancel').disabled=false;$('stale').hidden=true;$('results').hidden=true;result=null;$('comparison').dataset.state='running';
-  const active=worker=new Worker(new URL('./environment-worker.mjs?v=locations-1',import.meta.url),{type:'module'});
+  const active=worker=new Worker(new URL('./environment-worker.mjs?v=sensitivity-1',import.meta.url),{type:'module'});
   const fail=message=>{stop();$('comparison').dataset.state='error';$('status').textContent=message;};
   worker.onerror=()=>{if(worker===active)fail('計算に失敗しました。再実行してください。');};
   worker.onmessage=({data})=>{
@@ -62,7 +66,7 @@ async function init(){
   const data=await fetch(new URL(`${asset.file}?sha256=${asset.sha256}`,base));if(!data.ok)throw Error('軌道データを取得できません');
   const bytes=await data.arrayBuffer(),hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
   if(bytes.byteLength!==asset.bytes||hash!==asset.sha256)throw Error('軌道データの検証に失敗しました');
-  scene=await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).json();source={file:asset.file,sha256:hash};$('run').disabled=false;$('comparison').dataset.state='idle';$('status').textContent='準備完了。3条件を比較してください。';
+  scene=await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).json();source={file:asset.file,sha256:hash};$('run').disabled=false;sensitivity.ready();$('comparison').dataset.state='idle';$('status').textContent='準備完了。3条件を比較してください。';
 }
 init().catch(error=>{$('comparison').dataset.state='error';$('status').textContent=error.message;});
 
