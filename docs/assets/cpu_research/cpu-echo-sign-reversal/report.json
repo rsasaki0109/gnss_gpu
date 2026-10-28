@@ -1,0 +1,107 @@
+{
+  "cells": [
+    {
+      "initial_doppler_hz": 0.7,
+      "relative_drift_hz_s": 0.0,
+      "crosses_zero": false,
+      "attempts": 16,
+      "successes": 16,
+      "success_exact_95": [
+        0.7940927857921769,
+        1.0
+      ],
+      "unavailable": 0,
+      "available_large_errors": 0,
+      "median_raw_error_m": -0.04749431030482195,
+      "median_absolute_raw_error_m": 0.08089124029757577,
+      "max_absolute_raw_error_m": 0.3188590652390823,
+      "median_paired_absolute_error_change_m": 0.0
+    },
+    {
+      "initial_doppler_hz": 0.7,
+      "relative_drift_hz_s": -2.0,
+      "crosses_zero": true,
+      "attempts": 16,
+      "successes": 16,
+      "success_exact_95": [
+        0.7940927857921769,
+        1.0
+      ],
+      "unavailable": 0,
+      "available_large_errors": 0,
+      "median_raw_error_m": -3.074698922550408,
+      "median_absolute_raw_error_m": 3.074698922550408,
+      "max_absolute_raw_error_m": 3.6407743720979195,
+      "median_paired_absolute_error_change_m": 2.955429090115363
+    },
+    {
+      "initial_doppler_hz": 0.7,
+      "relative_drift_hz_s": 2.0,
+      "crosses_zero": false,
+      "attempts": 16,
+      "successes": 16,
+      "success_exact_95": [
+        0.7940927857921769,
+        1.0
+      ],
+      "unavailable": 0,
+      "available_large_errors": 0,
+      "median_raw_error_m": 0.22741395373198361,
+      "median_absolute_raw_error_m": 0.22741395373198361,
+      "max_absolute_raw_error_m": 0.375819033394862,
+      "median_paired_absolute_error_change_m": 0.17413992896732572
+    },
+    {
+      "initial_doppler_hz": -0.7,
+      "relative_drift_hz_s": 0.0,
+      "crosses_zero": false,
+      "attempts": 16,
+      "successes": 16,
+      "success_exact_95": [
+        0.7940927857921769,
+        1.0
+      ],
+      "unavailable": 0,
+      "available_large_errors": 0,
+      "median_raw_error_m": -0.002076512473275517,
+      "median_absolute_raw_error_m": 0.07891373224705647,
+      "max_absolute_raw_error_m": 0.31029594608901345,
+      "median_paired_absolute_error_change_m": 0.0
+    },
+    {
+      "initial_doppler_hz": -0.7,
+      "relative_drift_hz_s": -2.0,
+      "crosses_zero": false,
+      "attempts": 16,
+      "successes": 16,
+      "success_exact_95": [
+        0.7940927857921769,
+        1.0
+      ],
+      "unavailable": 0,
+      "available_large_errors": 0,
+      "median_raw_error_m": 0.2268808987676129,
+      "median_absolute_raw_error_m": 0.2268808987676129,
+      "max_absolute_raw_error_m": 0.5024387187294985,
+      "median_paired_absolute_error_change_m": 0.17219841098568023
+    },
+    {
+      "initial_doppler_hz": -0.7,
+      "relative_drift_hz_s": 2.0,
+      "crosses_zero": true,
+      "attempts": 16,
+      "successes": 16,
+      "success_exact_95": [
+        0.7940927857921769,
+        1.0
+      ],
+      "unavailable": 0,
+      "available_large_errors": 0,
+      "median_raw_error_m": -3.0961172468697584,
+      "median_absolute_raw_error_m": 3.0961172468697584,
+      "max_absolute_raw_error_m": 3.575366128084303,
+      "median_paired_absolute_error_change_m": 3.0185866013188685
+    }
+  ],
+  "scope": "Exploratory 16 shared fresh replicas across six cells; pointwise exact intervals. No significance test or causal identification of zero crossing; sign reversal also changes phase evolution."
+}

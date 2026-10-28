@@ -1,0 +1,80 @@
+{
+  "cells": [
+    {
+      "relative_drift_hz_s": 0.0,
+      "attempts": 16,
+      "successes": 16,
+      "success_exact_95": [
+        0.7940927857921769,
+        1.0
+      ],
+      "unavailable": 0,
+      "available_large_errors": 0,
+      "median_absolute_raw_error_m": 0.16574043817965944,
+      "max_absolute_raw_error_m": 0.3428301209825614,
+      "gains": 0,
+      "losses": 0
+    },
+    {
+      "relative_drift_hz_s": -0.5,
+      "attempts": 16,
+      "successes": 16,
+      "success_exact_95": [
+        0.7940927857921769,
+        1.0
+      ],
+      "unavailable": 0,
+      "available_large_errors": 0,
+      "median_absolute_raw_error_m": 0.5336711606327034,
+      "max_absolute_raw_error_m": 0.8605644292417332,
+      "gains": 0,
+      "losses": 0
+    },
+    {
+      "relative_drift_hz_s": 0.5,
+      "attempts": 16,
+      "successes": 16,
+      "success_exact_95": [
+        0.7940927857921769,
+        1.0
+      ],
+      "unavailable": 0,
+      "available_large_errors": 0,
+      "median_absolute_raw_error_m": 0.27606871195342747,
+      "max_absolute_raw_error_m": 0.49457703801477365,
+      "gains": 0,
+      "losses": 0
+    },
+    {
+      "relative_drift_hz_s": -2.0,
+      "attempts": 16,
+      "successes": 16,
+      "success_exact_95": [
+        0.7940927857921769,
+        1.0
+      ],
+      "unavailable": 0,
+      "available_large_errors": 0,
+      "median_absolute_raw_error_m": 3.143705097428346,
+      "max_absolute_raw_error_m": 3.770201134958624,
+      "gains": 0,
+      "losses": 0
+    },
+    {
+      "relative_drift_hz_s": 2.0,
+      "attempts": 16,
+      "successes": 16,
+      "success_exact_95": [
+        0.7940927857921769,
+        1.0
+      ],
+      "unavailable": 0,
+      "available_large_errors": 0,
+      "median_absolute_raw_error_m": 0.16697430413040068,
+      "max_absolute_raw_error_m": 0.6312847938529876,
+      "gains": 0,
+      "losses": 0
+    }
+  ],
+  "scope": "Exploratory 16 shared replicas per cell, known two-path order, pointwise exact intervals. No significance test or pooled independent sample claim."
+}

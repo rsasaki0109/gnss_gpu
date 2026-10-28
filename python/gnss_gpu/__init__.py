@@ -110,6 +110,7 @@ from gnss_gpu.candidate_3dma import (
     visibility_mode_cluster_scores,
 )
 from gnss_gpu.signal_sim import SignalSimulator
+from gnss_gpu.signal_sim_cpu import CpuSignalSimulator
 from gnss_gpu.urban_signal_sim import UrbanSignalSimulator
 from gnss_gpu.e2e_helpers import (
     compute_e2e_wls_weights,
@@ -205,6 +206,7 @@ __all__ = [
     "visibility_mode_cluster_scores",
     # Signal simulation
     "SignalSimulator",
+    "CpuSignalSimulator",
     "UrbanSignalSimulator",
     # E2E helpers (acquisition to pseudorange)
     "compute_e2e_wls_weights",

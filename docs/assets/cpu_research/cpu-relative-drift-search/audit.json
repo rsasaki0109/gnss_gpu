@@ -1,0 +1,14 @@
+{
+  "observations": 40,
+  "prior_and_sources_verified": true,
+  "all_endpoints_recomputed": true,
+  "full_search_replays": [
+    0,
+    2,
+    18,
+    20,
+    22,
+    24
+  ],
+  "dense_covariance_checks": 6
+}

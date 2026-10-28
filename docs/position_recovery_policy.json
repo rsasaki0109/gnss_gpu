@@ -1,0 +1,21 @@
+{
+  "gate": {
+    "min_observations": 6,
+    "max_pdop": 6.0,
+    "max_residual_rms_m": 15.0,
+    "jump_allowance_m": 20.0,
+    "speed_bound_mps": 15.0,
+    "max_anchor_age_s": 2.0,
+    "confirmation_blocks": 5
+  },
+  "recovery": {
+    "min_observations": 7,
+    "max_pdop": 5.0,
+    "max_residual_rms_m": 5.0,
+    "window_blocks": 25,
+    "min_span_s": 0.024,
+    "max_gap_s": 0.005,
+    "radius_m": 10.0,
+    "anchor_window_blocks": 15
+  }
+}

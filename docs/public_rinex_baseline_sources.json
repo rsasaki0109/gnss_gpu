@@ -1,0 +1,21 @@
+{
+  "repository": "https://github.com/tomojitakasu/RTKLIB",
+  "commit": "71db0ffa0d9735697c6adfd06fdf766d0e5ce807",
+  "files": {
+    "test/data/rinex/07590920.05o": {
+      "url": "https://raw.githubusercontent.com/tomojitakasu/RTKLIB/71db0ffa0d9735697c6adfd06fdf766d0e5ce807/test/data/rinex/07590920.05o",
+      "sha256": "8474af556633e9c03293a8fb1e2c1f55180b42336b17574a84fda06eb6a02f9e",
+      "bytes": 68266
+    },
+    "test/data/rinex/07590920.05n": {
+      "url": "https://raw.githubusercontent.com/tomojitakasu/RTKLIB/71db0ffa0d9735697c6adfd06fdf766d0e5ce807/test/data/rinex/07590920.05n",
+      "sha256": "eb26dce205b59269147035be49db481d38dc51bb8601dac6e84c0c868bb8094a",
+      "bytes": 95314
+    },
+    "readme.txt": {
+      "url": "https://raw.githubusercontent.com/tomojitakasu/RTKLIB/71db0ffa0d9735697c6adfd06fdf766d0e5ce807/readme.txt",
+      "sha256": "e74c5106fa3d8b7e3855807bf10dca8325f4f141586f6b99058c868873def09a",
+      "bytes": 9441
+    }
+  }
+}

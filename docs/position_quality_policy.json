@@ -1,0 +1,9 @@
+{
+  "min_observations": 6,
+  "max_pdop": 6.0,
+  "max_residual_rms_m": 15.0,
+  "jump_allowance_m": 20.0,
+  "speed_bound_mps": 15.0,
+  "max_anchor_age_s": 2.0,
+  "confirmation_blocks": 5
+}

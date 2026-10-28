@@ -1,0 +1,132 @@
+{
+  "python/gnss_gpu/bandlimited_multipath_cpu.py": {
+    "original_sha256": "5d139529cc3ca4ad479333bb2b231ea66a88ea853eb06dc5e7cc18a7d7928fd1",
+    "current_sha256": "c95b84cde6970bfbe3aa01dd12c8680212e96e97228797841036063cacb27b80",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/bandlimited_multipath_cpu.py"
+  },
+  "python/gnss_gpu/bandlimited_multipath_v2_cpu.py": {
+    "original_sha256": "d6d8d0909bf613beb54b93fec3a31fb086b09a411a952e8ac71c8897d9a5f0a7",
+    "current_sha256": "10c1d80067be14d8d66523612ce109d8d8d1031c579641f173e15f8bcb31f426",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/bandlimited_multipath_v2_cpu.py"
+  },
+  "python/gnss_gpu/bandwidth_drift_paths_cpu.py": {
+    "original_sha256": "1d09180134285984edadbf083a11f90e6306127f69e683be9e05a7a5f2811b16",
+    "current_sha256": "8bb1335b33c32fd98ab4c70ebc4c02f04f727602add49b55e2da668525dd736d",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/bandwidth_drift_paths_cpu.py"
+  },
+  "python/gnss_gpu/broad_relative_drift_cpu.py": {
+    "original_sha256": "af828766adb63d6b490efa16716631c499977afbfc9374069dd6697c14ae980d",
+    "current_sha256": "28a12b0b740202d04450e1c40eee52327da6eee06f54e0be7d5f063dc533f7b9",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/broad_relative_drift_cpu.py"
+  },
+  "python/gnss_gpu/ca_cancellation_cpu.py": {
+    "original_sha256": "8e364bf06970772d2cda91075d041d5b7697ecbf3357ccd59390ee82093a44cf",
+    "current_sha256": "6d94012abdcb9590db25c4ecb4315dd1c14b89790be2cf6894712d1343c67f91",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/ca_cancellation_cpu.py"
+  },
+  "python/gnss_gpu/ca_local_delay_cpu.py": {
+    "original_sha256": "65e212f5f51dcbc65fb79c8d6c83478aaa48da0605ff99961f235850a10979fe",
+    "current_sha256": "1656435761233f345d02c721dd53a4d0252e113089d156472853c53f68b92007",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/ca_local_delay_cpu.py"
+  },
+  "python/gnss_gpu/ca_multiseed_cpu.py": {
+    "original_sha256": "8406e83117c1009be9cada8966f78f7ba6f95511a34572a2c0c23507714e55d8",
+    "current_sha256": "cdda1eb99ec712e2e489c9787dae7117b55cc586c480106b7df359bef0104a2c",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/ca_multiseed_cpu.py"
+  },
+  "python/gnss_gpu/cached_drift_carrier_paths_cpu.py": {
+    "original_sha256": "a9ed02c9a94f97b4e05128f0484f3617f0c611dd42419d6b5d7e371e63ee3e65",
+    "current_sha256": "52a954627242d64d04a9f0fc73fedafa5902e33fadd92b0ffa1a0408a0a62e05",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/cached_drift_carrier_paths_cpu.py"
+  },
+  "python/gnss_gpu/calibrated_dynamic_paths_cpu.py": {
+    "original_sha256": "163e96c8376a87ca22cac242fe7bb1904d763af62e015a222d3988602530aecb",
+    "current_sha256": "27df8f266a818b7d7621db685d388e74f3c7c1a3ca3640bf184ec85fadaf5f14",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/calibrated_dynamic_paths_cpu.py"
+  },
+  "python/gnss_gpu/common_carrier_paths_cpu.py": {
+    "original_sha256": "3a342924b7e8480f7c408c5b069871c92f1ce8f522ef6b640dc6dc086631709a",
+    "current_sha256": "3e26c076eeae10e9b2defecb25c62a3ba29a54073454c324486ed312945d31ff",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/common_carrier_paths_cpu.py"
+  },
+  "python/gnss_gpu/dominant_drift_paths_cpu.py": {
+    "original_sha256": "de31cccfb3f594b49105381236f25b0f4fbeb2215183162f91680a03068f75bc",
+    "current_sha256": "f0f63251aba56d4e3b75009de4f86bab10aee19919e97a2fbfb8325935cf63b5",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/dominant_drift_paths_cpu.py"
+  },
+  "python/gnss_gpu/dominant_path_amplitudes_cpu.py": {
+    "original_sha256": "9b5fd7daf4fd2d72d827db624f7a2853f0bb0b696bee35e52438113f1b4b18d3",
+    "current_sha256": "cb61b543e4206f275fb8270b70b3a01017925205c3aab733ae6485fe04b3e68b",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/dominant_path_amplitudes_cpu.py"
+  },
+  "python/gnss_gpu/drift_carrier_paths_cpu.py": {
+    "original_sha256": "1f8ba06e59be6a0db3a9bb5f0ce22964e4b4ff31c402f387631dd5b6db13219a",
+    "current_sha256": "8dd7a44289d8dc46881add4a44d53dede17d43488402a2d268e93bf893809b92",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/drift_carrier_paths_cpu.py"
+  },
+  "python/gnss_gpu/duration_carrier_paths_cpu.py": {
+    "original_sha256": "509024eca652aa3627393bc53d5f2e1b1a38faec79e2b3ec8197049682f3a393",
+    "current_sha256": "426ec091437a400ba3b8ee87d4f3a6105116d75b8c379cd3f95b12a9dce08dee",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/duration_carrier_paths_cpu.py"
+  },
+  "python/gnss_gpu/dynamic_multipath_cpu.py": {
+    "original_sha256": "5523b6890a54a042ef44353e2f784d7201a080268cbb5fb4a76d19079721453d",
+    "current_sha256": "a8de8848b98ed07241e38ad9cf7c2d6a5bf19ed7caba5027add5d127a12087e4",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/dynamic_multipath_cpu.py"
+  },
+  "python/gnss_gpu/moving_echo_cpu.py": {
+    "original_sha256": "55cd511b6abcd8ba911ebf48f22ca73d9a4a6a4fbbe003f625a53d168b095da5",
+    "current_sha256": "8e0e1bc206aa7ebc93560c092449577b2c61438099f8811caca213f361545f7b",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/moving_echo_cpu.py"
+  },
+  "python/gnss_gpu/noise_aware_multipath_cpu.py": {
+    "original_sha256": "67551107dfc134c789dc10d5674f313a60666b769fb3ffbdda4603f749efb6da",
+    "current_sha256": "ee3d8024666dc72750032f92c223f3a20835702c9201c89639a93c5d9460d947",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/noise_aware_multipath_cpu.py"
+  },
+  "python/gnss_gpu/noncoherent_acquisition_cpu.py": {
+    "original_sha256": "b692e8dd0b27dedb3385010701c2de9be5fd0fcfb4ce95e0303680986d6d38d3",
+    "current_sha256": "6d9c4e878e91e7f4d9ac733c9f2f09ddc8caf9710379e4db5ec2c4a88eff8e20",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/noncoherent_acquisition_cpu.py"
+  },
+  "python/gnss_gpu/ranked_path_gate_cpu.py": {
+    "original_sha256": "1e64af8e28106e27843ff0bbd6ca16e1a9a81310411a9d58fb7d1eb81edacf5a",
+    "current_sha256": "db75794a9be30fc81c1fd819eaeaa010c87aae12d48115eea7f8e1c85fcee662",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/ranked_path_gate_cpu.py"
+  },
+  "python/gnss_gpu/relative_drift_paths_cpu.py": {
+    "original_sha256": "1513bf178b64acf4043616e108039424d51540953ca64f4bac8f92dee6fdfd8f",
+    "current_sha256": "4baabaa226e3da82904dffc0c5de899ae70cecda074aa46b0008a1bc7b2e1a5c",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/relative_drift_paths_cpu.py"
+  },
+  "python/gnss_gpu/residual_dynamic_paths_cpu.py": {
+    "original_sha256": "88be5063fb1371bb91494a27e1abd68ec086d60aec7f98965903739ad49bef9c",
+    "current_sha256": "8c465ec8fb5eb1865abaab8ccb61e100a81ffba8d1f2ae15949cc0e10c4fddd2",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/residual_dynamic_paths_cpu.py"
+  },
+  "python/gnss_gpu/spectral_noise_cpu.py": {
+    "original_sha256": "11cf93c37335d587e236495aacd80c77d9a5be3095f229ee13c9debe484e2757",
+    "current_sha256": "9d80063b10dbd8cba6442f8941e637fb51aa14e655ba69aefe3149cf4bed150d",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/spectral_noise_cpu.py"
+  },
+  "python/gnss_gpu/weak_acquisition_cpu.py": {
+    "original_sha256": "c8b6a2d3d8dd3cc8c80218a1d91dda166e5a47d7031d14fb251e53b2ae1d1ed8",
+    "current_sha256": "e83ae900cce21ea83dc99f91cda9793447d0bc59d11b4ac59e3ca5b604691817",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/weak_acquisition_cpu.py"
+  },
+  "python/gnss_gpu/weak_positioning_cpu.py": {
+    "original_sha256": "f365bf8178ee82f3d895524c556ce26028485ca2681b09500bcde562aa25c25b",
+    "current_sha256": "f79e32e6fb73c234275679592fa05864d838e28d7b9a4b9571b654237ed4d433",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/weak_positioning_cpu.py"
+  },
+  "python/gnss_gpu/weak_tracking_cpu.py": {
+    "original_sha256": "6e28f2fba996b76abff766edc1624d3d81739b73f3e105cfde769884d1e5fb0f",
+    "current_sha256": "75d1872906be81045457ea6edc6429ddf53d0e86e628f0194b1372bbe9e3cb80",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/weak_tracking_cpu.py"
+  },
+  "python/gnss_gpu/window_seed_relative_drift_cpu.py": {
+    "original_sha256": "77df12e67f28710e853854da2f1744f6fe32fab92780cfc7afc92ad96cec7a4d",
+    "current_sha256": "fa8eeeb04e5053b1040d33c03ee4e0a9f0aca4803e79b5b16e3b162da3ab3925",
+    "original_source": "experiments/frozen_cpu_sources/python/gnss_gpu/window_seed_relative_drift_cpu.py"
+  }
+}

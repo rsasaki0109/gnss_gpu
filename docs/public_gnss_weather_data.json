@@ -1,0 +1,118 @@
+{
+  "checked_date": "2026-10-24",
+  "scope": "Public-source scoping; live distribution access checked; Boreas native receiver records acquired, weather attribution not verified.",
+  "datasets": [
+    {
+      "name": "Oxford RobotCar",
+      "sdk_commit": "16ce3329223ca418fe5106277b91aea8d9b672b2",
+      "official_metadata_sequences": 134,
+      "rain_tag_sequences": 9,
+      "sun_tag_sequences": 62,
+      "verified_sources": [
+        {
+          "url": "https://github.com/ori-mrg/robotcar-dataset-sdk",
+          "local_evidence": "output/research-scoping/robotcar_readme.txt",
+          "sha256": "53c6750aabff969a002c8d03e6fdd3634e0aec3e719da277715c305d731b6a2f"
+        }
+      ],
+      "license_status": "SDK LICENSE inspected: CC BY-NC-SA 4.0; dataset download terms not independently retrieved. No SDK code copied.",
+      "inventory": "output/public-gnss-data/robotcar_weather_inventory.csv",
+      "weather_semantics": "Official categorical labels, not measured precipitation or wetness.",
+      "gnss_payload_acquired": false,
+      "distribution_probe": {
+        "url": "https://robotcar-dataset.robots.ox.ac.uk/",
+        "http_status": 200,
+        "runtime_revision": "9"
+      },
+      "download_host_discovered": "mrgdatashare.robots.ox.ac.uk",
+      "download_host_network_draft_saved": true,
+      "payload_probe": {
+        "host": "mrgdatashare.robots.ox.ac.uk",
+        "http_status": 503,
+        "https_status": 503,
+        "observed_error": "503 upstream remote connection failure/termination after configuration update; exact transport cause not established",
+        "probe_evidence": "output/public-gnss-data/robotcar_download_host_probe.json",
+        "runtime_revision": "10"
+      },
+      "download_host_runtime_revision": "10",
+      "provider_notice": {
+        "url": "https://robotcar-dataset.robots.ox.ac.uk/downloads/",
+        "accessed_date": "2026-10-24",
+        "notice_date": "2026-10-22",
+        "http_status": 200,
+        "text": "Please note that we are withdrawing the RobotCar Dataset until further notice.",
+        "local_evidence": "output/public-gnss-data/robotcar_downloads.html",
+        "sha256": "b01d821f4875ea752ef0df931d58d33670a243b63cf52f79af22181026bd8bcc"
+      },
+      "payload_acquisition_status": "paused_provider_withdrawal_confirmed_no_further_environment_publication_needed"
+    },
+    {
+      "name": "Boreas",
+      "sdk_commit": "8e100ff82ecd4992511da61b016398dbd230f205",
+      "verified_sources": [
+        {
+          "url": "https://raw.githubusercontent.com/utiasASRL/pyboreas/master/DATA_REFERENCE.md",
+          "local_evidence": "output/research-scoping/boreas_reference.txt",
+          "sha256": "4aa6a29b58fecec43479f311510fa7f0cf83a34ef1693ec8bbff5db54fe618e9"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/utiasASRL/pyboreas/master/DATA_LICENSE.md",
+          "local_evidence": "output/research-scoping/boreas_license.txt",
+          "sha256": "92368d96fe04291eaa6e56c22faabd9860d34f1d4ce1ecad0f0b3ba9e953a52d"
+        }
+      ],
+      "paper": "https://arxiv.org/abs/2203.10168",
+      "data_license": "CC BY 4.0 according to official DATA_LICENSE.md",
+      "documented_navigation_data": "200 Hz postprocessed Applanix GNSS/INS poses, not standalone GNSS observations.",
+      "raw_iq_or_rinex_verified": false,
+      "gnss_payload_acquired": true,
+      "empty_example_warning": "SDK test/demo/gt/boreas-objects-v1/applanix/gps_post_process.csv has zero bytes.",
+      "distribution_probe": {
+        "url": "https://boreas.s3.amazonaws.com/?list-type=2&max-keys=3",
+        "http_status": 200,
+        "runtime_revision": "9"
+      },
+      "native_receiver_log_acquired": true,
+      "gnss_payload_scope": "Two Applanix native receiver log chunks; 631 checksum-verified GGA/ZDA fixes. No RINEX observation conversion established.",
+      "recording": "boreas-2020-11-26-13-58",
+      "download_manifest": "output/public-gnss-data/boreas-2020-11-26-13-58/download_manifest.json",
+      "import_provenance": "output/boreas-gnss-import/provenance.json",
+      "weather_label_for_acquired_recording_verified": false,
+      "receiver_status_intervals": 9,
+      "reference_audit": "docs/boreas_reference_audit.md",
+      "postprocessed_reference_acquired": true,
+      "reference_rows": 215097,
+      "reference_sensor_pose_consistency_verified": true,
+      "antenna_reference_axis_mapping_verified": false,
+      "weather_metadata_site_probe": {
+        "url": "https://boreas.utias.utoronto.ca/",
+        "runtime_revision": "11",
+        "host_present_in_saved_and_executor_allowlists": true,
+        "https_result": "proxy CONNECT 403 Forbidden",
+        "http_result": {
+          "url": "http://boreas.utias.utoronto.ca/",
+          "http_status": 403,
+          "body": "Domain forbidden"
+        },
+        "configuration_applied_but_connectivity_unverified": true,
+        "diagnosis_evidence": "output/boreas-reference-audit/website_access_diagnosis.json",
+        "further_publication_requested": false
+      }
+    },
+    {
+      "name": "UrbanNav",
+      "verified_sources": [
+        {
+          "url": "https://github.com/IPNL-POLYU/UrbanNavDataset",
+          "local_evidence": "output/research-scoping/urbannav_readme.txt",
+          "sha256": "37ecd074a74d5c68d442b1fa486b6e2745e944cfddecdeed693e13978947a6bf"
+        }
+      ],
+      "paper_doi": "10.33012/navi.602",
+      "documented_navigation_data": "Raw GNSS RINEX and SPAN-CPT/POS LV GNSS/INS reference. README notes timing and reference limitations for specific sequences.",
+      "data_license": "Official README states MIT includes linked datasets; retain notice if redistributing.",
+      "rain_or_wet_forest_labels_verified": false,
+      "gnss_payload_acquired_this_study": false
+    }
+  ]
+}
