@@ -16,5 +16,6 @@
   "docs/assets/cpu_research/cpu-relative-drift-search/summary.png": "826d6bbb9ab08a4d7f69f647c114fe9339f64c9e672e70dcd323634c85da5997",
   "docs/assets/cpu_research/cpu-window-drift-search/report.json": "b0ba06f981588d2d1e85510b1cf661f661d5bfdd240a1f8b41ec6ea4878b615d",
   "docs/assets/cpu_research/cpu-window-drift-search/audit.json": "09ca22a54b99c0cd5dd0adb2961d2fda4a9b97563d8734430cdcba1adf236f94",
-  "docs/assets/cpu_research/cpu-window-drift-search/summary.png": "b69e7148369320bbb44a176230155c8605470044791f0a2331612e8ef4c8aac0"
+  "docs/assets/cpu_research/cpu-window-drift-search/summary.png": "b69e7148369320bbb44a176230155c8605470044791f0a2331612e8ef4c8aac0",
+  "docs/assets/cpu_research/cpu-moving-echo-pilot/comparison.png": "36fa8585f6c9f3568f82b80a120bdd7e6911716468b5c4b2b54137d0dd09d9b4"
 }

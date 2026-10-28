@@ -58,7 +58,7 @@ python -m experiments.plot_cpu_moving_echo_pilot
 
 ±7Hz相当では800msで反射経路長が約1.07m変わるが、今回の直接波距離推定に与えた変化は最大約15cmだった。この値は同じ雑音を使った固定コード/移動コードの推定差であり、実機の系統誤差の上限ではない。また、移動モデルを入れれば常に精度が改善するという結果でもない。
 
-![固定コード近似と整合した移動コードの比較](../output/cpu-moving-echo-pilot/comparison.png)
+![固定コード近似と整合した移動コードの比較](assets/cpu_research/cpu-moving-echo-pilot/comparison.png)
 
 ## 判断と次の段階
 
