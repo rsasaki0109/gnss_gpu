@@ -1,0 +1,159 @@
+{
+  "accessed_date": "2026-10-24",
+  "papers": [
+    {
+      "authors": "Felipe G. Nievinski; Kristine M. Larson",
+      "year": 2014,
+      "title": "Forward modeling of GPS multipath for near-surface reflectometry and positioning applications",
+      "doi": "10.1007/s10291-013-0331-y",
+      "full_text_reviewed": false,
+      "crossref_verified": {
+        "url": "https://api.crossref.org/works/10.1007/s10291-013-0331-y",
+        "volume": "18",
+        "issue": "2",
+        "pages": "309-322",
+        "online_date": [
+          2013,
+          6,
+          25
+        ],
+        "print_date": [
+          2014,
+          4
+        ],
+        "response_sha256": "506cfe3baef2b4bb2a10085580cbad97747df1d98351b2d9da6bb3dc8b406671"
+      },
+      "publisher_access": {
+        "checked_date": "2026-10-24",
+        "requested_pdf_url": "https://link.springer.com/content/pdf/10.1007/s10291-013-0331-y.pdf",
+        "returned_url": "https://link.springer.com/article/10.1007/s10291-013-0331-y",
+        "http_status": 200,
+        "content_type": "text/html",
+        "access_state": "subscription_preview",
+        "full_text_available": false,
+        "public_content_reviewed": [
+          "publisher abstract",
+          "bibliographic metadata",
+          "public reference list"
+        ],
+        "publisher_preview_sha256": "2842760c6281aae6ca33c788f921144d75612715aa230c9436a57cb39a554231",
+        "blocker": "Publisher requires institutional/subscriber access for the full article; network access now works."
+      }
+    },
+    {
+      "authors": "Felipe G. Nievinski; Kristine M. Larson",
+      "year": 2014,
+      "title": "An open source GPS multipath simulator in Matlab/Octave",
+      "doi": "10.1007/s10291-014-0370-z",
+      "full_text_reviewed": false,
+      "crossref_verified": {
+        "url": "https://api.crossref.org/works/10.1007/s10291-014-0370-z",
+        "volume": "18",
+        "issue": "3",
+        "pages": "473-481",
+        "online_date": [
+          2014,
+          3,
+          19
+        ],
+        "print_date": [
+          2014,
+          7
+        ],
+        "response_sha256": "8119344fabfbcbf310884ec29bbb0eceda9c58def51a8febf7d07b9ce0aada32"
+      },
+      "publisher_access": {
+        "checked_date": "2026-10-24",
+        "requested_pdf_url": "https://link.springer.com/content/pdf/10.1007/s10291-014-0370-z.pdf",
+        "returned_url": "https://link.springer.com/article/10.1007/s10291-014-0370-z",
+        "http_status": 200,
+        "content_type": "text/html",
+        "access_state": "subscription_preview",
+        "full_text_available": false,
+        "public_content_reviewed": [
+          "publisher abstract",
+          "bibliographic metadata",
+          "public reference list"
+        ],
+        "publisher_preview_sha256": "23f3f0ea12b5d2480b72641f8cacf8f65940b31dde02edc7f99de290b3399686",
+        "blocker": "Publisher requires institutional/subscriber access for the full article; network access now works."
+      }
+    },
+    {
+      "authors": "Jitu Sanwale; Mangal Kothari; Hari B. Hablani; Suresh Dahiya",
+      "year": 2026,
+      "title": "Physics Driven Digital Twin Model for Evaluation of GNSS User Receiver Equipment",
+      "publication_status": "arXiv preprint, v1; journal publication not established",
+      "full_text_reviewed": true,
+      "reviewed_sections": [
+        "Section II.A.2, page 3, Eq. (8): relative-motion Doppler",
+        "Section II.A.3, page 3, Eqs. (9)-(12): range-dependent power and complex noise",
+        "Section III: validation pipeline and limits"
+      ],
+      "implementation_scope": "Relative-velocity geometry and prescribed accelerated trajectories only; no reproduction of full digital twin/HIL results",
+      "arxiv": "2605.01553v1",
+      "url": "https://arxiv.org/pdf/2605.01553v1",
+      "pdf_sha256": "a55f300554a2f80a5614b7fba9d11586de59c6caadd5956af5d277a7736db43a",
+      "text_sha256": "c62d3daa36c24aaed4e76fa995ed07514cbd81b7e15c94768a98b70b70674f91"
+    },
+    {
+      "authors": "Ivan Iudice; Domenico Pascarella; Gianluca Corraro; Giovanni Cuciniello",
+      "year": 2024,
+      "title": "A real/fast-time simulator for impact assessment of spoofing & jamming attacks on GNSS receivers",
+      "doi": "10.1109/MetroAeroSpace61015.2024.10591529",
+      "publication_status": "Author-accepted conference version on arXiv, v2",
+      "full_text_reviewed": true,
+      "reviewed_sections": [
+        "Abstract and Section II: measurement-domain threat impact model"
+      ],
+      "implementation_scope": "Reviewed to distinguish observation-domain error injection from sample-level IQ synthesis; no attack model implemented",
+      "arxiv": "2405.17925v2",
+      "url": "https://arxiv.org/pdf/2405.17925v2",
+      "pdf_sha256": "fc3e3d9d8b4d106112dcbee474bbfaf20f8780dabb3c87e14005ae3c98a88383",
+      "text_sha256": "b6f3f233128dc7510a84050cceb4490f4a8dbcbfcb6e8f9fd438a9efce4e7f33"
+    }
+  ],
+  "verified_supplement": {
+    "repository": "https://github.com/ufrgs-gnss-lab/mpsim",
+    "commit": "61be6278d49779d539bc7b3e19f6a13cefcc30a8",
+    "license": "BSD-2-Clause",
+    "files": [
+      {
+        "path": "README.TXT",
+        "url": "https://raw.githubusercontent.com/ufrgs-gnss-lab/mpsim/61be6278d49779d539bc7b3e19f6a13cefcc30a8/README.TXT",
+        "sha256": "3bcd60c4d5423352953e047066d7c65d1b6e308f95be3ac98538b635f4e270d0"
+      },
+      {
+        "path": "lib/snr/fwd/snr_fwd_reflected.m",
+        "url": "https://raw.githubusercontent.com/ufrgs-gnss-lab/mpsim/61be6278d49779d539bc7b3e19f6a13cefcc30a8/lib/snr/fwd/snr_fwd_reflected.m",
+        "sha256": "2ac22d77f7e497c71057d37c654ba3011a948bd1a1e12febe76598b0208eb4a5"
+      },
+      {
+        "path": "lib/snr/fwd/get_reflection_coeff_linear2circ.m",
+        "url": "https://raw.githubusercontent.com/ufrgs-gnss-lab/mpsim/61be6278d49779d539bc7b3e19f6a13cefcc30a8/lib/snr/fwd/get_reflection_coeff_linear2circ.m",
+        "sha256": "6cd1b71c2058a2b4c06a55ea7ba242e53f7feac5eb12307e7b2af263d02e03ea"
+      },
+      {
+        "path": "lib/snr/fwd/get_reflection_coeff_linear.m",
+        "url": "https://raw.githubusercontent.com/ufrgs-gnss-lab/mpsim/61be6278d49779d539bc7b3e19f6a13cefcc30a8/lib/snr/fwd/get_reflection_coeff_linear.m",
+        "sha256": "d1ded4b31a8561eb23d6778d10b03227e765a2e36dfaa2c4537bf8609f869609"
+      },
+      {
+        "path": "script/figA4.m",
+        "url": "https://raw.githubusercontent.com/ufrgs-gnss-lab/mpsim/61be6278d49779d539bc7b3e19f6a13cefcc30a8/script/figA4.m",
+        "sha256": "f51f7b69f1b88ad9ec3feae2a054ee8790e1fa350b70200f0e9d40759fc1c50e"
+      },
+      {
+        "path": "script/extra/figB4.m",
+        "url": "https://raw.githubusercontent.com/ufrgs-gnss-lab/mpsim/61be6278d49779d539bc7b3e19f6a13cefcc30a8/script/extra/figB4.m",
+        "sha256": "ffd88890bb8d479c17a727b1e0aa95e0ae9e51db833f164e630ec7c88d87f254"
+      },
+      {
+        "path": "LICENSE",
+        "url": "https://raw.githubusercontent.com/ufrgs-gnss-lab/mpsim/61be6278d49779d539bc7b3e19f6a13cefcc30a8/LICENSE",
+        "sha256": "19155a6fe3b00cacdae6cd8e4f5991f77d93042ede33f28e12e6275ac81c68c1"
+      }
+    ]
+  },
+  "access_limit": "Network access to Crossref, arXiv, link.springer.com and idp.springer.com now works. Official 2014 PDF requests return publisher HTML subscription previews; full-text access needs publisher entitlement or a lawful author/user-supplied copy. No further network publication is required for this blocker. The two version-pinned arXiv PDFs remain full-text reviewed, and the 2014 models remain supplement-based."
+}

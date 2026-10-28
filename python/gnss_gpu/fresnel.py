@@ -163,6 +163,58 @@ def reflection_coefficient(
     return _maybe_scalar(magnitude)
 
 
+def circular_reflection_voltage(
+    incidence_angle_rad,
+    material="concrete",
+    freq_hz=GPS_L1_FREQ,
+    *,
+    incident_rhcp=1+0j,
+    incident_lhcp=0j,
+    receiver_rhcp=1+0j,
+    receiver_lhcp=0j,
+):
+    """Coherently combine reflected circular fields at a receiving antenna.
+
+    Model follows the polarization composition in Nievinski & Larson (2014),
+    GPS Solutions, doi:10.1007/s10291-013-0331-y and its author-published MPSim
+    supplement (snr_fwd_reflected.m). See docs/gnss_signal_simulation_literature.md
+    for the verified source version and limits of the literature review.
+
+    R_same=(R_parallel+R_perpendicular)/2, R_cross=(R_parallel-R_perpendicular)/2.
+    Receiver parameters are complex voltage responses in the reflected ray's
+    circular basis, defined by V=h_R*E_R+h_L*E_L; they are not power gains or
+    Jones analyzer vectors to be conjugated again. All fields/responses are
+    finite scalar complex numbers. Response phase affects coherent interference.
+    The result is a voltage transfer, not a reflectance; it is not clipped to 1.
+    """
+    fields = []
+    for name, value in (("incident_rhcp", incident_rhcp), ("incident_lhcp", incident_lhcp),
+                        ("receiver_rhcp", receiver_rhcp), ("receiver_lhcp", receiver_lhcp)):
+        try:
+            value = complex(value)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError(f"{name} must be a finite scalar complex voltage") from exc
+        if not np.isfinite(value):
+            raise ValueError(f"{name} must be a finite scalar complex voltage")
+        fields.append(value)
+    er, el, hr, hl = fields
+    theta = np.asarray(incidence_angle_rad, dtype=float)
+    if not np.all(np.isfinite(theta)) or np.any(theta < 0) or np.any(theta > math.pi/2):
+        raise ValueError("incidence_angle_rad must be finite and in [0, pi/2]")
+    if not np.isfinite(freq_hz) or freq_hz <= 0:
+        raise ValueError("freq_hz must be finite and positive")
+    eps = complex_permittivity(material, freq_hz)
+    if not np.isfinite(eps):
+        raise ValueError("material permittivity must be finite")
+    parallel, perpendicular = fresnel_coefficients(theta, eps)
+    same = .5*(np.asarray(parallel)+np.asarray(perpendicular))
+    cross = .5*(np.asarray(parallel)-np.asarray(perpendicular))
+    voltage = hr*(same*er+cross*el)+hl*(cross*er+same*el)
+    if not np.all(np.isfinite(voltage)):
+        raise ValueError("reflected voltage exceeds supported numeric range")
+    return _maybe_scalar(voltage)
+
+
 __all__ = [
     "EPS0",
     "GPS_L1_FREQ",
@@ -171,4 +223,5 @@ __all__ = [
     "fresnel_coefficients",
     "reflection_coefficient",
     "reflection_coefficient_complex",
+    "circular_reflection_voltage",
 ]

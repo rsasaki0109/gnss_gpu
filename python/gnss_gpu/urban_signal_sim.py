@@ -106,9 +106,12 @@ class UrbanSignalSimulator:
                  max_double_reflection_paths=0,
                  max_reflection_diffraction_paths=0,
                  reflection_diffraction_path_kwargs=None,
-                 reflection_diffraction_orders=("RD", "DR")):
+                 reflection_diffraction_orders=("RD", "DR"),
+                 signal_backend="cuda"):
         """
         Args:
+            signal_backend: "cuda" (default) or "cpu". CPU IQ generation
+                requires Numba and supports GPS L1 C/A PRNs 1-32 only.
             building_model: BuildingModel or BVHAccelerator instance.
             sampling_freq: IQ sampling frequency [Hz].
             intermediate_freq: IF frequency [Hz].
@@ -147,7 +150,13 @@ class UrbanSignalSimulator:
                 (e.g. max_ray_edge_distance_m, max_excess_path_m).
         """
         self.building_model = building_model
-        self.sim = SignalSimulator(sampling_freq, intermediate_freq, noise_floor_db)
+        if signal_backend == "cpu":
+            from gnss_gpu.signal_sim_cpu import CpuSignalSimulator
+            self.sim = CpuSignalSimulator(sampling_freq, intermediate_freq, noise_floor_db)
+        elif signal_backend == "cuda":
+            self.sim = SignalSimulator(sampling_freq, intermediate_freq, noise_floor_db)
+        else:
+            raise ValueError("signal_backend must be 'cuda' or 'cpu'")
         self.elevation_mask_rad = math.radians(elevation_mask_deg)
         self.nlos_attenuation_db = nlos_attenuation_db
         self.fresnel_coeff = fresnel_coeff

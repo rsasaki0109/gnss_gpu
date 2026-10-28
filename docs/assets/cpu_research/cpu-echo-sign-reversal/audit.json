@@ -1,0 +1,17 @@
+{
+  "evaluation": 96,
+  "sources_and_artifacts_verified": true,
+  "prior_ids_disjoint": true,
+  "paired_noise_checks": 96,
+  "zero_acceleration_exact": 32,
+  "physical_endpoints_verified": true,
+  "all_endpoints_recomputed": true,
+  "full_replays": [
+    0,
+    16,
+    32,
+    48,
+    64,
+    80
+  ]
+}

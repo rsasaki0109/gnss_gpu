@@ -325,6 +325,34 @@ python experiments/fetch_urbannav_subset.py --run Odaiba --output-dir data/urban
 
 ### Browser/CPU reference
 
+For parallel GPS L1 C/A IQ generation without CUDA, see
+[CPU signal simulation](docs/cpu_signal_simulation.md), including C/N0-calibrated
+noise, navigation-bit transitions and continuous waveform blocks.
+The [unknown-carrier acquisition example](docs/cpu_signal_simulation.md#unknown-carrier-acquisition-on-cpu)
+adds CPU carrier/code-delay search and independent whole-search noise calibration.
+The [blockwise tracking example](docs/cpu_signal_simulation.md#carrier-refinement-and-contiguous-block-following)
+adds frequency refinement, carrier-aided code following, outage and reacquisition diagnostics.
+The tracker now defaults to [two-block acquisition confirmation](docs/cpu_signal_simulation.md#multi-block-acquisition-confirmation),
+with paired examples recording false captures and the added acquisition delay.
+The [continuous multipath tracking experiment](docs/cpu_signal_simulation.md#continuous-tracking-with-specular-multipath)
+compares direct-only and reflected signals with paired noise and a finite wall edge.
+An [experimental two-path fitter](docs/cpu_signal_simulation.md#experimental-two-path-waveform-fitting)
+records resolution limits, high-SNR improvements and noisy failure cases; it is not yet used for tracking correction.
+The [rain and wet-wall experiment](docs/rain_simulation.md) propagates rain attenuation
+and independently prescribed surface films through CPU IQ acquisition to position/clock estimates.
+The [wet-troposphere residual study](docs/wet_delay_simulation.md) adds a separate
+signed delay control and measures its effect on height and receiver clock.
+The [wet antenna/radome replay](docs/wet_antenna_simulation.md) tests prescribed
+loss, code bias and phase through continuous wetting/drying, including outages and recovery.
+The [position-publication policy](docs/position_quality_simulation.md) tests redundant
+observations, DOP, residuals and temporal consistency on separate noise seeds, including the availability cost.
+The [position-reference recovery study](docs/position_recovery_simulation.md)
+tests median references and sustained candidate clusters against the previous gate on fresh noise.
+The [range-uncertainty study](docs/position_uncertainty_simulation.md) tests causal
+range scatter, weighted position estimates and nominal covariance coverage before changing publication rules.
+The [literature-backed propagation model](docs/gnss_signal_simulation_literature.md)
+records published GNSS simulation references and the implemented polarization extension.
+
 **Zero install:**
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/rsasaki0109/gnss_gpu/blob/main/examples/colab_urban_canyon_quickstart.ipynb)
 — or locally:
@@ -471,3 +499,10 @@ build command.
 ## License
 
 [Apache-2.0](LICENSE)
+
+### CPU simulation research checkpoint
+
+The [CPU research checkpoint](docs/cpu_research_milestone.md) summarizes moving
+and accelerating reflections, receiver uncertainty, and half-window carrier
+initialization. It includes the limits of the synthetic results and links to
+curated reports and figures. These research estimators remain opt-in.

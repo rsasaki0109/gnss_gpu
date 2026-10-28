@@ -3,6 +3,56 @@
 
 % --- Textbooks ---
 
+% --- GNSS multipath signal simulation ---
+% Bibliographic details and model checked in the author-published MPSim
+% supplement and Crossref metadata. These two full-paper texts are not retrieved; see
+% docs/gnss_signal_simulation_literature.md for source-level provenance.
+
+@article{nievinski2014forward,
+  author = {Felipe G. Nievinski and Kristine M. Larson},
+  title = {Forward modeling of {GPS} multipath for near-surface reflectometry and positioning applications},
+  journal = {GPS Solutions},
+  year = {2014},
+  volume = {18},
+  number = {2},
+  pages = {309--322},
+  doi = {10.1007/s10291-013-0331-y}
+}
+
+@article{nievinski2014simulator,
+  author = {Felipe G. Nievinski and Kristine M. Larson},
+  title = {An open source {GPS} multipath simulator in {Matlab/Octave}},
+  journal = {GPS Solutions},
+  year = {2014},
+  volume = {18},
+  number = {3},
+  pages = {473--481},
+  doi = {10.1007/s10291-014-0370-z}
+}
+
+@misc{sanwale2026digitaltwin,
+  author = {Jitu Sanwale and Mangal Kothari and Hari B. Hablani and Suresh Dahiya},
+  title = {Physics Driven Digital Twin Model for Evaluation of {GNSS} User Receiver Equipment},
+  year = {2026},
+  eprint = {2605.01553},
+  archiveprefix = {arXiv},
+  primaryclass = {eess.SY},
+  note = {Version 1, preprint; full text reviewed for Section II.A.2, Eq. (8)},
+  url = {https://arxiv.org/abs/2605.01553v1}
+}
+
+@inproceedings{iudice2024realtime,
+  author = {Ivan Iudice and Domenico Pascarella and Gianluca Corraro and Giovanni Cuciniello},
+  title = {A real/fast-time simulator for impact assessment of spoofing \& jamming attacks on {GNSS} receivers},
+  booktitle = {2024 IEEE 11th International Workshop on Metrology for AeroSpace},
+  year = {2024},
+  doi = {10.1109/MetroAeroSpace61015.2024.10591529},
+  eprint = {2405.17925},
+  archiveprefix = {arXiv},
+  note = {Accepted-author version 2 reviewed; measurement-domain model, not implemented as an IQ channel},
+  url = {https://arxiv.org/abs/2405.17925v2}
+}
+
 @book{groves2013,
   author    = {Paul D. Groves},
   title     = {Principles of {GNSS}, Inertial, and Multisensor Integrated Navigation Systems},
@@ -257,4 +307,21 @@
   doi       = {10.1109/ICRA57147.2024.10610447},
   eprint    = {2404.16370},
   archiveprefix = {arXiv}
+}
+
+@techreport{itu_r_p838_3_2005,
+  author      = {{International Telecommunication Union}},
+  title       = {Specific attenuation model for rain for use in prediction methods},
+  institution = {ITU-R},
+  number      = {Recommendation P.838-3},
+  year        = {2005},
+  url         = {https://www.itu.int/rec/R-REC-P.838-3-200503-I/en},
+  note        = {Coefficient implementation checked through version-pinned ITU-Rpy; primary PDF not reviewed}
+}
+
+@misc{itu_rpy_040_rain_coefficients,
+  author = {Inigo del Portillo},
+  title  = {ITU-Rpy 0.4.0: ITU-R P.838-3 implementation},
+  url    = {https://github.com/inigodelportillo/ITU-Rpy/blob/094abb618c2a7a8cc145e93940f4571650bc2cf5/itur/models/itu838.py},
+  note   = {MIT license; commit 094abb618c2a7a8cc145e93940f4571650bc2cf5; reviewed frequency coefficients and circular-polarization combination on 2026-10-24}
 }

@@ -1,0 +1,21 @@
+{
+  "docs/assets/cpu_research/cpu-moving-echo-pilot/report.json": "3c2f49c0e7c426260a8ca9850a7ceb04d226a0561f197393b24fba2ea49a1375",
+  "docs/assets/cpu_research/cpu-moving-echo-pilot/audit.json": "280c4a37834fde521debd6e3c1e50392774eac09a0cdc4803eb48db19bb1c766",
+  "docs/assets/cpu_research/cpu-accelerating-echo-pilot/report.json": "8f723a2b8a1768b27cb4f6ca5138ae52f1924713158f311e04fb6ed18ff557ae",
+  "docs/assets/cpu_research/cpu-accelerating-echo-pilot/audit.json": "1694585f74d3e55773a6f6b64c54043ae2aa8dd6333973cadf4d432b056ce995",
+  "docs/assets/cpu_research/cpu-accelerating-echo-pilot/summary.png": "aea1d663746a1364e41e99002c54f37065b6eced918237412e4351affae1bf67",
+  "docs/assets/cpu_research/cpu-echo-sign-reversal/report.json": "4a303e2e5cefe3b539d04874efa101a4b8ac624dd9abe133cb7c431bca217908",
+  "docs/assets/cpu_research/cpu-echo-sign-reversal/audit.json": "c4858e82c44818d05068bfb75559d5c7d37778af1b732d3098140aa73c1c445f",
+  "docs/assets/cpu_research/cpu-echo-sign-reversal/summary.png": "c775662b7da2148df9b27e783fffb4133435b00c2faaf1bdec33623df162424f",
+  "docs/assets/cpu_research/cpu-relative-drift-pilot/report.json": "8c16489417b92418a824348af3c686500b0ddf15d708f6a1d60e343b470b57df",
+  "docs/assets/cpu_research/cpu-relative-drift-pilot/audit.json": "440e362ac229d8793ec36df86478949d78c7c9f7b2635d962a25bb9b19759729",
+  "docs/assets/cpu_research/cpu-relative-drift-pilot/summary.png": "09064890a7d6eb7a9fdd9fa7bc1b8ec2b09ac9d0f97274d5b9cdd79c88cd90de",
+  "docs/assets/cpu_research/cpu-relative-drift-pilot/timing.json": "dd2be89cb44f2d2c77e2afade53fe66beae69778315fb79812f75bc0cc00bf54",
+  "docs/assets/cpu_research/cpu-relative-drift-search/report.json": "d43bc0433e9262a217509e207f3ca598f61d18cf29314e9f5b994d0915862b43",
+  "docs/assets/cpu_research/cpu-relative-drift-search/audit.json": "09ca22a54b99c0cd5dd0adb2961d2fda4a9b97563d8734430cdcba1adf236f94",
+  "docs/assets/cpu_research/cpu-relative-drift-search/summary.png": "826d6bbb9ab08a4d7f69f647c114fe9339f64c9e672e70dcd323634c85da5997",
+  "docs/assets/cpu_research/cpu-window-drift-search/report.json": "b0ba06f981588d2d1e85510b1cf661f661d5bfdd240a1f8b41ec6ea4878b615d",
+  "docs/assets/cpu_research/cpu-window-drift-search/audit.json": "09ca22a54b99c0cd5dd0adb2961d2fda4a9b97563d8734430cdcba1adf236f94",
+  "docs/assets/cpu_research/cpu-window-drift-search/summary.png": "b69e7148369320bbb44a176230155c8605470044791f0a2331612e8ef4c8aac0",
+  "docs/assets/cpu_research/cpu-moving-echo-pilot/comparison.png": "36fa8585f6c9f3568f82b80a120bdd7e6911716468b5c4b2b54137d0dd09d9b4"
+}

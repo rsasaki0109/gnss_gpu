@@ -1,0 +1,38 @@
+{
+  "checked_date": "2026-10-24",
+  "rain_attenuation": {
+    "standard": "ITU-R P.838-3 (2005), specific attenuation model for rain",
+    "standard_url": "https://www.itu.int/rec/R-REC-P.838-3-200503-I/en",
+    "review_boundary": "Numerical frequency-fit coefficients and circular-polarization combination checked against the pinned public reference implementation; primary ITU PDF not downloaded or claimed reviewed.",
+    "reference_implementation": "ITU-Rpy 0.4.0",
+    "commit": "094abb618c2a7a8cc145e93940f4571650bc2cf5",
+    "source_url": "https://raw.githubusercontent.com/inigodelportillo/ITU-Rpy/094abb618c2a7a8cc145e93940f4571650bc2cf5/itur/models/itu838.py",
+    "source_sha256": "b25bf4d9765e65cace788c3204871e2ac53c6167349e168eed19d218f9ae1a1a",
+    "reviewed_component": "class _ITU838_3_, rain_specific_attenuation_coefficients; frequency fits kH/kV/alphaH/alphaV, tau=45 degrees circular case",
+    "license": "MIT, Copyright (c) 2016 Inigo del Portillo, Massachusetts Institute of Technology",
+    "license_url": "https://raw.githubusercontent.com/inigodelportillo/ITU-Rpy/094abb618c2a7a8cc145e93940f4571650bc2cf5/LICENSE.txt",
+    "license_sha256": "0ecf960450c6fce43db8dc6d3604a3a2560d382dfa93847801e9bd09a301b428",
+    "notice": "itu_rpy_notice.txt",
+    "formula": "gamma_dB_per_km = k * R_mm_per_hour ** alpha; A_dB = gamma * rain_path_km; voltage factor = 10 ** (-A_dB/20)",
+    "l1_anchor": {"frequency_hz": 1575420000, "k": 0.000056009072377142174, "alpha": 0.9567177715408957, "gamma_at_100_mm_h_db_per_km": 0.004588744986528188},
+    "limits": "Uniform prescribed rain slab, scalar circular-polarization attenuation, no stochastic rain cells, P.618 exceedance/time-percentage prediction, rain phase/group delay or depolarization. Reflected rays use the same scalar approximation."
+  },
+  "wet_delay_residual": {
+    "model": "Signed actual-minus-applied neutral wet-delay residual, constant refractivity contrast in a finite flat slab; not a humidity retrieval or rainfall relation",
+    "derivation": "delta(n-1)=delta_ZWD/(top-bottom); excess path=delta(n-1)*segment_length_inside_slab. Full straight-ray crossings give delta_ZWD/sin(elevation). Differentiate finite slab clipping for path rate; reflected paths sum both legs using the moving specular-point derivative.",
+    "iq_application": "Same nondispersive excess range added to code and carrier; derivative added to their rates/Doppler. Geometric ranges/rates and inverse-range amplitude remain geometric.",
+    "signed_residuals_m": [-0.3, -0.1, 0, 0.1, 0.3],
+    "parameter_status": "Illustrative correction-error sensitivity levels; negative means over-correction, not negative physical water vapour. No empirical weather calibration or probability distribution.",
+    "contextual_reference": "Previously reviewed Sanwale et al. arXiv:2605.01553v1 Eq. (7) separates geometric and atmospheric delay. The flat residual slab and analytic derivatives here are our own geometry model, not a reproduced atmospheric mapping algorithm.",
+    "limits": "No bending, curved-Earth mapping, Niell/GMF coefficients, time evolution or horizontal wet gradients; common nominal atmosphere is assumed removed, only residual is injected. No antenna wetting."
+  },
+  "wet_wall": {
+    "model": "Planar air / homogeneous lossy water film / semi-infinite substrate; coherent two-interface Fresnel composition",
+    "derivation": "Separate s/p interface reflection coefficients with conserved tangential wavevector; r=(r01+r12*exp(-2j*k0*q1*d))/(1+r01*r12*exp(-2j*k0*q1*d)); existing circular receive-basis composition. In wall IQ multiply by exp(+2j*k0*cos(theta)*d) to reference the unchanged substrate plane while film replaces air.",
+    "water_relative_permittivity": [80, -8],
+    "parameter_status": "Explicit illustrative assumed bulk complex permittivity, not measured wet concrete, not a temperature-dependent model or fitted rain experiment",
+    "film_depths_m": [0, 0.0001, 0.001],
+    "rainfall_to_film_mapping": "None: rate and thickness are independent sensitivity controls, including wet-after-rain cases",
+    "limits": "Uniform smooth film only; no droplets, roughness, porosity/infiltration, patchy wetness, wet antenna or radome"
+  }
+}

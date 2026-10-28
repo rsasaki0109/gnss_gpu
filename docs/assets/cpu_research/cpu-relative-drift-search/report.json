@@ -1,0 +1,83 @@
+{
+  "cells": [
+    {
+      "initial_doppler_hz": 0.7,
+      "relative_drift_hz_s": 0.0,
+      "count": 2,
+      "materially_lower_loss": 0,
+      "median_relative_loss_improvement": -1.5545650258333837e-15,
+      "original_median_absolute_error_m": 0.05205720004790171,
+      "broad_median_absolute_error_m": 0.052057419064881705,
+      "broad_max_absolute_error_m": 0.0578416803173817,
+      "broad_unavailable": 0,
+      "broad_nonconverged": 0,
+      "median_absolute_drift_error_hz_s": 0.0508145990146953
+    },
+    {
+      "initial_doppler_hz": 0.7,
+      "relative_drift_hz_s": -2.0,
+      "count": 16,
+      "materially_lower_loss": 10,
+      "median_relative_loss_improvement": 0.001818771592632054,
+      "original_median_absolute_error_m": 3.1097427739727843,
+      "broad_median_absolute_error_m": 0.8530599950795461,
+      "broad_max_absolute_error_m": 3.5126516335098663,
+      "broad_unavailable": 0,
+      "broad_nonconverged": 0,
+      "median_absolute_drift_error_hz_s": 0.35498514127074254
+    },
+    {
+      "initial_doppler_hz": 0.7,
+      "relative_drift_hz_s": 2.0,
+      "count": 2,
+      "materially_lower_loss": 0,
+      "median_relative_loss_improvement": 0.0,
+      "original_median_absolute_error_m": 0.040024845388923466,
+      "broad_median_absolute_error_m": 0.040024845388923466,
+      "broad_max_absolute_error_m": 0.050907313229031026,
+      "broad_unavailable": 0,
+      "broad_nonconverged": 0,
+      "median_absolute_drift_error_hz_s": 0.04260717734054109
+    },
+    {
+      "initial_doppler_hz": -0.7,
+      "relative_drift_hz_s": 0.0,
+      "count": 2,
+      "materially_lower_loss": 0,
+      "median_relative_loss_improvement": -9.401154305179653e-16,
+      "original_median_absolute_error_m": 0.06801463701188493,
+      "broad_median_absolute_error_m": 0.06801403556342497,
+      "broad_max_absolute_error_m": 0.07926403018668468,
+      "broad_unavailable": 0,
+      "broad_nonconverged": 0,
+      "median_absolute_drift_error_hz_s": 0.024148925590005463
+    },
+    {
+      "initial_doppler_hz": -0.7,
+      "relative_drift_hz_s": -2.0,
+      "count": 2,
+      "materially_lower_loss": 0,
+      "median_relative_loss_improvement": 0.0,
+      "original_median_absolute_error_m": 0.07717759802664034,
+      "broad_median_absolute_error_m": 0.07717759802664034,
+      "broad_max_absolute_error_m": 0.09650642688214439,
+      "broad_unavailable": 0,
+      "broad_nonconverged": 0,
+      "median_absolute_drift_error_hz_s": 0.03828304315530673
+    },
+    {
+      "initial_doppler_hz": -0.7,
+      "relative_drift_hz_s": 2.0,
+      "count": 16,
+      "materially_lower_loss": 7,
+      "median_relative_loss_improvement": 0.0,
+      "original_median_absolute_error_m": 3.017981436032442,
+      "broad_median_absolute_error_m": 2.867196657380159,
+      "broad_max_absolute_error_m": 3.3244292254843817,
+      "broad_unavailable": 0,
+      "broad_nonconverged": 0,
+      "median_absolute_drift_error_hz_s": 1.2625037051465466
+    }
+  ],
+  "scope": "Retrospective diagnosis: all32 zero-crossing cases plus first2 replicas of each other cell. No held-out claim, significance test or global optimum proof."
+}

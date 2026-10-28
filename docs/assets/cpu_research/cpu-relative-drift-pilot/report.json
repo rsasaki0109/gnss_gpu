@@ -1,0 +1,197 @@
+{
+  "cells": [
+    {
+      "initial_doppler_hz": 0.7,
+      "relative_drift_hz_s": 0.0,
+      "models": {
+        "common_drift": {
+          "successes": 16,
+          "attempts": 16,
+          "success_exact_95": [
+            0.7940927857921769,
+            1.0
+          ],
+          "unavailable": 0,
+          "available_large_errors": 0,
+          "median_absolute_raw_error_m": 0.0968849669555986,
+          "max_absolute_raw_error_m": 0.39973295534050696
+        },
+        "relative_drift": {
+          "successes": 16,
+          "attempts": 16,
+          "success_exact_95": [
+            0.7940927857921769,
+            1.0
+          ],
+          "unavailable": 0,
+          "available_large_errors": 0,
+          "median_absolute_raw_error_m": 0.09650257052285892,
+          "max_absolute_raw_error_m": 0.3970475967614908
+        }
+      },
+      "median_paired_absolute_error_change_m": -0.00020386454977307927,
+      "median_absolute_relative_drift_error_hz_s": 0.022449990258063705
+    },
+    {
+      "initial_doppler_hz": 0.7,
+      "relative_drift_hz_s": -2.0,
+      "models": {
+        "common_drift": {
+          "successes": 16,
+          "attempts": 16,
+          "success_exact_95": [
+            0.7940927857921769,
+            1.0
+          ],
+          "unavailable": 0,
+          "available_large_errors": 0,
+          "median_absolute_raw_error_m": 3.22014390437909,
+          "max_absolute_raw_error_m": 3.6167823420151963
+        },
+        "relative_drift": {
+          "successes": 16,
+          "attempts": 16,
+          "success_exact_95": [
+            0.7940927857921769,
+            1.0
+          ],
+          "unavailable": 0,
+          "available_large_errors": 0,
+          "median_absolute_raw_error_m": 3.1097427739727843,
+          "max_absolute_raw_error_m": 3.5126516335098663
+        }
+      },
+      "median_paired_absolute_error_change_m": -0.11459908245736239,
+      "median_absolute_relative_drift_error_hz_s": 1.3004343586748186
+    },
+    {
+      "initial_doppler_hz": 0.7,
+      "relative_drift_hz_s": 2.0,
+      "models": {
+        "common_drift": {
+          "successes": 16,
+          "attempts": 16,
+          "success_exact_95": [
+            0.7940927857921769,
+            1.0
+          ],
+          "unavailable": 0,
+          "available_large_errors": 0,
+          "median_absolute_raw_error_m": 0.20682202305276148,
+          "max_absolute_raw_error_m": 0.44226752121905655
+        },
+        "relative_drift": {
+          "successes": 16,
+          "attempts": 16,
+          "success_exact_95": [
+            0.7940927857921769,
+            1.0
+          ],
+          "unavailable": 0,
+          "available_large_errors": 0,
+          "median_absolute_raw_error_m": 0.09641391001798169,
+          "max_absolute_raw_error_m": 0.38717445612374946
+        }
+      },
+      "median_paired_absolute_error_change_m": -0.15508967936936885,
+      "median_absolute_relative_drift_error_hz_s": 0.026249553877419562
+    },
+    {
+      "initial_doppler_hz": -0.7,
+      "relative_drift_hz_s": 0.0,
+      "models": {
+        "common_drift": {
+          "successes": 16,
+          "attempts": 16,
+          "success_exact_95": [
+            0.7940927857921769,
+            1.0
+          ],
+          "unavailable": 0,
+          "available_large_errors": 0,
+          "median_absolute_raw_error_m": 0.09204330226392002,
+          "max_absolute_raw_error_m": 0.33080332556984104
+        },
+        "relative_drift": {
+          "successes": 16,
+          "attempts": 16,
+          "success_exact_95": [
+            0.7940927857921769,
+            1.0
+          ],
+          "unavailable": 0,
+          "available_large_errors": 0,
+          "median_absolute_raw_error_m": 0.092191401511282,
+          "max_absolute_raw_error_m": 0.3309245489446144
+        }
+      },
+      "median_paired_absolute_error_change_m": 4.7180587244399774e-05,
+      "median_absolute_relative_drift_error_hz_s": 0.016087885733189027
+    },
+    {
+      "initial_doppler_hz": -0.7,
+      "relative_drift_hz_s": -2.0,
+      "models": {
+        "common_drift": {
+          "successes": 16,
+          "attempts": 16,
+          "success_exact_95": [
+            0.7940927857921769,
+            1.0
+          ],
+          "unavailable": 0,
+          "available_large_errors": 0,
+          "median_absolute_raw_error_m": 0.20793231075896018,
+          "max_absolute_raw_error_m": 0.418241272923094
+        },
+        "relative_drift": {
+          "successes": 16,
+          "attempts": 16,
+          "success_exact_95": [
+            0.7940927857921769,
+            1.0
+          ],
+          "unavailable": 0,
+          "available_large_errors": 0,
+          "median_absolute_raw_error_m": 0.10542514983320848,
+          "max_absolute_raw_error_m": 0.3716277117150739
+        }
+      },
+      "median_paired_absolute_error_change_m": -0.15582573406999656,
+      "median_absolute_relative_drift_error_hz_s": 0.012895435811850597
+    },
+    {
+      "initial_doppler_hz": -0.7,
+      "relative_drift_hz_s": 2.0,
+      "models": {
+        "common_drift": {
+          "successes": 16,
+          "attempts": 16,
+          "success_exact_95": [
+            0.7940927857921769,
+            1.0
+          ],
+          "unavailable": 0,
+          "available_large_errors": 0,
+          "median_absolute_raw_error_m": 3.1305671454776807,
+          "max_absolute_raw_error_m": 3.4638112277000626
+        },
+        "relative_drift": {
+          "successes": 16,
+          "attempts": 16,
+          "success_exact_95": [
+            0.7940927857921769,
+            1.0
+          ],
+          "unavailable": 0,
+          "available_large_errors": 0,
+          "median_absolute_raw_error_m": 3.017981436032442,
+          "max_absolute_raw_error_m": 3.3684437196115353
+        }
+      },
+      "median_paired_absolute_error_change_m": -0.10582407127926396,
+      "median_absolute_relative_drift_error_hz_s": 1.3861899162728115
+    }
+  ],
+  "scope": "16 fresh paired replicas across6cells. Known two-path order, fixed old weights. Exploratory, no hypothesis test, pointwise intervals. Not model-selection validation."
+}

@@ -1,0 +1,135 @@
+{
+  "cells": [
+    {
+      "mode": "fixed_code",
+      "relative_doppler_hz": 0.0,
+      "attempts": 16,
+      "successes": 16,
+      "success_exact_95": [
+        0.7940927857921769,
+        1.0
+      ],
+      "unavailable": 0,
+      "available_large_errors": 0,
+      "median_absolute_raw_error_m": 1.1264530826697194
+    },
+    {
+      "mode": "fixed_code",
+      "relative_doppler_hz": 0.7,
+      "attempts": 16,
+      "successes": 16,
+      "success_exact_95": [
+        0.7940927857921769,
+        1.0
+      ],
+      "unavailable": 0,
+      "available_large_errors": 0,
+      "median_absolute_raw_error_m": 0.0982992640387131
+    },
+    {
+      "mode": "fixed_code",
+      "relative_doppler_hz": 7.0,
+      "attempts": 16,
+      "successes": 16,
+      "success_exact_95": [
+        0.7940927857921769,
+        1.0
+      ],
+      "unavailable": 0,
+      "available_large_errors": 0,
+      "median_absolute_raw_error_m": 0.15570110197031728
+    },
+    {
+      "mode": "fixed_code",
+      "relative_doppler_hz": -7.0,
+      "attempts": 16,
+      "successes": 16,
+      "success_exact_95": [
+        0.7940927857921769,
+        1.0
+      ],
+      "unavailable": 0,
+      "available_large_errors": 0,
+      "median_absolute_raw_error_m": 0.17992093389961522
+    },
+    {
+      "mode": "moving_code",
+      "relative_doppler_hz": 0.0,
+      "attempts": 16,
+      "successes": 16,
+      "success_exact_95": [
+        0.7940927857921769,
+        1.0
+      ],
+      "unavailable": 0,
+      "available_large_errors": 0,
+      "median_absolute_raw_error_m": 1.1264530826697194
+    },
+    {
+      "mode": "moving_code",
+      "relative_doppler_hz": 0.7,
+      "attempts": 16,
+      "successes": 16,
+      "success_exact_95": [
+        0.7940927857921769,
+        1.0
+      ],
+      "unavailable": 0,
+      "available_large_errors": 0,
+      "median_absolute_raw_error_m": 0.09824758647025036
+    },
+    {
+      "mode": "moving_code",
+      "relative_doppler_hz": 7.0,
+      "attempts": 16,
+      "successes": 16,
+      "success_exact_95": [
+        0.7940927857921769,
+        1.0
+      ],
+      "unavailable": 0,
+      "available_large_errors": 0,
+      "median_absolute_raw_error_m": 0.16081701093487114
+    },
+    {
+      "mode": "moving_code",
+      "relative_doppler_hz": -7.0,
+      "attempts": 16,
+      "successes": 16,
+      "success_exact_95": [
+        0.7940927857921769,
+        1.0
+      ],
+      "unavailable": 0,
+      "available_large_errors": 0,
+      "median_absolute_raw_error_m": 0.19126231446272834
+    }
+  ],
+  "paired_changes": [
+    {
+      "relative_doppler_hz": 0.0,
+      "gains": 0,
+      "losses": 0,
+      "max_absolute_range_estimate_change_m": 0.0
+    },
+    {
+      "relative_doppler_hz": 0.7,
+      "gains": 0,
+      "losses": 0,
+      "max_absolute_range_estimate_change_m": 0.013930191596357416
+    },
+    {
+      "relative_doppler_hz": 7.0,
+      "gains": 0,
+      "losses": 0,
+      "max_absolute_range_estimate_change_m": 0.14500279361731028
+    },
+    {
+      "relative_doppler_hz": -7.0,
+      "gains": 0,
+      "losses": 0,
+      "max_absolute_range_estimate_change_m": 0.12077463042438161
+    }
+  ],
+  "scope": "Exploratory16 shared replicas,known two-path order,49dBHz,800ms. Existing fixed-code receiver unchanged. Midpoint gap is descriptive,not the truth target for direct delay. No significance test or pooled independent sample claim."
+}
