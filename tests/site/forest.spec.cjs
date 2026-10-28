@@ -347,3 +347,18 @@ test("published extinction reference retains bare-crown loss and survives a capt
   expect(hits).toBeGreaterThan(0);expect(route.cases.every(c=>c.observations.every(o=>o.sigma===route.settings.sigma))).toBe(true);
   await page.locator("#route-results").screenshot({path:testInfo.outputPath("reference-route-plots.png")});  await page.screenshot({path:testInfo.outputPath("reference-route.png"),fullPage:true});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(errors).toEqual([]);
 });
+
+test('environment comparison runs three paired conditions and exports captured results',async({page},testInfo)=>{
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto('forest-comparison.html');await expect(page.locator('#comparison')).toHaveAttribute('data-state','idle');
+  await page.locator('#run').click();await expect(page.locator('#comparison')).toHaveAttribute('data-state','ready');
+  await expect(page.locator('#summary tr')).toHaveCount(3);await expect(page.locator('#channels tr')).not.toHaveCount(0);
+  const pending=page.waitForEvent('download');await page.locator('#save').click();
+  const result=JSON.parse(fs.readFileSync(await (await pending).path(),'utf8'));expect(result.epochs).toHaveLength(41);expect(result.source.sha256).toHaveLength(64);
+  await page.locator('#epoch').fill('40');await expect(page.locator('#time')).toHaveText('+1200秒');
+  await page.locator('#wet-loss').selectOption('0');await expect(page.locator('#stale')).toBeVisible();
+  await page.locator('#run').click();await expect(page.locator('#comparison')).toHaveAttribute('data-state','ready');await expect(page.locator('#stale')).toBeHidden();
+  const rows=await page.locator('#summary tr').allTextContents();expect(rows[1].replace('森林','')).toBe(rows[2].replace('濡れた森林',''));
+  expect(errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.screenshot({path:testInfo.outputPath('environment-comparison.png'),fullPage:true});
+});
