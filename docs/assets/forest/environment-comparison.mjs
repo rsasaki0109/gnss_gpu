@@ -32,7 +32,7 @@ function normal(seed,seconds,id){
   const random=randomSequence(key);
   return Math.sqrt(-2*Math.log(Math.max(Number.MIN_VALUE,random())))*Math.cos(2*Math.PI*random());
 }
-export function compareEpoch({forest,receiver,signals,seconds,seed=7,wetLoss=.3,threshold=30}){
+export function prepareEpoch({forest,receiver,signals,seconds}){
   const open={...forest,trees:[],count:0};
   const channels=signals.filter(s=>/^G\d+$/.test(s.id)).map(s=>{
     const delta=s.sourceENU.map((v,i)=>v-receiver[i]),direction=delta.map(v=>v/Math.hypot(...delta));
@@ -40,8 +40,12 @@ export function compareEpoch({forest,receiver,signals,seconds,seed=7,wetLoss=.3,
     const dry=traceForest(forest,receiver,direction,options),clear=traceForest(open,receiver,direction,options);
     return {id:s.id,sourceENU:s.sourceENU,azimuth:s.azimuth,elevation:s.elevation,canopyPathM:dry.canopyPath,
       dryLossDb:dry.canopyLoss,blocked:dry.directRelativeDb===null,terrainBlocked:clear.directRelativeDb===null,
-      normalDraw:normal(seed,seconds,s.id)};
+      };
   });
+  return {seconds,receiver,channels};
+}
+export function evaluateEpoch({seconds,receiver,channels}, {seed=7,wetLoss=.3,threshold=30}={}){
+  channels=channels.map(c=>({...c,normalDraw:normal(seed,seconds,c.id)}));
   return {seconds,cases:CONDITIONS.map(condition=>{
     const rows=channels.map(c=>{
       const blocked=condition==='open'?c.terrainBlocked:c.blocked;
@@ -57,6 +61,7 @@ export function compareEpoch({forest,receiver,signals,seconds,seed=7,wetLoss=.3,
       verticalErrorM:fit.position?fit.position[2]-receiver[2]:null};
   })};
 }
+export function compareEpoch(input){return evaluateEpoch(prepareEpoch(input),input);}
 // Shared catalogue keeps map markers, exports and worker receiver positions identical.
 export function comparisonLocations(forest=generateForest()){
   return [{id:'trail',label:'林道の中央',receiver:forestReceiver(600)},...forest.trees.map((tree,i)=>({

@@ -50,3 +50,33 @@ test('location catalogue preserves original receiver and reproduces the T062 out
   assert.deepEqual(r.epochs.filter(e=>e.cases[2].status!=='solution').map(e=>e.seconds),[720,750,780,810,840,870]);
   assert.throws(()=>runComparison(scene,{location:'T999'}),RangeError);
 });
+
+test('sensitivity grid reuses geometry and agrees with individual runs',async()=>{
+  const {sensitivityStudy}=await import('../../docs/assets/forest/sensitivity.mjs'),{runComparison}=await modulePromise,progress=[];
+  const study=sensitivityStudy(scene,{location:'T062',seed:7},p=>progress.push(p));
+  assert.equal(study.cells.length,16);assert.equal(progress.filter(p=>p.phase==='geometry').length,41);
+  assert.deepEqual(study.settings.seeds,[7,8,9,10,11,12,13,14]);
+  for(const threshold of [30,35,40]){
+    const c=study.cells.find(c=>c.threshold===threshold&&c.wetLoss===.6);
+    for(const seed of [7,14]){
+      const expected=runComparison(scene,{location:'T062',seed,threshold,wetLoss:.6});
+      for(let i=0;i<3;i++){
+        const actual=c.runs.find(r=>r.seed===seed).conditions[i];
+        assert.equal(actual.available,expected.summary[i].available);assert.equal(actual.horizontalP95M,expected.summary[i].horizontalP95M);
+        assert.deepEqual(actual.failedSeconds,expected.epochs.filter(e=>e.cases[i].status!=='solution').map(e=>e.seconds));
+      }
+    }
+    const values=c.runs.map(r=>r.conditions[2].horizontalP95M).sort((a,b)=>a-b);
+    assert.equal(c.summary[2].medianSeedP95M,(values[3]+values[4])/2);
+  }
+  assert.deepEqual([30,35,40].map(t=>study.cells.find(c=>c.threshold===t&&c.wetLoss===.6).summary[2].minAvailable),[41,35,24]);
+  for(const c of study.cells.filter(c=>c.wetLoss===0))for(const r of c.runs)assert.deepEqual({...r.conditions[1],condition:'wet'},r.conditions[2]);
+});
+
+test('sensitivity never imputes missing solutions and records wrapped seeds',async()=>{
+  const {sensitivityStudy}=await import('../../docs/assets/forest/sensitivity.mjs');
+  const r=sensitivityStudy({...scene,navigation:[]},{seed:4294967295});
+  assert.deepEqual(r.settings.seeds,[4294967295,0,1,2,3,4,5,6]);
+  for(const c of r.cells)for(const s of c.summary){assert.equal(s.minAvailable,0);assert.equal(s.medianSeedP95M,null);assert.equal(s.minSeedP95M,null);assert.equal(s.maxSeedP95M,null);assert.equal(s.seedsWithSolution,0);}
+  assert.throws(()=>sensitivityStudy(scene,{seed:-1}),RangeError);
+});

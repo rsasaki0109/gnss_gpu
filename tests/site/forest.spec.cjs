@@ -384,3 +384,20 @@ test('environment locations preserve pinned conditions and expose satellite-shor
   await page.locator('#outage-example').click();await expect(page.locator('#wet-loss')).toHaveValue('.6');await expect(page.locator('#threshold')).toHaveValue('35');
   expect(errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
+
+test('environment sensitivity grid exports all seeds and applies a captured cell',async({page},testInfo)=>{
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto('forest-comparison.html');await expect(page.locator('#comparison')).toHaveAttribute('data-state','idle');
+  await page.locator('#outage-example').click();await page.locator('#sensitivity-run').click();
+  await expect(page.locator('#sensitivity')).toHaveAttribute('data-state','ready',{timeout:30000});
+  await expect(page.locator('#sensitivity-grid button')).toHaveCount(16);
+  const cell=page.locator('#sensitivity-grid [data-threshold="40"][data-wet-loss="0.6"]');await expect(cell).toContainText('24/41');
+  const pending=page.waitForEvent('download');await page.locator('#sensitivity-save').click();
+  const result=JSON.parse(fs.readFileSync(await (await pending).path(),'utf8'));expect(result.cells).toHaveLength(16);expect(result.settings.seeds).toEqual([7,8,9,10,11,12,13,14]);expect(result.source.sha256).toHaveLength(64);
+  await page.locator('#location').selectOption('trail');await expect(page.locator('#sensitivity-stale')).toBeVisible();
+  await cell.click();await expect(page.locator('#location')).toHaveValue('T062');await expect(page.locator('#threshold')).toHaveValue('40');await expect(page.locator('#wet-loss')).toHaveValue('.6');await expect(page.locator('#sensitivity-stale')).toBeHidden();
+  await page.locator('#run').click();await expect(page.locator('#comparison')).toHaveAttribute('data-state','ready');await expect(page.locator('#summary tr').nth(2)).toContainText('24/41');
+  await page.locator('#sensitivity').screenshot({path:testInfo.outputPath('sensitivity-grid.png')});
+  await page.locator('#sensitivity-run').click();await page.locator('#sensitivity-cancel').click();await expect(page.locator('#sensitivity')).toHaveAttribute('data-state','cancelled');await expect(page.locator('#sensitivity-save')).toBeDisabled();
+  expect(errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
