@@ -925,9 +925,35 @@ bash setup_deps.sh --python PY --skip-pip --skip-gtsam   # reuse an existing env
 
 The tc stage was exercised on 2026-10-06. The GTSAM stage replays the CMake
 options of the original build (Visual Studio 17 2022, Release, Python wrapper
-on, TBB/Boost features off) but has not yet been run on a clean machine. The original build used plain
+on, TBB/Boost features off). The original build used plain
 MSVC with the build tree on a data drive. It did not use vcpkg; a vcpkg/MKL
 attempt filled the system drive.
+
+### Docker (Linux, clean build)
+
+`docker/Dockerfile.rbpf_fgo` builds the same stack on Debian bookworm (GCC 12)
+and was run end to end on 2026-11-21:
+
+```bash
+docker build --build-arg JOBS=1 -f docker/Dockerfile.rbpf_fgo -t gnss-gpu-rbpf-fgo experiments/rbpf_fgo
+docker run --rm -v "$PWD":/work -v /path/to/PPC-Dataset/tokyo:/data:ro \
+  -w /work/experiments/rbpf_fgo -e RBPF_PYTHON=/usr/local/bin/python -e PPC_DATA_ROOT=/data \
+  gnss-gpu-rbpf-fgo bash run_ship.sh smoke 1 400
+```
+
+- GTSAM compiles with `-Werror` on GCC/Clang. GCC 12 reports a false-positive
+  `-Wuse-after-free` in the bundled Eigen, so `setup_deps.sh` keeps the
+  warnings but drops `-Werror` off Windows (code generation is unchanged).
+- Each GTSAM compile job needs several GB. `JOBS` sets the make parallelism
+  (`setup_deps.sh` used to pass a bare `--parallel`, i.e. unlimited jobs).
+- The GTSAM tree lives in a BuildKit cache mount, so an interrupted build
+  resumes on the next `docker build`; only the installed package and its
+  shared libraries are copied into the image.
+
+With this image, the WP56 ship configuration over three seeds (20260710–12)
+reproduced the published real-time correct FIX on all six runs: Tokyo
+62.9 / 82.2 / 78.6%, Nagoya 70.5 / 52.0 / 30.8% (wrong FIX at most 0.08%).
+PPC OFFICIAL was 85.5 / 93.7 / 92.3 / 77.2 / 57.5 / 83.7%.
 
 ## Running
 
