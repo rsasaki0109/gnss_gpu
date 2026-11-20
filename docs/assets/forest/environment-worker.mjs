@@ -1,2 +1,2 @@
-import {runComparison} from './environment-comparison.mjs?v=sensitivity-1';
+import {runComparison} from './environment-comparison.mjs?v=multi-gnss-1';
 self.onmessage=({data})=>{try{self.postMessage({result:runComparison(data.scene,data.settings,progress=>self.postMessage({progress}))});}catch(error){self.postMessage({error:error.message});}};

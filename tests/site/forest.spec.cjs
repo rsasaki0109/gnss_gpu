@@ -401,3 +401,23 @@ test('environment sensitivity grid exports all seeds and applies a captured cell
   await page.locator('#sensitivity-run').click();await page.locator('#sensitivity-cancel').click();await expect(page.locator('#sensitivity')).toHaveAttribute('data-state','cancelled');await expect(page.locator('#sensitivity-save')).toBeDisabled();
   expect(errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
+
+test('environment comparison pins GPS-only against five systems at the same outage',async({page},testInfo)=>{
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto('forest-comparison.html');await expect(page.locator('#comparison')).toHaveAttribute('data-state','idle');
+  await expect(page.locator('#systems')).toHaveValue('G');
+  await page.locator('#outage-example').click();await page.locator('#threshold').selectOption('40');
+  await page.locator('#run').click();await expect(page.locator('#comparison')).toHaveAttribute('data-state','ready');
+  await expect(page.locator('#summary tr').nth(2)).toContainText('24/41');await page.locator('#pin').click();
+  await page.locator('#systems').selectOption('GECJR');await expect(page.locator('#stale')).toBeVisible();
+  await page.locator('#run').click();await expect(page.locator('#comparison')).toHaveAttribute('data-state','ready');
+  await expect(page.locator('#capture')).toContainText('5システム');await expect(page.locator('#summary tr').nth(2)).toContainText('41/41');
+  await expect(page.locator('#location-comparison')).toBeVisible();await expect(page.locator('#pair-label')).toContainText('GPSのみ');
+  await expect(page.locator('#pair-rows tr').nth(2)).toContainText('24/41');await expect(page.locator('#pair-rows tr').nth(2)).toContainText('41/41');
+  for(const system of ['G','E','C','J','R'])await expect(page.locator('#channels td:first-child',{hasText:new RegExp(`^${system}[0-9]+$`)}).first()).toBeVisible();
+  const pending=page.waitForEvent('download');await page.locator('#save').click();const result=JSON.parse(fs.readFileSync(await (await pending).path(),'utf8'));
+  expect(result.settings.systems).toBe('GECJR');expect(result.pinnedComparison.settings.systems).toBe('G');expect(Object.keys(result.summary[2].meanUsedBySystem).sort()).toEqual(['C','E','G','J','R']);
+  await page.locator('#outage-example').click();await expect(page.locator('#systems')).toHaveValue('G');
+  await page.screenshot({path:testInfo.outputPath('forest-multi-gnss-comparison.png'),fullPage:true});
+  expect(errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
