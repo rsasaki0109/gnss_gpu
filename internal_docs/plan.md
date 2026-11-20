@@ -1,6 +1,6 @@
 # gnss_gpu 引き継ぎメモ
 
-**最終更新**: 2026-10-02 JST（docs 整合: §2 不整合の棚卸し、CONTRIBUTING lint、decisions.md 相互リンク）／2026-09-26 JST（repo hygiene: plan.md 再構成、decisions.md 未決定事項の棚卸し、result artifact policy の enforcement、`experiments/archive/`）
+**最終更新**: 2026-11-20 JST（§3 に 10/06–11/20 のトラックを追加: RB-FGO-PF WP43–61、exact-output 高速化、ブラウザ PLATEAU シミュレーション / v0.4.0、森林ラボ、CPU 研究 checkpoint、nightly full suite 復旧。§4 にサイト / シミュレーションの Next、§6 に dev 機の CUDA ビルド手順）／2026-10-02 JST（docs 整合: §2 不整合の棚卸し、CONTRIBUTING lint、decisions.md 相互リンク）／2026-09-26 JST（repo hygiene: plan.md 再構成、decisions.md 未決定事項の棚卸し、result artifact policy の enforcement、`experiments/archive/`）
 **対象**: 次に作業する coding agent（Claude / Codex / Cursor）
 **旧版**: 2026-04〜07 の研究ログ（PPC Phase 11–80、GSDC2023 MATLAB 等価、validation wave 詳細）は [`archive/plan_history_2026-04_to_2026-07.md`](archive/plan_history_2026-04_to_2026-07.md) に移動済み。他文書の「plan.md §B / §0 / Phase NN」参照は旧版を指す。
 
@@ -43,7 +43,7 @@
 
 ---
 
-## 3. トラック一覧（2026-07-03 → 09-26）
+## 3. トラック一覧（2026-07-03 → 11-20）
 
 | トラック | 期間 / PR | 状態 | 出典 |
 |---|---|---|---|
@@ -59,6 +59,12 @@
 | GPU onboarding CLI / run compare | 8/28, #167–#168 | 採用 | README |
 | UrbanNav data loop / PLATEAU / PF3D-BVH NLOS | 9/16, #169 + direct commits | per-particle 3DMA 不採用（D-037）、opt-in のみ残す | `decisions.md` D-037 |
 | Repo hygiene（artifact policy 強制、experiments 108 本 archive、`gnss_gpu.metrics` 抽出） | 9/26 | 完了（branch `agent/repo-hygiene-docs`） | このファイル, `results/ARTIFACT_POLICY.md`, `experiments/archive/README.md` |
+| RB-FGO-PF WP43–WP61（lineage 追跡、名古屋の誤 FIX、逆向きパス、実時間出力、アンサンブル、PLATEAU NLOS メンバー） | 10/6–10/18, #252 ほか | 実時間 6 run 平均 81.6%、アンサンブル + 3D 地図 86.3%（PPC OFFICIAL、§2）。WP61（3D 地図で候補位置を採点）は不採用 | `inuex35_tc_fgo_benchmark.md`, `decisions.md` D-042–D-060 |
+| exact-output 高速化（PF、BVH、信号シミュレーション、RB-FGO-PF） | 10/12–10/19, #236–#253 | 採用。出力が bit 一致する変更だけを入れ、棄却案は `benchmarks/probes/*_rejected_*.patch` に残す | `benchmarks/probes/`, `CHANGELOG.md` |
+| ブラウザ PLATEAU シミュレーション（Odaiba 実メッシュ、5 システム、受信強度比較、経路評価） | 10/21–10/23, #254–#278 | v0.4.0 として release（#279） | `RELEASE_NOTES_v0.4.0.md`, `docs/simulation.html` |
+| 森林ラボ（樹木遮蔽・地面反射・樹種と季節・葉の有無、開けた場所 / 乾いた森 / 濡れた樹冠の比較、感度マップ） | 10/23–10/29, #280–#288, #290–#292 | サイト公開。濡れた樹冠の損失は未較正の感度仮定、GPS のみ、測位は WLS のみ | `docs/forest.html`, `docs/forest-comparison.html`, `docs/forest_environment_comparison.md` |
+| CPU GNSS シミュレーション / 反射受信機研究 checkpoint | 10/28, #289 | 合成データのみ。実データや独立データでの性能は未主張、推定器は opt-in | `docs/cpu_research_milestone.md` |
+| 保守: nightly full suite 復旧、PF systematic リサンプルの修正 | 11/20 | full suite は 11/12 から毎晩 1,463 fail（製品の退行ではなく、テスト側の環境依存 6 ファイル）。systematic リサンプルの偏りは D-039 | このファイル §4 #14 / #17 |
 
 ---
 
@@ -107,6 +113,14 @@
 14. **PF device リサンプリング**（D-039）。(a) ~~既定 `megopolis` の切替~~（2026-10-03 完了: 正しい Megopolis B=60 を既定に、旧版は `megopolis_legacy`。PPC と UrbanNav Odaiba で評価）。(b) `pf_device_resample_systematic` の u0 二重除算バグ（FFBSi 系に影響、未修正）。(c) `_resample` が毎回同じ seed（PPC では効果なし）。(d) ホスト側 `ParticleFilter` の megopolis も同じ欠陥（未評価）。
 15. ~~README headline（Odaiba PF smoother 1.36 m / 4.11 m）の再現~~（2026-10-04 原因判明・解決: libgnsspp の `CorrectedMeasurement` に `prn` が無く、DD pseudorange / widelane / DD carrier が実データで一度も動いていなかった（Odaiba 0/12200 epoch）。gnssplusplus #557 で `prn` を公開し pin を develop `304798e7` に更新、DD 有効時に `prn` が無ければ即エラー。5 seed で SMTH P50 1.50 m / RMS 4.06 m、4 月の RMS と一致。`urbannav_pf_dd_satellite_ids_2026_10_04.md`）。以下は 2026-10-03 時点の誤った結論（記録として残す）: 再現不能。README を記録した `421d284` 自体でも今のデータでは SMTH P50 1.99 m / RMS 12.71 m で、gnss_gpu のコード変更は原因ではない。gnssplusplus の SPP 版は P50 を 0.3–0.7 m 動かすが RMS は説明しない。評価 epoch 数が 4 月 freeze の 12228 に対し現データでは常に 12184 で、4 月は別版の Odaiba データだった。4 月データと gnssplusplus pin `4932676` は手元に無く復元不能。README は現 main の値に更新済み（#191）。詳細: `resampler_ablation_urbannav_2026_10_03.md`。残作業: 公開サイト snapshot と demo を現データで再生成するか判断。
 16. **UrbanNav PF の RTK 欠落区間精度**（2026-10-04 着手）。RTK FIXED epoch で粒子群を fix まわりに引き直す `--rtk-anchor-pos` を追加（前向き・後ろ向き両方、既定 off）。5 seed で RTK + PF 穴埋めの <5 m は Odaiba 87.8→88.4%、Shinjuku 84.2→84.4%、穴の中の P50 は −0.4〜−0.7 m。限界は FIX を失った後の約 1 m/s のずれ（IMU 誘導の速度誤差とみられる）。同日追記: 原因は 10 Hz SPP 差分による方位補正（雑音が移動量を上回る）。`--rtk-anchor-heading`（FIX 区間の差分でのみ方位補正、他はジャイロ）+ `--sigma-pos 0.1` で、アンカー付き PF 単体が Odaiba <5 m 98.1% / <3 m 93.0% / RMS 1.26 m、Shinjuku 91.8% / 87.8% / 2.42 m（5 seed、RTKLIB は 86.6% / 69.0%、73.5% / 63.4%）。注意: σ_pos 0.1 はこの 2 ルートで選んだ値。σ_pos は 2 ルート間の交差確認で 0.05–0.1 が最適、保守側の 0.1 で named preset `urbannav_rtk_anchored`（`--rtk-anchor-pos` 必須）を追加。同日 PPC 6 route で held-out 確認（`ppc_pf_rtk_anchor_2026_10_04.md`）: Tokyo は再調整なしで改善が再現、Nagoya はジャイロバイアス 0.15 deg/s で長い欠落が崩れた。`--imu-speed-source doppler`（gnssplusplus #558 で Doppler / 衛星速度を公開、pin `9d89a58a`）と `--imu-gyro-bias-zupt` を追加し、preset `rtk_anchored_doppler` で 6 route 平均 <5 m 88.4%（anchor のみ 84.5%、RTK 単独 78.6%）。ZUPT の UrbanNav での悪化は方位ではなく停止中の漂い（stop σ 0.1 m/epoch）が原因と判明し、stop σ 0.01 + ZUPT を両 preset に入れて統一（Odaiba 5 seed: <1/<3/<5 m 80.7/98.0/98.1%、RMS 0.83 m、PPC 平均 <5 m 88.9%）。2026-10-05 PPC 5 seed で確認: 6 route 平均 <0.5/<1/<3/<5 m = 67.9/72.8/83.9/88.9%（anchor のみより全閾値 +4.3〜5.3 点、seed sd ≤ 0.4）。例外 nagoya run1（<5 m −1.2 点、RMS 6.8 m）。原因は Doppler 速度の外れ値（マルチパス 1 本で 30 m/s 級）で、残差最大の行を除く頑健 LS にして 6 route 平均 <5 m 90.4%（seed 42）、nagoya run1 は依然 anchor のみを 1.3 点下回る。nagoya run1 の残りは 15 s の受信断（測定ゼロ）: 1 回の predict で直線外挿 + dt 非依存の σ_pos で 73 m ずれて戻れなかった。IMU guide を区間内のジャイロ経路平均方向に（既定）、受信断後の σ 拡大 `--predict-gap-velocity-sigma` を opt-in で追加（nagoya run1 は改善するが Shinjuku で悪化）。残差判定・FLOAT による立て直しは不採用（記録のみ）。代わりに平滑化の前向き/後ろ向きを各アンカーからの時間で重み付け（`--smoother-anchor-weighting`、両 preset に追加）し、5 seed で <1 m が Odaiba +3.7 / Shinjuku +2.7 / PPC 平均 +2.1 点、PPC RMS は +0.26 m。UrbanNav Hong Kong 2019-04-28 は held-out に不適（8 分・1 周波 u-blox・基準局 30 s 間隔で RTK FIX 0）。公開サイトの snapshot は 2026-10-05 に現在値へ更新（入力 `experiments/results/urbannav_current_checkpoint.json`）。記録 `urbannav_pf_rtk_anchor_2026_10_04.md`。
+17. **nightly full suite（`full-suite.yml`）を緑に保つ**。PR gate ではないので、壊れても PR は通る。2026-11-12 から毎晩 1,463 fail だったのを 11-20 に復旧した。原因はすべてテスト側の環境依存で、(a) `benchmarks/pf_pool_normalize_cases.py` が存在しない `dist/` に一時ファイルを作っていた、(b) BVH grouped-directions の projection が作業ツリーのハッシュを見ていた（`bvh.h` は git では LF なので、autocrlf の Windows でしか一致しない）、(c) ネイティブ拡張なしで CUDA IQ 比較が走っていた、(d) bandlimited v2 の回帰テストが「v1 は 1e-14 の目的関数の同点で失敗する」ことを前提にしていた（BLAS が違うと v1 も収束する）。今後もハッシュで固定した比較は、作業ツリーではなく `benchmarks/probes/*_baseline_*`（`* -text`）のスナップショットを読むこと。CI と同じ条件で再現するには §6 の手順を使う。
+
+### サイト / シミュレーション
+
+18. **森林ラボのマルチ GNSS 化**。今は GPS のみで、都市シミュレーションの既定は 5 システム。森林下で衛星数と可用性がどう変わるかを見る。
+19. **濡れた樹冠の損失の較正**。今は未較正の感度仮定（`docs/forest_environment_comparison.md`）。文献値か実測で根拠を付けるまで、降雨量の予測としては出さない。
+20. **森林での搬送波 / RTK・PF**。今の森林比較の測位は WLS のみ。
+21. **CPU 反射受信機研究の再現**。手順を凍結したまま独立データで再現し、計算コストと null control を付ける（`docs/cpu_research_milestone.md` の次の milestone）。今の結果は合成データのみ。
 
 ---
 
@@ -136,4 +150,10 @@ gnss-gpu doctor
 gnss-gpu run --preset signal-acquisition
 ```
 
-CI（`.github/workflows/ci.yml`）: actionlint、ruff、repo path lint、commit message lint、artifact policy check、python smoke、wrapper smoke、site smoke（playwright）、CUDA import smoke。self-hosted CUDA runtime は `cuda-runtime-self-hosted.yml`（`workflow_dispatch`）。
+CI（`.github/workflows/ci.yml`）: actionlint、ruff（`ruff==0.15.7` に固定。新しい版は既定ルールが増えて既存コードが大量に引っかかる）、repo path lint、commit message lint、artifact policy check、python smoke、wrapper smoke、site smoke（playwright）、CUDA import smoke。self-hosted CUDA runtime は `cuda-runtime-self-hosted.yml`（`workflow_dispatch`）。2026-11-20 時点で self-hosted runner は登録されていない。nightly の full suite は `full-suite.yml`（ubuntu、Python 3.12、ネイティブ拡張なし）。
+
+Windows dev 機（RTX 5070 Laptop、sm_120）での CUDA ビルドとテスト（2026-11-20）:
+- Windows 側に nvcc は無い。WSL Ubuntu の `/usr/local/cuda-13.3` を使う（13.1 の nvcc は GCC 15 で compiler id 判定に失敗する）。
+- WSL の CUDA には cuFFT / cuRAND / cuSOLVER が入っておらず、sudo も使えない。venv に pip の `nvidia-curand nvidia-cufft nvidia-cusolver`（`nvidia/cu13/{include,lib}`）を入れ、`lib*.so.N` へのバージョン無しの symlink を `~/cuda-extra/lib` に作る。
+- configure: `cmake -S <repo> -B ~/build/gnss_gpu -DCMAKE_CUDA_ARCHITECTURES=120 -DCMAKE_CUDA_COMPILER=/usr/local/cuda-13.3/bin/nvcc -DCUDAToolkit_ROOT=/usr/local/cuda-13.3 -DCMAKE_LIBRARY_PATH=~/cuda-extra/lib -DCMAKE_CUDA_FLAGS="-isystem <cu13>/include" -DCMAKE_CXX_FLAGS="-isystem <cu13>/include" -Dpybind11_DIR=$(python -m pybind11 --cmakedir)`。できた `_*.so`（23 個）を `python/gnss_gpu/` にコピーし、`LD_LIBRARY_PATH=<cu13>/lib` で pytest を実行する。
+- nightly と同じ条件の確認: Python 3.12 の venv に `scripts/ci/requirements-full-suite.txt` を入れ、WSL の Linux FS へ LF で clone したブランチで `PYTHONPATH=python:. python -m pytest tests -q` を流す。`/mnt/c` の autocrlf チェックアウトではハッシュ系のテストが CI と違う結果になる。
