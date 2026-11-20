@@ -955,6 +955,23 @@ reproduced the published real-time correct FIX on all six runs: Tokyo
 62.9 / 82.2 / 78.6%, Nagoya 70.5 / 52.0 / 30.8% (wrong FIX at most 0.08%).
 PPC OFFICIAL was 85.5 / 93.7 / 92.3 / 77.2 / 57.5 / 83.7%.
 
+## WP62 per-basin graph probe (2026-11-21, negative)
+
+`basin_branch_probe.py` tests plan 5b (one FGO per top basin) offline. With
+`--env RBPF_WITNESS=1 --env RBPF_BRANCH_PROBE=1`, whenever the two heaviest
+basins compete it copies the witness smoother's ISAM2 twice, holds each
+basin's DD integers in one copy, feeds both the witness's factors for 15
+epochs and writes `runN_branch.csv` (one row per event, truth-labelled).
+`RBPF_BRANCH_EPOCHS`, `RBPF_BRANCH_MIN_MASS2`, `RBPF_BRANCH_COOLDOWN` and
+`RBPF_BRANCH_HOLD_SIGMA` tune it; `RBPF_BRANCH_DEBUG=1` prints branch
+failures. The reported output is unchanged with the probe on.
+
+On Nagoya 2/3 and Tokyo 1 (seed 20260710, 75 events) the branch fit picked
+the correct basin in 7 of 12 one-correct events against the PF's 10 of 12,
+20 of 40 completed events had neither basin correct, and 35 of 75 branches
+stopped on an indeterminate linear system. The approach is not pursued
+(D-061 in `internal_docs/decisions.md`).
+
 ## Running
 
 The data root defaults to the original workstation path; set `PPC_DATA_ROOT`

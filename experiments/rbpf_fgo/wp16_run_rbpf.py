@@ -660,6 +660,13 @@ def main() -> int:
     witness = (WitnessGtsamRtkTc(witness_nav, imu_data, pos0)
                if witness_nav is not None else None)
     witness_rbpf = RbpfFgo(RbpfConfig()) if witness is not None else None
+    # WP62 diagnostic: per-basin graph branches copied from the witness
+    # graph (basin_branch_probe.py); observational, off unless asked.
+    branch_probe = None
+    if witness is not None and int(os.environ.get('RBPF_BRANCH_PROBE', '0')):
+        from basin_branch_probe import BasinBranchProbe
+        branch_probe = BasinBranchProbe(
+            witness, args.out_dir / f"run{args.run}_branch.csv")
     print(f"RBPF: N={args.rb_n} K={args.rb_k} beta={args.rb_beta} "
           f"gamma*={args.rb_gamma} min_nb={args.rb_min_nb} "
           f"base_ar={args.run_base_ar} seed={rtk.rbpf.cfg.seed}")
@@ -741,6 +748,8 @@ def main() -> int:
         updated = rtk.last_valid_epoch != prev_valid
         week, tow = gn.time2gpst(obs.t)
         tow_t = _true_tow(tow)      # true time (== tow unless --reverse)
+        if branch_probe is not None and updated:
+            branch_probe.after_epoch(rtk, ne, tow_t)
         dr_ecef = None
         # WP59 P2_IMU_ONLY: a committed epoch without GNSS rows is reported
         # like a DR epoch, from the last reported position plus the graph's
@@ -1014,6 +1023,10 @@ def main() -> int:
                   f"ep {ne+1}", flush=True)
 
     elapsed = time.time() - t_start
+    if branch_probe is not None:
+        branch_probe.close()
+        print(f"WP62 branch probe: {branch_probe.n_events} events -> "
+              f"{args.out_dir / f'run{args.run}_branch.csv'}")
     pf = rtk.rbpf
     print(f"Done: {ne+1} synced epochs, {len(pos_rows)} committed "
           f"({n_fix} fix, {n_flt} float) in {elapsed:.1f}s "

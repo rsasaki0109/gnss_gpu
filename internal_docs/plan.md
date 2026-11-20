@@ -86,7 +86,7 @@
    - 計算量はほぼ増えず、CPU で 2.1 倍速。N = 256 も、追跡位置を重みに入れる `RBPF_TRACK=1`（1 エポック約 500 solve）も効かなかった。よって GPU 化はまだ精度面で正当化できない。
    - 残る損失の主因: run1 のトンネル（搬送波なし、約 15 pp）と、DD ペア 6–15 の区間（float が 1–2 m ずれ、真の basin の 1 エポック尤度が負ける）。後者は候補供給ではなく、マルチパス下の測定モデルの問題（`RBPF_DBG4` 診断）。
    - 作業環境: Linux で `experiments/rbpf_fgo/setup_deps.sh` を通した（GTSAM は 2 並列ビルド、4 並列では 16 GB でメモリ不足）。PPC データは公式 OneDrive の zip。
-5b. **RB-FGO-PF: top basin ごとの factor graph**（2026-10-07 時点で設計のみ、未着手。次エージェント向け。WP43 の lineage 追跡は位置だけの軽量版で、出力でのみ効いた）
+5b. ~~**RB-FGO-PF: top basin ごとの factor graph**~~（2026-11-21 WP62、D-061 で否定: witness グラフを `gtsam.ISAM2(other)` で分岐して basin の整数を入れても、因子誤差で正しい basin を選べたのは 7/12（PF は 10/12）。競合区間の半分は上位 2 basin がどちらも誤り。診断は `experiments/rbpf_fgo/basin_branch_probe.py`。以下は当初の設計メモ）
    - 狙い: 現状は共有 float FGO を 1 本だけ持ち、MAP basin の整数を hold として戻している（WP17。これが最大の改善源だった）。上位 basin それぞれに、自分の hold と履歴を持つ FGO を与える。
    - 分かっていること:
      - 位置だけを記憶する cluster shadow は 3 シードで −3.1 pp（WP42）。やるなら本物の graph が必要。
