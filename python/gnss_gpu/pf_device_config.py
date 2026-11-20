@@ -240,6 +240,7 @@ def init_pf_device_config(
     pf._state = pf._pf_device_create(pf.n_particles)
     pf._initialized = False
     pf._step = 0
+    pf._systematic_resample_count = 0
 
 
 def clone_pf_device_init_kwargs(source) -> dict:

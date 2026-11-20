@@ -91,6 +91,7 @@ class ParticleFilter:
         self._log_weights = None
         self._initialized = False
         self._step = 0
+        self._systematic_resample_count = 0
 
     def initialize(self, position_ecef, clock_bias=0.0, spread_pos=100.0,
                    spread_cb=1000.0):
@@ -127,6 +128,7 @@ class ParticleFilter:
 
         self._initialized = True
         self._step = 0
+        self._systematic_resample_count = 0
 
     def predict(self, velocity=None, dt=1.0):
         """Predict step with optional velocity.
@@ -200,9 +202,12 @@ class ParticleFilter:
                 self._px, self._py, self._pz, self._pcb,
                 self._log_weights, self.n_particles, 15, self.seed)
         else:
+            # Fresh offset per call (see ParticleFilterDevice._resample).
             self._pf_resample_systematic(
                 self._px, self._py, self._pz, self._pcb,
-                self._log_weights, self.n_particles, self.seed)
+                self._log_weights, self.n_particles,
+                self.seed + self._systematic_resample_count)
+            self._systematic_resample_count += 1
 
         # After resampling, reset to uniform weights (allocated by initialize())
         cast(np.ndarray, self._log_weights)[:] = 0.0

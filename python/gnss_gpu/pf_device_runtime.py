@@ -213,6 +213,7 @@ class ParticleFilterDeviceRuntime:
 
         self._initialized = True
         self._step = 0
+        self._systematic_resample_count = 0
         self._velocity_init_sigma = float(velocity_init_sigma)
 
     def predict(self, velocity=None, dt=1.0, sigma_pos=None, sigma_vel=None,
@@ -772,7 +773,13 @@ class ParticleFilterDeviceRuntime:
         elif self.resampling == "megopolis_legacy":
             self._pf_device_resample_megopolis(self._state, self.megopolis_iterations, self.seed)
         else:
-            self._pf_device_resample_systematic(self._state, self.seed)
+            # Systematic resampling needs a fresh offset per call; a fixed
+            # seed would reuse one offset for the whole run. Megopolis keeps
+            # self.seed so default-resampler results stay reproducible.
+            self._pf_device_resample_systematic(
+                self._state, self.seed + self._systematic_resample_count
+            )
+            self._systematic_resample_count += 1
 
     def resample(self):
         """Force one resampling step regardless of the current ESS.

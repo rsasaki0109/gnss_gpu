@@ -1,5 +1,6 @@
 #include "gnss_gpu/cuda_check.h"
 #include "gnss_gpu/particle_filter.h"
+#include "gnss_gpu/resample_offset.h"
 #include <thrust/device_vector.h>
 #include <thrust/scan.h>
 #include <curand_kernel.h>
@@ -147,9 +148,8 @@ void pf_resample_systematic(double* px, double* py, double* pz, double* pcb,
   thrust::device_ptr<double> cdf_ptr(d_cdf);
   thrust::inclusive_scan(w_ptr, w_ptr + n_particles, cdf_ptr);
 
-  // Step 6: Generate uniform random u0 on CPU
-  // Simple LCG from seed for u0 in [0, 1/N)
-  double u0 = (double)(seed % 1000000) / (double)(1000000 * n_particles);
+  // Step 6: Offset u0 in [0, 1); the kernel divides (u0 + i) by N.
+  double u0 = systematic_offset_from_seed(seed);
 
   // Step 7: Resample
   systematic_resample_kernel<<<grid, block>>>(d_cdf, d_px, d_py, d_pz, d_pcb,
