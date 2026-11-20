@@ -80,3 +80,42 @@ test('sensitivity never imputes missing solutions and records wrapped seeds',asy
   for(const c of r.cells)for(const s of c.summary){assert.equal(s.minAvailable,0);assert.equal(s.medianSeedP95M,null);assert.equal(s.minSeedP95M,null);assert.equal(s.maxSeedP95M,null);assert.equal(s.seedsWithSolution,0);}
   assert.throws(()=>sensitivityStudy(scene,{seed:-1}),RangeError);
 });
+
+test('multi-GNSS solver estimates one clock per system and needs 3 + systems sources',async()=>{
+  const {solveRanges}=await modulePromise,truth=[17,-24,6],clocks={G:31,E:-12,R:140};
+  const geometry=[[1,0,1],[-1,0,1],[0,1,1],[0,-1,1],[.2,.3,2],[.5,-.4,1.5],[-.3,.6,1.2]];
+  const ids=['G01','G02','E03','E04','R05','G06','E07'];
+  const observations=geometry.map((v,i)=>{const sourceENU=v.map(x=>x*2e7);return {id:ids[i],sourceENU,sigma:.3,
+    range:Math.hypot(...truth.map((t,j)=>t-sourceENU[j]))+clocks[ids[i][0]]};});
+  const fit=solveRanges(observations);assert.equal(fit.status,'solution');
+  assert.ok(Math.hypot(...fit.position.map((v,i)=>v-truth[i]))<1e-5);
+  for(const [s,c] of Object.entries(clocks))assert.ok(Math.abs(fit.clocksM[s]-c)<1e-5);
+  assert.equal(solveRanges(observations.slice(0,5)).status,'insufficient-satellites');
+  const gps=observations.filter(o=>o.id[0]==='G').concat([{...observations[0],id:'G09',sourceENU:[.4,.1,1.8].map(x=>x*2e7),
+    range:Math.hypot(...truth.map((t,j)=>t-[.4,.1,1.8][j]*2e7))+clocks.G}]);
+  const labelled=solveRanges(gps),unlabelled=solveRanges(gps.map(({id,...o})=>o));
+  assert.deepEqual(labelled,unlabelled);assert.equal(labelled.clocksM,undefined);
+});
+
+test('five systems keep GPS draws paired and fill the GPS-only wet-canopy outage',async()=>{
+  const {runComparison}=await modulePromise;
+  assert.deepEqual(runComparison(scene),runComparison(scene,{systems:'G'}));
+  const settings={location:'T062',wetLoss:.6,threshold:40},gps=runComparison(scene,{...settings,systems:'G'}),all=runComparison(scene,{...settings,systems:'GECJR'});
+  assert.deepEqual(gps.summary.map(s=>s.available),[41,41,24]);assert.deepEqual(all.summary.map(s=>s.available),[41,41,41]);
+  assert.equal(gps.settings.systems,'G');assert.equal(all.settings.systems,'GECJR');assert.equal(gps.summary[0].meanUsedBySystem,undefined);
+  assert.deepEqual(Object.keys(all.summary[2].meanUsedBySystem).sort(),['C','E','G','J','R']);
+  for(let e=0;e<41;e++)for(let i=0;i<3;i++){
+    const a=gps.epochs[e].cases[i].channels,b=all.epochs[e].cases[i].channels.filter(c=>c.id[0]==='G');
+    assert.deepEqual(b,a);
+  }
+  for(const s of all.summary)assert.ok(Math.abs(Object.values(s.meanUsedBySystem).reduce((x,y)=>x+y,0)-s.meanUsed)<1e-9);
+  assert.throws(()=>runComparison(scene,{systems:'GE'}),RangeError);
+});
+
+test('sensitivity grid records the satellite systems and matches individual multi-GNSS runs',async()=>{
+  const {sensitivityStudy}=await import('../../docs/assets/forest/sensitivity.mjs'),{runComparison}=await modulePromise;
+  const study=sensitivityStudy(scene,{location:'T062',seed:7,systems:'GECJR'});assert.equal(study.settings.systems,'GECJR');
+  const cell=study.cells.find(c=>c.threshold===40&&c.wetLoss===.6),expected=runComparison(scene,{location:'T062',seed:7,threshold:40,wetLoss:.6,systems:'GECJR'});
+  for(let i=0;i<3;i++){const actual=cell.runs[0].conditions[i];assert.equal(actual.available,expected.summary[i].available);assert.equal(actual.horizontalP95M,expected.summary[i].horizontalP95M);}
+  assert.throws(()=>sensitivityStudy(scene,{systems:'E'}),RangeError);
+});

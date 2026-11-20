@@ -1,11 +1,12 @@
-import {setupSensitivity} from './sensitivity-ui.mjs?v=1';
-import {comparisonLocations} from './environment-comparison.mjs?v=sensitivity-1';
+import {setupSensitivity,systemLabel} from './sensitivity-ui.mjs?v=multi-gnss-1';
+import {comparisonLocations} from './environment-comparison.mjs?v=multi-gnss-1';
 const $=id=>document.getElementById(id),labels=['開けた場所','森林','濡れた森林'],colors=['#91f8da','#ffcf68','#b4a4ff'];
+const SYSTEM_COLORS={G:'#dfefea',E:'#8fd3ff',C:'#ffb38a',J:'#f6e27a',R:'#f29ad8'};
 let scene,source,result,worker,activeSettings,pinned;
 const locations=comparisonLocations();
-const settings=()=>({seed:Number($('seed').value),wetLoss:Number($('wet-loss').value),threshold:Number($('threshold').value),location:$('location').value});
+const settings=()=>({seed:Number($('seed').value),wetLoss:Number($('wet-loss').value),threshold:Number($('threshold').value),location:$('location').value,systems:$('systems').value});
 const sensitivity=setupSensitivity(()=>({scene,source,settings:settings()}),s=>{
-  $('location').value=s.location;$('seed').value=s.seed;$('wet-loss').value=String(s.wetLoss).replace(/^0\./,'.');$('threshold').value=String(s.threshold);$('settings').onchange();
+  $('location').value=s.location;$('systems').value=s.systems;$('seed').value=s.seed;$('wet-loss').value=String(s.wetLoss).replace(/^0\./,'.');$('threshold').value=String(s.threshold);$('settings').onchange();
 });
 function svg(id,title){const root=$(id);root.replaceChildren();root.setAttribute('viewBox','0 0 480 260');const add=(tag,attrs,text)=>{const e=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v]of Object.entries(attrs))e.setAttribute(k,String(v));if(text!==undefined)e.textContent=text;root.append(e);return e;};add('text',{x:20,y:24,fill:'#dfefea','font-size':14},title);return add;}
 function linePlot(id,title,value){
@@ -18,25 +19,26 @@ function row(root,values){const tr=document.createElement('tr');for(const value 
 function epochView(){
   if(!result)return;const epoch=result.epochs[Number($('epoch').value)];$('time').textContent=`+${epoch.seconds}秒`;
   $('epoch-status').textContent=epoch.cases.map((c,i)=>`${labels[i]}: ${c.used}衛星 / ${c.horizontalErrorM===null?'測位不能':c.horizontalErrorM.toFixed(2)+' m'}`).join(' · ');
-  const sky=svg('sky','天頂図 · GPS · 北が上'),cx=240,cy=145,r=85;
+  const sky=svg('sky',`天頂図 · ${systemLabel(result.settings.systems)} · 北が上`),cx=240,cy=145,r=85;
   for(const radius of [r,r*2/3,r/3])sky('circle',{cx,cy,r:radius,fill:'none',stroke:'#45645a'});
   sky('text',{x:cx,y:48,fill:'#abc6bc','text-anchor':'middle'},'N');sky('text',{x:cx+r+12,y:cy,fill:'#abc6bc'},'E');
   const add=svg('strength','C/N₀ · dB-Hz（遮蔽は点なし）'),channels=epoch.cases[0].channels,n=channels.length;
   add('line',{x1:40,x2:460,y1:220-result.settings.threshold/50*170,y2:220-result.settings.threshold/50*170,stroke:'#abc6bc','stroke-dasharray':'4 4'});
   for(const v of [0,20,40,50])add('text',{x:30,y:224-v/50*170,fill:'#abc6bc','font-size':11,'text-anchor':'end'},v);
   $('channels').replaceChildren();
+  if(n>16)['G GPS','E Galileo','C BeiDou','J QZSS','R GLONASS'].forEach((name,i)=>sky('text',{x:20+i*92,y:252,fill:SYSTEM_COLORS[name[0]],'font-size':11},`● ${name}`));
   channels.forEach((c,j)=>{
     const az=c.azimuth*Math.PI/180,rr=r*(90-c.elevation)/90,x=cx+rr*Math.sin(az),y=cy-rr*Math.cos(az);
-    sky('circle',{cx:x,cy:y,r:4,fill:'#dfefea'});sky('text',{x:x+6,y:y-5,fill:'#dfefea','font-size':11},c.id);
+    const tint=n>16?SYSTEM_COLORS[c.id[0]]:'#dfefea';sky('circle',{cx:x,cy:y,r:4,fill:tint});sky('text',{x:x+5,y:y-4,fill:tint,'font-size':n>16?8:11},c.id);
     const values=epoch.cases.map(v=>v.channels[j]);row($('channels'),[c.id,...values.map(v=>v.cn0===null?'遮蔽':`${v.cn0.toFixed(1)}${v.used?'':'（下限未満）'}`)]);
-    const xx=52+j*395/Math.max(1,n-1);add('text',{x:xx,y:242,fill:'#abc6bc','font-size':10,'text-anchor':'middle'},c.id);
+    const xx=52+j*395/Math.max(1,n-1);add('text',{x:xx,y:242,fill:'#abc6bc','font-size':n>16?7:10,'text-anchor':'middle'},c.id);
     values.forEach((v,i)=>{if(v.cn0!==null)add('circle',{cx:xx+(i-1)*5,cy:220-Math.max(0,v.cn0)/50*170,r:3,fill:colors[i]});});
   });
 }
 function render(){
   $('results').hidden=false;$('summary').replaceChildren();
   result.summary.forEach((s,i)=>row($('summary'),[labels[i],`${s.available}/${s.total} (${(s.availability*100).toFixed(1)}%)`,s.meanUsed.toFixed(1),s.horizontalP95M===null?'測位不能':`${s.horizontalP95M.toFixed(2)} m`]));
-  const s=result.settings;$('capture').textContent=`実行条件: ${result.locationLabel} · 濡れ ${s.wetLoss} dB/m · 下限 ${s.threshold} dB-Hz · シード ${s.seed} · GPST週 ${result.week} / TOW ${result.startTow}`;
+  const s=result.settings;$('capture').textContent=`実行条件: ${result.locationLabel} · ${systemLabel(s.systems)} · 濡れ ${s.wetLoss} dB/m · 下限 ${s.threshold} dB-Hz · シード ${s.seed} · GPST週 ${result.week} / TOW ${result.startTow}`;
   linePlot('errors','水平測位誤差 · m',c=>c.horizontalErrorM);linePlot('counts','使用衛星数',c=>c.used);epochView();renderPair();
   const failures=result.epochs.filter(e=>e.cases.some(c=>c.status!=='solution'));
   $('failures').textContent=`3条件のいずれかで測位できない時刻: ${failures.length}/${result.epochs.length}`;
@@ -47,7 +49,7 @@ $('cancel').onclick=()=>{stop();$('comparison').dataset.state='cancelled';$('sta
 $('settings').onchange=()=>{drawLocations();sensitivity.changed();$('stale').hidden=!result||JSON.stringify(result.settings)===JSON.stringify(settings());};
 $('settings').onsubmit=event=>{
   event.preventDefault();stop();activeSettings=settings();$('run').disabled=true;$('save').disabled=true;$('cancel').disabled=false;$('stale').hidden=true;$('results').hidden=true;result=null;$('comparison').dataset.state='running';
-  const active=worker=new Worker(new URL('./environment-worker.mjs?v=sensitivity-1',import.meta.url),{type:'module'});
+  const active=worker=new Worker(new URL('./environment-worker.mjs?v=multi-gnss-1',import.meta.url),{type:'module'});
   const fail=message=>{stop();$('comparison').dataset.state='error';$('status').textContent=message;};
   worker.onerror=()=>{if(worker===active)fail('計算に失敗しました。再実行してください。');};
   worker.onmessage=({data})=>{
@@ -92,14 +94,14 @@ function renderPair(){
   $('location-comparison').hidden=true;
   if(!pinned||!result)return;
   const same=['seed','wetLoss','threshold'].every(k=>pinned.settings[k]===result.settings[k]);
-  $('pin-status').textContent=`固定: ${pinned.locationLabel} · 濡れ ${pinned.settings.wetLoss} dB/m · 下限 ${pinned.settings.threshold} · シード ${pinned.settings.seed}${same?'':'（条件が異なります。地点だけの比較には設定をそろえてください）'}`;
+  $('pin-status').textContent=`固定: ${pinned.locationLabel} · ${systemLabel(pinned.settings.systems)} · 濡れ ${pinned.settings.wetLoss} dB/m · 下限 ${pinned.settings.threshold} · シード ${pinned.settings.seed}${same?'':'（条件が異なります。地点・衛星システムの比較には、濡れ・下限・シードをそろえてください）'}`;
   if(!same)return;
-  $('location-comparison').hidden=false;$('pair-label').textContent=`同じ軌道・時刻・乱数・減衰設定: ${pinned.locationLabel} → ${result.locationLabel}`;$('pair-rows').replaceChildren();
+  $('location-comparison').hidden=false;$('pair-label').textContent=`同じ軌道・時刻・乱数・減衰設定: ${pinned.locationLabel}（${systemLabel(pinned.settings.systems)}） → ${result.locationLabel}（${systemLabel(result.settings.systems)}）`;$('pair-rows').replaceChildren();
   const error=v=>v===null?'測位不能':`${v.toFixed(2)} m`;
   result.summary.forEach((r,i)=>{const p=pinned.summary[i];row($('pair-rows'),[labels[i],`${p.available}/${p.total}`,`${r.available}/${r.total}`,error(p.horizontalP95M),error(r.horizontalP95M)]);});
 }
 $('location').replaceChildren(...locations.map(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.label;return o;}));$('location').value='canopy';drawLocations();
-$('outage-example').onclick=()=>{$('location').value='T062';$('wet-loss').value='.6';$('threshold').value='35';$('settings').onchange();};
+$('outage-example').onclick=()=>{$('systems').value='G';$('location').value='T062';$('wet-loss').value='.6';$('threshold').value='35';$('settings').onchange();};
 $('pin').onclick=()=>{pinned=structuredClone(result);renderPair();};
 $('next-failure').onclick=()=>{
   const indices=result.epochs.flatMap((e,i)=>e.cases.some(c=>c.status!=='solution')?[i]:[]);
