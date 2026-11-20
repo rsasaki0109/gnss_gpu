@@ -3,7 +3,6 @@
 from contextlib import redirect_stderr
 import io
 import os
-from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import warnings
@@ -74,7 +73,7 @@ def evaluate(data,policy,operation):
     try:
         # NumPy's print policy writes native fd 2 rather than sys.stderr.
         # Serial tests capture both channels without filling a worker pipe.
-        with tempfile.TemporaryFile(dir=Path(__file__).resolve().parents[1]/'dist') as native_output:
+        with tempfile.TemporaryFile() as native_output:
             saved_fd=os.dup(2)
             try:
                 os.dup2(native_output.fileno(),2)

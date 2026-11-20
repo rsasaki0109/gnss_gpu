@@ -10,6 +10,11 @@ PATH = ROOT / "benchmarks/probes/bvh_grouped_directions/generate.py"
 SPEC = importlib.util.spec_from_file_location("grouped_direction_projection", PATH)
 GEN = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(GEN)
+# Project from the raw-byte snapshot, as bvh_grouped_candidates does. The
+# working-tree bvh.h is LF in git and CRLF only on autocrlf checkouts, so its
+# hash matched BASE_SHA256 on Windows and failed on Linux.
+BASE = ROOT / "benchmarks/probes/bvh_baseline_iterative_20261019"
+GEN.ROOT = BASE
 
 
 @pytest.mark.parametrize(
@@ -32,7 +37,7 @@ SPEC.loader.exec_module(GEN)
 )
 def test_all_original_gpu_functions_are_literal(name):
     projected, _ = GEN.project()
-    original = (ROOT / "src/raytrace/bvh.cu").read_text(encoding="utf8")
+    original = (BASE / "src/raytrace/bvh.cu").read_text(encoding="utf8")
     assert GEN.function(projected["src/raytrace/bvh.cu"], name) == GEN.function(
         original, name
     )
@@ -47,7 +52,7 @@ def test_whole_source_undo_exact(name):
 
 def test_original_cpu_builder_and_normalization_tail_are_literal():
     projected, _ = GEN.project()
-    source = (ROOT / "src/raytrace/bvh.cu").read_text(encoding="utf8")
+    source = (BASE / "src/raytrace/bvh.cu").read_text(encoding="utf8")
     candidate = GEN.function(source, "multipath_candidate")
     tail = candidate[candidate.index("  double t;") : candidate.rfind("}")]
     assert tail in projected["src/raytrace/bvh.cu"]

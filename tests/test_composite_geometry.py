@@ -7,6 +7,17 @@ import warnings
 
 import numpy as np
 import pytest
+from importlib.util import find_spec
+
+# The CUDA IQ comparison drives UrbanSignalSimulator, which needs both native
+# extensions; other tests here run on the pure-Python reflection geometry.
+NATIVE_IQ = all(
+    find_spec(name) is not None
+    for name in ("gnss_gpu._raytrace", "gnss_gpu._gnss_gpu_signal_sim")
+)
+requires_native_iq = pytest.mark.skipif(
+    not NATIVE_IQ, reason="needs gnss_gpu._raytrace and _gnss_gpu_signal_sim"
+)
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'benchmarks'))
 from bench_composite_geometry_compare import make_call,scene
@@ -167,6 +178,7 @@ def test_no_cross_call_cache_and_independent_returned_arrays(oracle):
 
 @pytest.mark.gpu
 @pytest.mark.cuda
+@requires_native_iq
 @pytest.mark.parametrize('samples',[31,2600,260000])
 @pytest.mark.parametrize('orders',[('RD',),('DR',),('RD','DR')])
 def test_real_native_LOS_composite_channels_and_CUDA_IQ_bits(oracle,samples,orders):

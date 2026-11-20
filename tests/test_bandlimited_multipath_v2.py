@@ -35,7 +35,11 @@ def test_development_nonconvergence_regression(monkeypatch, replica):
     old = evaluate((3.6,55.,.8,.5,np.pi/2,replica))
     monkeypatch.setattr(experiment,'fit_bandlimited_paths',fit_bandlimited_paths)
     new = evaluate((3.6,55.,.8,.5,np.pi/2,replica))
-    assert old['fit']['reason'] == 'optimizer did not converge'
+    # v1 lost these replicas to a 1e-14 objective tie that a failed start won
+    # on the development BLAS. Other platforms can break the tie toward the
+    # converged start, so v1 may already succeed; the fix must agree either way.
+    assert old['fit']['reason'] in (
+        'optimizer did not converge', 'interior locally conditioned fit')
     assert new['fit']['selected_model'] == 'two_path'
     assert new['observation_sha256'] == old['observation_sha256']
     assert abs(new['fit']['first_delay_chips']-old['fit']['first_delay_chips']) < 1e-7
