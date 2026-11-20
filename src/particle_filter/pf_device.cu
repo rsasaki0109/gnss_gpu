@@ -1,5 +1,6 @@
 #include "gnss_gpu/cuda_check.h"
 #include "gnss_gpu/pf_device.h"
+#include "gnss_gpu/resample_offset.h"
 #include <curand_kernel.h>
 #include <thrust/device_ptr.h>
 #include <thrust/scan.h>
@@ -3692,8 +3693,8 @@ void pf_device_resample_systematic(PFDeviceState* state, unsigned long long seed
     thrust::device_ptr<double> cdf_ptr(state->d_cdf);
     thrust::inclusive_scan(thrust::cuda::par.on(state->stream), w_ptr, w_ptr + N, cdf_ptr);
 
-    // Step 6: Generate u0
-    double u0 = (double)(seed % 1000000) / (double)(1000000 * N);
+    // Step 6: Offset u0 in [0, 1); the kernel divides (u0 + i) by N.
+    double u0 = systematic_offset_from_seed(seed);
 
     // Step 7: Resample into tmp buffers
     pfd_systematic_resample_kernel<<<grid, BLOCK_SIZE, 0, state->stream>>>(

@@ -767,6 +767,12 @@
 
 ## D-039: PF device のリサンプラを正しい Megopolis に切り替える（旧版は `megopolis_legacy`）
 
+**更新（2026-11-20）**: systematic の 2 件を修正し、ホスト側 megopolis を評価した。
+- (b) systematic の起点: device（`pf_device.cu`）と host（`resampling.cu`）の両方で、起点 u0 を `systematic_offset_from_seed(seed)`（splitmix64 → [0, 1)、`include/gnss_gpu/resample_offset.h`）に変えた。カーネルの `(u0 + i) / N` はそのまま。旧コードは重み [0.1, 0.4, 0.2, 0.3] で子孫数の平均が [1.00, 1.00, 1.00, 1.00]（期待値 [0.4, 1.6, 0.8, 1.2]）で、重みをほぼ無視していた。修正後、上と同じ合成 N=4096・400 seed の TV は σ=1.5 で 0.006、σ=3.0 で 0.003（多項の下限 0.015 / 0.008 より小さい）。
+- (c) seed: systematic のときだけ、`ParticleFilterDevice` と `ParticleFilter` が呼び出しごとに `seed + k`（k は `initialize()` で 0 に戻る）を渡す。既定の megopolis は `self.seed` 固定のまま（PPC で効果なし、既定の結果を変えないため）。
+- 数値が変わるのは `resampling="systematic"` の経路だけ（FFBSi、genealogy smoother、`enable_pf_ffbsi_smoother`）。既定経路と正規 59.22% パイプラインは変わらない。回帰テストは `tests/test_pf_systematic_resampling.py`。
+- (d) ホスト側 `ParticleFilter` の megopolis（`resampling.cu`）: 同じプロトコルで TV は σ=1.5 で B=15/60/240 が 0.106 / 0.124 / 0.242、σ=3.0 で 0.452 / 0.231 / 0.153。device の旧版と同じ値で、欠陥も同じ。ホスト PF の既定（PF3D、PF3D-BVH、ROS 2 node、`urbannav_cli`）なので、正しい版への切替は実データで評価してから決める。未着手。
+
 **更新（2026-10-03、同日）**: 既定を切替えた。`resampling="megopolis"` は Chesser et al. (2021) の正しい Megopolis（`megopolis_coalesced` は別名）、`megopolis_iterations` の既定は 60。旧カーネルは `"megopolis_legacy"` として旧結果の再現用にのみ残す。根拠: PPC 6 route（P50 −0.7 m、`resampler_ablation_ppc_2026_10_03.md`）と UrbanNav Odaiba PF smoother 複数 seed（前向き RMS −0.6 m、smoother 出力は noise 内で同等、`resampler_ablation_urbannav_2026_10_03.md`）で、noise を超える悪化が無く前向きは改善、かつ正しく 1M 粒子で速い（B=60 12 ms vs 旧 B=15 28 ms）。ホスト側 `ParticleFilter` の megopolis（`resampling.cu`）も同じ欠陥を持つが未評価のため変更していない。
 
 以下は同日の当初判断（opt-in 追加時点）。
