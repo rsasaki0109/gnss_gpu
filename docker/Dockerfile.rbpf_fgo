@@ -1,0 +1,40 @@
+# RB-FGO-PF research runtime: Python 3.12, the pinned inuex35 GTSAM fork
+# (custom DoubleDifference*Factor[Arm]) and the pinned tightly-coupled FGO repo.
+#
+#   docker build -f docker/Dockerfile.rbpf_fgo -t gnss-gpu-rbpf-fgo experiments/rbpf_fgo
+#   docker run --rm -v "$PWD":/work -v /path/to/PPC-Dataset:/data:ro \
+#     -w /work/experiments/rbpf_fgo -e PYTHONPATH=/opt/rbpf/tc/src \
+#     gnss-gpu-rbpf-fgo python wp16_run_rbpf.py ...
+#
+# The repository is mounted at run time; the image holds only dependencies.
+FROM python:3.12-slim-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential cmake git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# GTSAM compile jobs need several GB each. Two jobs exhausted the 12 GB WSL2 VM
+# on the Windows dev machine (2026-11-20) and hung Docker; override with
+# --build-arg JOBS=N on larger hosts.
+ARG JOBS=1
+ENV CMAKE_BUILD_PARALLEL_LEVEL=${JOBS} \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /opt/rbpf
+COPY setup_deps.sh requirements.txt ./
+# Python requirements and the tc checkout, cached as their own layer.
+RUN bash setup_deps.sh --python /usr/local/bin/python --skip-gtsam
+# GTSAM source and build tree live in a BuildKit cache mount, so an
+# interrupted build resumes where make stopped on the next `docker build`.
+# The pip-installed gtsam package links the shared libraries in the build
+# tree, so copy those out of the cache mount before it is unmounted.
+RUN --mount=type=cache,id=rbpf-gtsam-deps,target=/opt/rbpf/deps \
+    bash setup_deps.sh --python /usr/local/bin/python --skip-pip \
+    && find /opt/rbpf/deps/gtsam_build -name '*.so*' -not -path '*/python/*' \
+         -exec cp -P {} /usr/local/lib/ \; \
+    && ldconfig
+# Checked without the cache mount: what the runtime image actually sees.
+RUN python -c "import gtsam; assert hasattr(gtsam, 'DoubleDifferencePseudorangeFactorArm'); print('gtsam ok')"
+
+ENV PYTHONPATH=/opt/rbpf/tc/src

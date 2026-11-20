@@ -15,8 +15,9 @@
 #                        produced the published results, built, pip-installed.
 #
 # Stages 1 and 2 were exercised on 2026-10-06. Stage 3 reproduces the original
-# CMake cache options (Visual Studio 17 2022, Release) but has not yet been
-# run end-to-end on a clean machine.
+# CMake cache options (Visual Studio 17 2022, Release). On Linux it ran end to
+# end in docker/Dockerfile.rbpf_fgo (GCC 12, 2026-11-21), and the WP56 3-seed
+# baseline matched the published correct-FIX table on all six runs.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -67,7 +68,16 @@ clone_at "$TC_REPO" "$TC_COMMIT" "$HERE/tc"
 if [ "$SKIP_GTSAM" = 0 ]; then
   mkdir -p "$HERE/deps"
   clone_at "$GTSAM_REPO" "$GTSAM_COMMIT" "$HERE/deps/gtsam"
-  cmake -S "$HERE/deps/gtsam" -B "$HERE/deps/gtsam_build" \
+  # GTSAM builds with -Werror on GCC/Clang. GCC 12 (Debian bookworm) reports a
+  # false-positive -Wuse-after-free inside the bundled Eigen and stops the
+  # build, so off Windows keep the warnings but drop -Werror. Warnings only;
+  # code generation is unchanged. MSVC keeps GTSAM's own /W flags.
+  WARN_FLAGS=()
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) ;;
+    *) WARN_FLAGS=(-DGTSAM_COMPILE_OPTIONS_PRIVATE_COMMON="-Wall;-Wno-unused-parameter;-Wreturn-type;-Wformat;-Werror=format-security") ;;
+  esac
+  cmake -S "$HERE/deps/gtsam" -B "$HERE/deps/gtsam_build" "${WARN_FLAGS[@]}" \
     -DCMAKE_BUILD_TYPE=Release \
     -DGTSAM_BUILD_PYTHON=ON -DGTSAM_PYTHON_VERSION=3.12 \
     -DPYTHON_EXECUTABLE="$PY" \
@@ -77,12 +87,22 @@ if [ "$SKIP_GTSAM" = 0 ]; then
     -DGTSAM_USE_SYSTEM_EIGEN=OFF -DGTSAM_WITH_EIGEN_MKL=OFF \
     -DGTSAM_ALLOW_DEPRECATED_SINCE_V43=ON \
     -DGTSAM_POSE3_EXPMAP=ON -DGTSAM_ROT3_EXPMAP=ON
-  cmake --build "$HERE/deps/gtsam_build" --config Release --parallel
+  # A bare --parallel means unlimited `make -j` with Makefile generators and
+  # overrides CMAKE_BUILD_PARALLEL_LEVEL; GTSAM then exhausts memory. Pass the
+  # level explicitly when it is set (2 jobs fit in 16 GB; 4 did not).
+  cmake --build "$HERE/deps/gtsam_build" --config Release --parallel ${CMAKE_BUILD_PARALLEL_LEVEL:-}
   "$PY" -m pip install "$HERE/deps/gtsam_build/python"
 fi
 
-"$PY" - <<'EOF'
-import gtsam
+"$PY" - "$SKIP_GTSAM" <<'EOF'
+import sys
+try:
+    import gtsam
+except ImportError:
+    if sys.argv[1] == "1":  # --skip-gtsam on a machine without it yet
+        print("[setup] gtsam not installed (skipped)")
+        sys.exit(0)
+    raise
 missing = [n for n in ("DoubleDifferencePseudorangeFactorArm",
                        "DoubleDifferenceCarrierPhaseFactorArm") if not hasattr(gtsam, n)]
 print("[setup] gtsam", gtsam.__file__, "custom DD factors:", "missing " + ",".join(missing) if missing else "ok")
